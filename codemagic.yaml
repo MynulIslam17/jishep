@@ -1,20 +1,23 @@
-
-# Jishep / GPS Ceilo - Codemagic Configuration
-# GitHub: MynulIslam17/jishep
-# Branch: master
-# iOS Bundle ID: org.gaccchurch.gpsceilo
-# Apple integration: Jose Rafael Nunez
+# Jishep / GPS Ceilo - Codemagic configuration
+# Codemagic repository: MynulIslam17/jishep (master)
+# Apple Developer team: Jose Rafael Nunez
+# iOS bundle ID: org.gaccchurch.gpsceilo
+# Apple integration name: Jose Rafael Nunez
+# Signing assets stored in Codemagic:
+#   Apple Distribution certificate: jishep_distribution
+#   App Store provisioning profile: jishep_appstore
+# Codemagic matches signing assets by distribution type and bundle ID.
+# TestFlight is manual: pushing code will not upload a release.
 
 workflows:
   flutter-ci:
     name: Jishep - Flutter checks
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     max_build_duration: 30
-
     environment:
       flutter: stable
-      java: 17
-
+      xcode: latest
+      cocoapods: default
     triggering:
       events:
         - push
@@ -27,26 +30,23 @@ workflows:
           include: true
           source: false
       cancel_previous_builds: true
-
     scripts:
       - name: Install Flutter dependencies
         script: flutter pub get
-
       - name: Analyze Flutter code
         script: flutter analyze --no-fatal-infos
-
       - name: Run Flutter tests
         script: flutter test
 
   android-debug:
     name: Jishep - Android APK (test)
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     max_build_duration: 60
-
     environment:
       flutter: stable
+      xcode: latest
+      cocoapods: default
       java: 17
-
     triggering:
       events:
         - push
@@ -59,14 +59,11 @@ workflows:
           include: true
           source: false
       cancel_previous_builds: true
-
     scripts:
       - name: Install Flutter dependencies
         script: flutter pub get
-
       - name: Build debug APK
         script: flutter build apk --debug
-
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
 
@@ -74,12 +71,10 @@ workflows:
     name: Jishep - iOS simulator (test)
     instance_type: mac_mini_m2
     max_build_duration: 60
-
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
-
     triggering:
       events:
         - push
@@ -92,61 +87,49 @@ workflows:
           include: true
           source: false
       cancel_previous_builds: true
-
     scripts:
       - name: Install Flutter dependencies
         script: flutter pub get
-
       - name: Install CocoaPods
         script: |
           set -e
           cd ios
           pod install
-
-      - name: Build for iOS simulator
+      - name: Build for iOS simulator (no signing)
         script: flutter build ios --simulator
 
   ios-testflight:
     name: Jishep - iOS TestFlight
     instance_type: mac_mini_m2
     max_build_duration: 120
-
     integrations:
       app_store_connect: "Jose Rafael Nunez"
-
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
-
       ios_signing:
         distribution_type: app_store
         bundle_identifier: org.gaccchurch.gpsceilo
-
     scripts:
       - name: Install Flutter dependencies
         script: flutter pub get
-
       - name: Install CocoaPods
         script: |
           set -e
           cd ios
           pod install
-
       - name: Apply iOS distribution signing
         script: xcode-project use-profiles
-
       - name: Build signed IPA
         script: |
           set -e
           flutter build ipa --release \
             --build-number="$BUILD_NUMBER" \
             --export-options-plist=/Users/builder/export_options.plist
-
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-
     publishing:
       app_store_connect:
         auth: integration
