@@ -1,0 +1,202 @@
+[
+  {
+    "id": "sample_001",
+    "residentName": "Juan Pérez",
+    "address": "120 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.879,
+    "longitude": -74.0445
+  },
+  {
+    "id": "sample_002",
+    "residentName": "María González",
+    "address": "124 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.87945,
+    "longitude": -74.04442
+  },
+  {
+    "id": "sample_003",
+    "residentName": "Carlos & Ana Rodríguez",
+    "address": "128 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8799,
+    "longitude": -74.04434
+  },
+  {
+    "id": "sample_004",
+    "residentName": "Luis Martínez",
+    "address": "132 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88035,
+    "longitude": -74.04426
+  },
+  {
+    "id": "sample_005",
+    "residentName": "Elena & Jorge Torres",
+    "address": "136 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8808,
+    "longitude": -74.04418
+  },
+  {
+    "id": "sample_006",
+    "residentName": "Rosa Méndez",
+    "address": "140 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88125,
+    "longitude": -74.0441
+  },
+  {
+    "id": "sample_007",
+    "residentName": "Pedro Flores",
+    "address": "144 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8817,
+    "longitude": -74.04402
+  },
+  {
+    "id": "sample_008",
+    "residentName": "Ana López",
+    "address": "148 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88215,
+    "longitude": -74.04394
+  },
+  {
+    "id": "sample_009",
+    "residentName": "Roberto Gómez",
+    "address": "152 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8826,
+    "longitude": -74.04386
+  },
+  {
+    "id": "sample_010",
+    "residentName": "Sofía Morales",
+    "address": "156 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88305,
+    "longitude": -74.04378
+  },
+  {
+    "id": "sample_011",
+    "residentName": "Manuel Ortiz",
+    "address": "160 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8835,
+    "longitude": -74.0437
+  },
+  {
+    "id": "sample_012",
+    "residentName": "Teresa Morales",
+    "address": "164 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88395,
+    "longitude": -74.04362
+  },
+  {
+    "id": "sample_013",
+    "residentName": "Gabriel Ramos",
+    "address": "168 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8844,
+    "longitude": -74.04354
+  },
+  {
+    "id": "sample_014",
+    "residentName": "Lucía Castillo",
+    "address": "172 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88485,
+    "longitude": -74.04346
+  },
+  {
+    "id": "sample_015",
+    "residentName": "Carmen Díaz",
+    "address": "176 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8853,
+    "longitude": -74.04338
+  },
+  {
+    "id": "sample_016",
+    "residentName": "Miguel Herrera",
+    "address": "180 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88575,
+    "longitude": -74.0433
+  },
+  {
+    "id": "sample_017",
+    "residentName": "Isabel Vargas",
+    "address": "184 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8862,
+    "longitude": -74.04322
+  },
+  {
+    "id": "sample_018",
+    "residentName": "Diego Castro",
+    "address": "188 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88665,
+    "longitude": -74.04314
+  },
+  {
+    "id": "sample_019",
+    "residentName": "Patricia Ruiz",
+    "address": "192 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8871,
+    "longitude": -74.04306
+  },
+  {
+    "id": "sample_020",
+    "residentName": "Fernando Silva",
+    "address": "196 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88755,
+    "longitude": -74.04298
+  },
+  {
+    "id": "sample_021",
+    "residentName": "Adriana Reyes",
+    "address": "200 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.888,
+    "longitude": -74.0429
+  },
+  {
+    "id": "sample_022",
+    "residentName": "Jorge Navarro",
+    "address": "204 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88845,
+    "longitude": -74.04282
+  },
+  {
+    "id": "sample_023",
+    "residentName": "Valeria Romero",
+    "address": "208 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8889,
+    "longitude": -74.04274
+  },
+  {
+    "id": "sample_024",
+    "residentName": "Ricardo Medina",
+    "address": "212 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.88935,
+    "longitude": -74.04266
+  },
+  {
+    "id": "sample_025",
+    "residentName": "Gloria Aguilar",
+    "address": "216 Main St",
+    "cityStateZip": "Hackensack, NJ 07601",
+    "latitude": 40.8898,
+    "longitude": -74.04258
+  }
+]

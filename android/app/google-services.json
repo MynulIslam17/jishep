@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "240307035698",
+    "project_id": "cielo-63925",
+    "storage_bucket": "cielo-63925.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:240307035698:android:1658b091de9a26d045e62b",
+        "android_client_info": {
+          "package_name": "com.ceilogps.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "240307035698-f06auvbvn6n67o01e34hvibr22m3ssj2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ceilogps.app",
+            "certificate_hash": "b3e3088c8635a1671ef4d0ea85887fb46d34fc16"
+          }
+        },
+        {
+          "client_id": "240307035698-2dvnvka24ml4nk12qpd66ue833h42990.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzIYAo2YNogJXnvPvnBz1GVYmSVmFF0uc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "240307035698-2dvnvka24ml4nk12qpd66ue833h42990.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "240307035698-aa7pr6dnk707ekha0j8a29m3qtfjspka.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ceilogps.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

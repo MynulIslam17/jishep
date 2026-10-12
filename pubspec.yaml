@@ -1,0 +1,52 @@
+name: gps_cielo
+description: "GPS Para El Cielo - Conectando hogares, alcanzando vidas."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Icons, UI and Typography
+  cupertino_icons: ^1.0.8
+  flutter_screenutil: ^5.9.3
+  flutter_svg: ^2.0.17
+  google_fonts: ^6.2.1
+
+  # State management, DI and navigation
+  get: ^4.6.6
+
+  # Networking and logging
+  logger: ^2.4.0
+
+  # Utilities and storage
+  intl: ^0.19.0
+  get_storage: ^2.1.1
+  shared_preferences: ^2.3.2
+  intl_phone_field: ^3.2.0
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  cloud_firestore: ^6.10.0
+  google_sign_in: ^7.2.0
+  geolocator: ^14.0.3
+  geocoding: ^5.0.0
+  geoflutterfire_plus: ^0.0.34
+  image_picker: ^1.2.3
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+

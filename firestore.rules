@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Profile, location and prayer preferences.
+    match /users/{uid} {
+      // avatarBase64 holds a small profile photo (no Firebase Storage).
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && (!('avatarBase64' in request.resource.data)
+            || request.resource.data.avatarBase64 == null
+            || request.resource.data.avatarBase64.size() <= 300000);
+      allow delete: if isOwner(uid);
+
+      // The user's own prayed / visited / invited / follow-up state.
+      match /household_status/{householdId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // In-app notifications.
+      match /notifications/{notificationId} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+    }
+
+    // Shared household directory. Managed with the Admin SDK
+    // (tool/seed_households) or the Firebase console.
+    match /households/{householdId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Contact Support messages: users can send, only admins can read.
+    match /support_messages/{messageId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 5000;
+      allow read, update, delete: if false;
+    }
+  }
+}
