@@ -42,6 +42,10 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to find households near you to pray for.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used to find households near you to pray for.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Your location is used to find households near you to pray for.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a profile photo from your library.</string>
 	<key>NSCameraUsageDescription</key>
