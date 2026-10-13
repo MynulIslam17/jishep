@@ -1,4 +1,4 @@
-package com.ceilogps.app
+package org.gaccchurch.gpsceilo
 
 import io.flutter.embedding.android.FlutterActivity
 

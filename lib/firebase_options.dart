@@ -69,6 +69,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'cielo-63925.firebasestorage.app',
     androidClientId: '240307035698-f06auvbvn6n67o01e34hvibr22m3ssj2.apps.googleusercontent.com',
     iosClientId: '240307035698-aa7pr6dnk707ekha0j8a29m3qtfjspka.apps.googleusercontent.com',
-    iosBundleId: 'com.ceilogps.app',
+    iosBundleId: 'org.gaccchurch.gpsceilo',
   );
 }
