@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_assets.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
@@ -142,10 +141,10 @@ class _SplashLogo extends StatelessWidget {
       opacity: fade,
       child: ScaleTransition(
         scale: scale,
-        child: SvgPicture.asset(
-          AppAssets.logoMark,
-          width: 88.w,
-          height: 104.h,
+        child: Image.asset(
+          AppAssets.logo,
+          width: 300,
+          height: 300,
           fit: BoxFit.contain,
         ),
       ),

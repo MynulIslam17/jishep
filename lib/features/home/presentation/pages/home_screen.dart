@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_assets.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
@@ -42,8 +41,8 @@ class HomeScreen extends GetView<HomeController> {
             titleSpacing: 16.w,
             title: Row(
               children: [
-                SvgPicture.asset(
-                  AppAssets.logoMark,
+                Image.asset(
+                  AppAssets.logo,
                   width: 32.w,
                   height: 38.h,
                   fit: BoxFit.contain,

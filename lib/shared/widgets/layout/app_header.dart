@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gps_cielo/core/constants/app_assets.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -29,9 +28,8 @@ class AppAuthHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Authentic logo_mark.svg with its original colors (no colorFilter tinting)
-          SvgPicture.asset(
-            AppAssets.logoMark,
+          Image.asset(
+            AppAssets.logo,
             width: 52.w,
             height: 62.h,
             fit: BoxFit.contain,

@@ -120,7 +120,18 @@ workflows:
           cd ios
           pod install
       - name: Apply iOS distribution signing
-        script: xcode-project use-profiles
+        script: |
+          set -e
+          if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER = org.gaccchurch.gpsceilo;" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "Runner is not using org.gaccchurch.gpsceilo, so the App Store profile cannot be applied."
+            exit 1
+          fi
+          xcode-project use-profiles
+          if ! grep -q "PROVISIONING_PROFILE" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "No App Store profile was applied for org.gaccchurch.gpsceilo."
+            echo "In Codemagic, confirm certificate jishep_distribution and profile jishep_appstore match this bundle ID."
+            exit 1
+          fi
       - name: Build signed IPA
         script: |
           set -e

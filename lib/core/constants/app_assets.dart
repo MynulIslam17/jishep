@@ -3,8 +3,7 @@ abstract final class AppAssets {
   static const String _icons = 'assets/icons';
 
   // --- Logos ---
-  static const String logo = '$_images/logo.svg';
-  static const String logoMark = '$_icons/logo_mark.svg';
+  static const String logo = '$_images/app_new_logo.png';
 
   // --- Onboarding Illustrations ---
   static const String housesIllustration = '$_images/houses_illustration.svg';
