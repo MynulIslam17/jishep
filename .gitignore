@@ -56,3 +56,4 @@ temp_interactive_push.bat
 **/node_modules/
 ios/Runner/Info.plist.backup
 ios/Runner/Info.plist.before-url-fix
+config.bat
