@@ -4,9 +4,10 @@
 # iOS bundle ID: org.gaccchurch.gpsceilo
 # Apple integration name: Jose Rafael Nunez
 # Signing assets stored in Codemagic:
-#   Apple Distribution certificate: jishep_distribution
-#   App Store provisioning profile: jishep_appstore
-# Codemagic matches signing assets by distribution type and bundle ID.
+#   Apple Distribution certificate: gps_cielo_distribution
+#   App Store provisioning profile: gps_cielo_appstore (expires 2027-10-12)
+# Apple Developer Team ID: T83PP9TMXS
+# Firebase project: gps-cielo (ios/Runner/GoogleService-Info.plist is committed)
 # TestFlight is manual: pushing code will not upload a release.
 
 workflows:
@@ -105,13 +106,26 @@ workflows:
     integrations:
       app_store_connect: "Jose Rafael Nunez"
     environment:
-      flutter: stable
+      # Same Flutter as the local machine: plugins resolve through Swift Package Manager.
+      flutter: 3.47.9
       xcode: latest
       cocoapods: default
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: org.gaccchurch.gpsceilo
+        provisioning_profiles:
+          - gps_cielo_appstore
+        certificates:
+          - gps_cielo_distribution
+      vars:
+        BUNDLE_ID: org.gaccchurch.gpsceilo
+        TEAM_ID: T83PP9TMXS
     scripts:
+      - name: Check Firebase and entitlements
+        script: |
+          set -e
+          plutil -lint ios/Runner/GoogleService-Info.plist ios/Runner/Info.plist ios/Runner/Runner.entitlements
+          /usr/libexec/PlistBuddy -c "Print :PROJECT_ID" ios/Runner/GoogleService-Info.plist | grep -qx "gps-cielo"
+          /usr/libexec/PlistBuddy -c "Print :BUNDLE_ID" ios/Runner/GoogleService-Info.plist | grep -qx "$BUNDLE_ID"
+          grep -q "com.apple.developer.applesignin" ios/Runner/Runner.entitlements
       - name: Install Flutter dependencies
         script: flutter pub get
       - name: Install CocoaPods
@@ -122,22 +136,51 @@ workflows:
       - name: Apply iOS distribution signing
         script: |
           set -e
-          if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER = org.gaccchurch.gpsceilo;" ios/Runner.xcodeproj/project.pbxproj; then
-            echo "Runner is not using org.gaccchurch.gpsceilo, so the App Store profile cannot be applied."
+          if ! grep -q "PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "Runner is not using $BUNDLE_ID, so the App Store profile cannot be applied."
             exit 1
           fi
           xcode-project use-profiles
-          if ! grep -q "PROVISIONING_PROFILE" ios/Runner.xcodeproj/project.pbxproj; then
-            echo "No App Store profile was applied for org.gaccchurch.gpsceilo."
-            echo "In Codemagic, confirm certificate jishep_distribution and profile jishep_appstore match this bundle ID."
+          if ! grep -q "<string>app-store" /Users/builder/export_options.plist; then
+            echo "Export options are not App Store. Check certificate gps_cielo_distribution and profile gps_cielo_appstore."
+            cat /Users/builder/export_options.plist
             exit 1
           fi
+      - name: Pick next build number
+        script: |
+          set -e
+          APP_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+            | python3 -c 'import json,sys; a=json.load(sys.stdin); print(a[0]["id"] if a else "")' || true)
+          LATEST=0
+          if [ -n "$APP_ID" ]; then
+            LATEST=$(app-store-connect get-latest-build-number "$APP_ID" --platform IOS 2>/dev/null || echo 0)
+          fi
+          LATEST=${LATEST:-0}
+          NEXT=$(( LATEST > BUILD_NUMBER ? LATEST + 1 : BUILD_NUMBER + 1 ))
+          echo "App Store Connect app $APP_ID, latest build $LATEST, using build $NEXT"
+          echo "NEXT_BUILD_NUMBER=$NEXT" >> $CM_ENV
       - name: Build signed IPA
         script: |
           set -e
           flutter build ipa --release \
-            --build-number="$BUILD_NUMBER" \
+            --build-number="$NEXT_BUILD_NUMBER" \
             --export-options-plist=/Users/builder/export_options.plist
+      - name: Verify IPA signing
+        script: |
+          set -e
+          IPA=$(ls build/ios/ipa/*.ipa | head -1)
+          rm -rf /tmp/ipa_check && mkdir /tmp/ipa_check && unzip -q "$IPA" -d /tmp/ipa_check
+          APP=$(ls -d /tmp/ipa_check/Payload/*.app)
+          security cms -D -i "$APP/embedded.mobileprovision" > /tmp/ipa_check/profile.plist
+          echo "Profile: $(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/ipa_check/profile.plist)"
+          if /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' /tmp/ipa_check/profile.plist >/dev/null 2>&1; then
+            echo "IPA is signed with a development/ad-hoc profile, not App Store."; exit 1
+          fi
+          /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' /tmp/ipa_check/profile.plist | grep -qx "$TEAM_ID"
+          codesign -d --entitlements - --xml "$APP" > /tmp/ipa_check/ent.plist 2>/dev/null
+          grep -q "com.apple.developer.applesignin" /tmp/ipa_check/ent.plist || { echo "Apple Sign-In entitlement missing"; exit 1; }
+          grep -A1 "get-task-allow" /tmp/ipa_check/ent.plist | grep -q "<false/>" || { echo "get-task-allow is not false"; exit 1; }
+          echo "Version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist"))"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
