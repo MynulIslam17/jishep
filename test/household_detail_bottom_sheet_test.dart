@@ -18,16 +18,13 @@ void main() {
   Widget createTestWidget({required Widget child}) {
     return ScreenUtilInit(
       designSize: const Size(393, 852),
-      builder: (context, _) => MaterialApp(
-        home: Scaffold(
-          body: child,
-        ),
-      ),
+      builder: (context, _) => MaterialApp(home: Scaffold(body: child)),
     );
   }
 
-  testWidgets('Notes section remains open when typing and insets change',
-      (WidgetTester tester) async {
+  testWidgets('Notes section remains open when typing and insets change', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       createTestWidget(
         child: HouseholdDetailBottomSheet(
@@ -66,8 +63,9 @@ void main() {
     tester.view.resetViewInsets();
   });
 
-  testWidgets('Notes section opens directly when initialOpenNotes is true',
-      (WidgetTester tester) async {
+  testWidgets('Notes section opens directly when initialOpenNotes is true', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       createTestWidget(
         child: HouseholdDetailBottomSheet(

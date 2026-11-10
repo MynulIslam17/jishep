@@ -49,15 +49,13 @@ class _OnboardingPageTwoState extends State<OnboardingPageTwo>
         curve: const Interval(0.35, 1.00, curve: Curves.easeIn),
       ),
     );
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.15),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0.35, 1.00, curve: Curves.easeOutCubic),
-      ),
-    );
+    _textSlide = Tween<Offset>(begin: const Offset(0.0, 0.15), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _animController,
+            curve: const Interval(0.35, 1.00, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _animController.forward();
   }

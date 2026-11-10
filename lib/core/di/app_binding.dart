@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
+import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/storage/local_storage_service.dart';
@@ -15,9 +16,12 @@ class AppBinding extends Bindings {
   void dependencies() {
     // 1. Core services (Permanent)
     Get.put<LocalStorageService>(LocalStorageService(), permanent: true);
-    Get.put<LocationService>(LocationService(), permanent: true);
-    Get.put<AddressSuggestionService>(
+    final addressSearch = Get.put<AddressSuggestionService>(
       AddressSuggestionService(),
+      permanent: true,
+    );
+    Get.put<LocationService>(
+      LocationService(addressSearch: addressSearch),
       permanent: true,
     );
 
@@ -38,6 +42,10 @@ class AppBinding extends Bindings {
     // 3. Shared household state (Permanent)
     final householdStore = Get.put<HouseholdStore>(
       HouseholdStore(householdRepository, notificationRepository),
+      permanent: true,
+    );
+    Get.put<HomeAddressService>(
+      HomeAddressService(userRepository, householdStore),
       permanent: true,
     );
 

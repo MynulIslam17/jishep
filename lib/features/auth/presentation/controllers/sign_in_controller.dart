@@ -20,7 +20,12 @@ class SignInController extends GetxController {
   final passwordController = TextEditingController();
 
   // Reactive State
+  /// True while any sign-in is running (blocks repeated taps on every
+  /// sign-in button).
   final isLoading = false.obs;
+
+  /// Which sign-in is running, so only its own button shows a spinner.
+  final busyWith = Rxn<SignInMethod>();
   final isPasswordVisible = false.obs;
   final isPhoneLogin = false.obs;
   final completePhoneNumber = ''.obs;
@@ -59,7 +64,7 @@ class SignInController extends GetxController {
       return;
     }
 
-    isLoading.value = true;
+    _setBusy(SignInMethod.form);
     try {
       final profile = await _authService.signInWithEmail(email, password);
       _globalAuthController.routeAfterSignIn(profile);
@@ -69,18 +74,21 @@ class SignInController extends GetxController {
         FirebaseErrorMapper.message(error),
       );
     } finally {
-      isLoading.value = false;
+      _setBusy(null);
     }
   }
 
   Future<void> _sendPhoneCode() async {
     final phone = completePhoneNumber.value.trim();
     if (phone.isEmpty || AppValidator.phone(phoneController.text) != null) {
-      SnackbarService.showError('Validation', 'Please enter a valid phone number');
+      SnackbarService.showError(
+        'Validation',
+        'Please enter a valid phone number',
+      );
       return;
     }
 
-    isLoading.value = true;
+    _setBusy(SignInMethod.form);
     try {
       final result = await _authService.sendPhoneCode(phone);
       switch (result) {
@@ -107,13 +115,40 @@ class SignInController extends GetxController {
         FirebaseErrorMapper.message(error),
       );
     } finally {
-      isLoading.value = false;
+      _setBusy(null);
+    }
+  }
+
+  void _setBusy(SignInMethod? method) {
+    busyWith.value = method;
+    isLoading.value = method != null;
+  }
+
+  /// Sign in with Apple is offered on iOS only.
+  bool get showAppleSignIn => _authService.appleSignInAvailable;
+
+  /// Native Sign in with Apple. Closing the Apple sheet is not an error.
+  Future<void> signInWithApple() async {
+    if (isLoading.value) return;
+    _setBusy(SignInMethod.apple);
+    try {
+      final profile = await _authService.signInWithApple();
+      if (profile != null) {
+        _globalAuthController.routeAfterSignIn(profile);
+      }
+    } catch (error) {
+      SnackbarService.showError(
+        'Apple Sign-In Failed',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      _setBusy(null);
     }
   }
 
   Future<void> signInWithGoogle() async {
     if (isLoading.value) return;
-    isLoading.value = true;
+    _setBusy(SignInMethod.google);
     try {
       final profile = await _authService.signInWithGoogle();
       if (profile != null) {
@@ -125,7 +160,7 @@ class SignInController extends GetxController {
         FirebaseErrorMapper.message(error),
       );
     } finally {
-      isLoading.value = false;
+      _setBusy(null);
     }
   }
 
@@ -137,3 +172,6 @@ class SignInController extends GetxController {
     super.onClose();
   }
 }
+
+/// The sign-in methods on the Sign In screen.
+enum SignInMethod { form, apple, google }

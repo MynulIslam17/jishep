@@ -31,7 +31,11 @@ class AppErrorState extends StatelessWidget {
                 color: AppColors.dangerLight,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline_rounded, size: 36.r, color: AppColors.danger),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: 36.r,
+                color: AppColors.danger,
+              ),
             ),
             SizedBox(height: 16.h),
             Text(
@@ -59,7 +63,11 @@ class AppErrorState extends StatelessWidget {
                 onPressed: onRetry!,
                 height: 42,
                 fontSize: 13,
-                icon: const Icon(Icons.refresh_rounded, size: 18, color: Colors.white),
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
               ),
             ],
           ],

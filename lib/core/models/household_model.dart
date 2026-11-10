@@ -40,12 +40,69 @@ class HouseholdModel {
   String get fullAddress =>
       cityStateZip.isEmpty ? address : '$address, $cityStateZip';
 
+  /// Whether [status] counts as prayed for in the cycle that started at
+  /// [cycleStart] (null = every prayer counts).
+  static bool prayedInCycle(
+    Map<String, dynamic>? status,
+    DateTime? cycleStart,
+  ) {
+    if (status?['isPrayed'] != true) return false;
+    if (cycleStart == null) return true;
+    final prayedAt = _toDate(status?['prayedAt']);
+    return prayedAt != null && !prayedAt.isBefore(cycleStart);
+  }
+
+  /// True when prayed for on the same calendar day as [now].
+  bool prayedOn(DateTime now) {
+    final at = prayedAt;
+    return isPrayed &&
+        at != null &&
+        at.year == now.year &&
+        at.month == now.month &&
+        at.day == now.day;
+  }
+
+  /// True when any status is set (shown on the Follow-up screen).
+  bool get hasActivity =>
+      isPrayed ||
+      isVisited ||
+      isInvited ||
+      hasFollowUp ||
+      (notes?.trim().isNotEmpty ?? false);
+
+  /// A household known only from the user's status document (it may be
+  /// outside the area currently loaded). The status stores name and address.
+  factory HouseholdModel.fromStatus({
+    required String id,
+    required Map<String, dynamic> status,
+    required int number,
+    DateTime? cycleStart,
+  }) {
+    final updatedAt = _toDate(status['updatedAt']);
+    return HouseholdModel(
+      id: id,
+      number: number,
+      residentName: status['residentName']?.toString() ?? 'Resident',
+      address: status['address']?.toString() ?? '',
+      isPrayed: prayedInCycle(status, cycleStart),
+      isVisited: status['isVisited'] == true,
+      isInvited: status['isInvited'] == true,
+      hasFollowUp: status['hasFollowUp'] == true,
+      followUpDate: status['followUpDate']?.toString(),
+      notes: status['notes']?.toString(),
+      prayedAt: _toDate(status['prayedAt']),
+      updatedAt: updatedAt,
+      lastUpdated: _describeUpdatedAt(updatedAt),
+    );
+  }
+
   /// Builds a household from the shared `households/{id}` document merged with
   /// the signed-in user's `household_status/{id}` document (if any).
   factory HouseholdModel.fromFirestore({
     required DocumentSnapshot<Map<String, dynamic>> doc,
     Map<String, dynamic>? status,
     required int number,
+    DateTime? cycleStart,
   }) {
     final data = doc.data() ?? const <String, dynamic>{};
     final geo = data['geo'];
@@ -60,7 +117,7 @@ class HouseholdModel {
       cityStateZip: data['cityStateZip']?.toString() ?? '',
       latitude: geopoint is GeoPoint ? geopoint.latitude : 0,
       longitude: geopoint is GeoPoint ? geopoint.longitude : 0,
-      isPrayed: status?['isPrayed'] == true,
+      isPrayed: prayedInCycle(status, cycleStart),
       isVisited: status?['isVisited'] == true,
       isInvited: status?['isInvited'] == true,
       hasFollowUp: status?['hasFollowUp'] == true,

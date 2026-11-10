@@ -15,6 +15,7 @@ abstract final class FirestorePaths {
   static const String supportMessages = 'support_messages';
 
   static String user(String uid) => '$users/$uid';
-  static String userHouseholdStatus(String uid) => '$users/$uid/$householdStatus';
+  static String userHouseholdStatus(String uid) =>
+      '$users/$uid/$householdStatus';
   static String userNotifications(String uid) => '$users/$uid/$notifications';
 }

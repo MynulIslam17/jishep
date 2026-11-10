@@ -1,5 +1,8 @@
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/core/models/user_model.dart';
+import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
+import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 
@@ -9,14 +12,22 @@ class PrayerListController extends GetxController {
 
   PrayerListController(this._service, this._authController);
 
-  final todayHouseholds = <HouseholdModel>[].obs;
-  final cycleCompleted = 0.obs;
-  final cycleTarget = 20.obs;
+  final plan = PrayerPlan.empty.obs;
   final isLoading = false.obs;
+  final isStartingCycle = false.obs;
+
+  /// The user has a saved home (the neighborhood is built around it).
+  final hasHome = false.obs;
+
+  /// Search range from Settings, in meters.
+  final rangeMeters = RxnDouble();
+
+  /// The saved home address, for messages ("within 5 km of Demra").
+  final homeLabel = 'your home'.obs;
 
   final List<Worker> _workers = [];
 
-  int get prayedTodayCount => todayHouseholds.where((h) => h.isPrayed).length;
+  List<HouseholdModel> get todayHouseholds => plan.value.today;
 
   @override
   void onInit() {
@@ -25,22 +36,23 @@ class PrayerListController extends GetxController {
     isLoading.value = _service.isLoading.value;
 
     _workers.addAll([
-      ever(_service.households, (_) => _rebuild()),
-      ever(_service.totalPrayed, (_) => _rebuild()),
+      ever(_service.neighborhood, (_) => _rebuild()),
       ever(_authController.currentUser, (_) => _rebuild()),
+      ever(_service.rangeMeters, (_) => _rebuild()),
       ever(_service.isLoading, (bool loading) => isLoading.value = loading),
     ]);
   }
 
   void _rebuild() {
-    final user = _authController.currentUser.value;
-    final dailyTarget = user?.dailyPrayerTarget ?? 5;
-
-    todayHouseholds.assignAll(
-      PrayerListService.buildTodayList(_service.households, dailyTarget),
+    final UserModel? user = _authController.currentUser.value;
+    hasHome.value = user?.hasLocation ?? false;
+    final address = user?.address.trim() ?? '';
+    homeLabel.value = address.isEmpty ? 'your home' : address;
+    rangeMeters.value = _service.rangeMeters.value;
+    plan.value = PrayerListService.buildPlan(
+      _service.neighborhood,
+      user?.dailyPrayerTarget ?? 5,
     );
-    cycleTarget.value = user?.prayerCycleTarget ?? 20;
-    cycleCompleted.value = _service.totalPrayed.value;
   }
 
   Future<void> loadTodayPrayers() => _service.refreshHouseholds();
@@ -49,16 +61,29 @@ class PrayerListController extends GetxController {
     return _service.togglePray(household.id);
   }
 
-  Future<void> toggleVisited(HouseholdModel household) {
-    return _service.toggleVisited(household.id);
-  }
-
-  Future<void> toggleFollowUp(HouseholdModel household) {
-    return _service.toggleFollowUp(household.id);
-  }
-
   void updateHousehold(HouseholdModel updated) {
     _service.updateHousehold(updated);
+  }
+
+  /// Begins praying through the whole neighborhood again.
+  Future<void> startNewCycle() async {
+    final user = _authController.currentUser.value;
+    if (user == null || isStartingCycle.value) return;
+    isStartingCycle.value = true;
+    try {
+      await _service.startNewCycle(user.id);
+      SnackbarService.showSuccess(
+        'New Prayer Cycle',
+        'Your neighborhood is ready to be prayed for again.',
+      );
+    } catch (error) {
+      SnackbarService.showError(
+        'Could not start a new cycle',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isStartingCycle.value = false;
+    }
   }
 
   @override

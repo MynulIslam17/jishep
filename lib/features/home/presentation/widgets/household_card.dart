@@ -75,24 +75,29 @@ class HouseholdCard extends StatelessWidget {
                       fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: 2.h),
                   Text(
                     household.address,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.body(
                       color: AppColors.textSecondary,
                       fontSize: 12.sp,
                     ),
                   ),
-                  Text(
-                    household.cityStateZip,
-                    style: AppTypography.body(
-                      color: AppColors.textSecondary,
-                      fontSize: 11.sp,
+                  if (household.cityStateZip.isNotEmpty)
+                    Text(
+                      household.cityStateZip,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.sp,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -104,7 +109,7 @@ class HouseholdCard extends StatelessWidget {
               onTap: onPrayToggle,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                padding: EdgeInsets.symmetric(horizontal: 11.w, vertical: 8.h),
                 decoration: BoxDecoration(
                   color: household.isPrayed
                       ? AppColors.successLight

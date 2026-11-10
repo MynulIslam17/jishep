@@ -8,10 +8,11 @@ import 'package:gps_cielo/shared/widgets/inputs/address_autocomplete.dart';
 class AppSearchField extends StatelessWidget {
   const AppSearchField({
     required this.controller,
-    this.hint = '123 Main St, Hackensack, NJ 07601',
+    this.hint = 'Street, area or city',
     this.onChanged,
     this.onSubmitted,
     this.onGpsPressed,
+    this.isLocating = false,
     this.onClear,
     this.onAddressSelected,
     this.nearLatitude,
@@ -24,6 +25,9 @@ class AppSearchField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final VoidCallback? onGpsPressed;
+
+  /// Shows a spinner in the GPS button while a fix is being taken.
+  final bool isLocating;
   final VoidCallback? onClear;
 
   /// When set, address suggestions are shown while typing.
@@ -34,6 +38,7 @@ class AppSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: onAddressSelected == null
@@ -58,12 +63,20 @@ class AppSearchField extends StatelessWidget {
               border: Border.all(color: AppColors.border),
             ),
             child: IconButton(
-              icon: Icon(
-                Icons.my_location_rounded,
-                size: 20.r,
-                color: AppColors.primaryNavy,
-              ),
-              onPressed: onGpsPressed,
+              icon: isLocating
+                  ? SizedBox.square(
+                      dimension: 18.r,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primaryNavy,
+                      ),
+                    )
+                  : Icon(
+                      Icons.my_location_rounded,
+                      size: 20.r,
+                      color: AppColors.primaryNavy,
+                    ),
+              onPressed: isLocating ? null : onGpsPressed,
               tooltip: 'Current location',
             ),
           ),

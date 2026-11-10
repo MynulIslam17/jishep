@@ -1,13 +1,19 @@
 {
   "name": "seed-households",
   "private": true,
-  "description": "Imports households into Firestore with geohash data for nearby queries.",
+  "description": "Seeds and removes SYNTHETIC demo households (demo_bd_*) in the gps-cielo Firestore.",
   "main": "seed.js",
   "scripts": {
-    "seed": "node seed.js"
+    "generate": "node demo_bd.js",
+    "dry-run": "node seed.js",
+    "seed": "node seed.js --write",
+    "cleanup:dry-run": "node seed.js --cleanup",
+    "cleanup": "node seed.js --cleanup --write"
   },
   "dependencies": {
-    "firebase-admin": "^13.0.0",
     "geofire-common": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

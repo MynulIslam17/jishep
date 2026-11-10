@@ -1,0 +1,13 @@
+{
+  "name": "seed-scale",
+  "private": true,
+  "description": "Seeds and removes SYNTHETIC scale-test households in the Firestore EMULATOR only (demo-* projects).",
+  "scripts": {
+    "seed:100": "node seed.js --size 100",
+    "seed:1k": "node seed.js --size 1000",
+    "seed:10k": "node seed.js --size 10000",
+    "seed:100k": "node seed.js --size 100000",
+    "cleanup": "node seed.js --cleanup"
+  },
+  "engines": { "node": ">=18" }
+}

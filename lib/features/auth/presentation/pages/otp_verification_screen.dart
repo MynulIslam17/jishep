@@ -70,9 +70,12 @@ class OtpVerificationScreen extends GetView<OtpVerificationController> {
                     // 6-Digit OTP Boxes
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(OtpVerificationController.codeLength, (index) {
-                        return _buildOtpBox(index);
-                      }),
+                      children: List.generate(
+                        OtpVerificationController.codeLength,
+                        (index) {
+                          return _buildOtpBox(index);
+                        },
+                      ),
                     ),
 
                     SizedBox(height: 36.h),
@@ -159,12 +162,13 @@ class OtpVerificationScreen extends GetView<OtpVerificationController> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14.r),
-            borderSide: const BorderSide(color: AppColors.primaryGold, width: 2),
+            borderSide: const BorderSide(
+              color: AppColors.primaryGold,
+              width: 2,
+            ),
           ),
         ),
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-        ],
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         onChanged: (value) {
           final last = OtpVerificationController.codeLength - 1;
           if (value.isNotEmpty && index < last) {

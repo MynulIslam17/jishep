@@ -9,7 +9,8 @@ class NotificationEmptyState extends StatelessWidget {
 
   const NotificationEmptyState({
     this.title = 'No Notifications',
-    this.message = 'You are all caught up! When you have prayer reminders or updates, they will appear here.',
+    this.message =
+        'You are all caught up! When you have prayer reminders or updates, they will appear here.',
     super.key,
   });
 

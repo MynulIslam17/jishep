@@ -4,9 +4,14 @@ import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 
 /// Confirms permanent account deletion. Password accounts must re-enter their
-/// password; Google accounts are asked to confirm with Google.
+/// password; Google and Apple accounts are asked to confirm with that
+/// account.
 class ProfileDeleteAccountDialog extends StatefulWidget {
   final bool requiresPassword;
+
+  /// The account the user confirms with, e.g. "Google" or "Apple" (null:
+  /// none, the sign-in must be recent).
+  final String? confirmWith;
 
   /// Performs the deletion; returns true when the account was deleted.
   final Future<bool> Function(String? password) onDelete;
@@ -14,6 +19,7 @@ class ProfileDeleteAccountDialog extends StatefulWidget {
   const ProfileDeleteAccountDialog({
     required this.requiresPassword,
     required this.onDelete,
+    this.confirmWith,
     super.key,
   });
 
@@ -21,12 +27,14 @@ class ProfileDeleteAccountDialog extends StatefulWidget {
     BuildContext context, {
     required bool requiresPassword,
     required Future<bool> Function(String? password) onDelete,
+    String? confirmWith,
   }) {
     return showDialog<void>(
       context: context,
       builder: (_) => ProfileDeleteAccountDialog(
         requiresPassword: requiresPassword,
         onDelete: onDelete,
+        confirmWith: confirmWith,
       ),
     );
   }
@@ -104,9 +112,10 @@ class _ProfileDeleteAccountDialogState
                 ),
               ),
             )
-          else
+          else if (widget.confirmWith != null)
             Text(
-              'You may be asked to confirm with your Google account.',
+              'You may be asked to confirm with your '
+              '${widget.confirmWith} account.',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12.5.sp,
@@ -134,10 +143,7 @@ class _ProfileDeleteAccountDialogState
                     color: Colors.white,
                   ),
                 )
-              : const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.white),
-                ),
+              : const Text('Delete', style: TextStyle(color: Colors.white)),
         ),
       ],
     );

@@ -49,26 +49,23 @@ class DefaultFirebaseOptions {
     }
   }
 
-  /// Web OAuth client from google-services.json (`client_type`: 3).
-  /// Android Credential Manager needs this to return a Google ID token.
-  static const String googleWebClientId =
-      '240307035698-2dvnvka24ml4nk12qpd66ue833h42990.apps.googleusercontent.com';
-
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAzIYAo2YNogJXnvPvnBz1GVYmSVmFF0uc',
-    appId: '1:240307035698:android:1658b091de9a26d045e62b',
-    messagingSenderId: '240307035698',
-    projectId: 'cielo-63925',
-    storageBucket: 'cielo-63925.firebasestorage.app',
+    apiKey: 'AIzaSyAxIMGG1mDWs_5IRPxuSG0sljThK1qfGNE',
+    appId: '1:93438539556:android:80e7f904cfad0096cfe5b1',
+    messagingSenderId: '93438539556',
+    projectId: 'gps-cielo',
+    storageBucket: 'gps-cielo.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAURr1yoKl1PsjyJ9akr4-MIxKsT7b1Ajk',
-    appId: '1:240307035698:ios:5004e02b8e4de89245e62b',
-    messagingSenderId: '240307035698',
-    projectId: 'cielo-63925',
-    storageBucket: 'cielo-63925.firebasestorage.app',
-    androidClientId: '240307035698-f06auvbvn6n67o01e34hvibr22m3ssj2.apps.googleusercontent.com',
-    iosClientId: '240307035698-aa7pr6dnk707ekha0j8a29m3qtfjspka.apps.googleusercontent.com',
+    apiKey: 'AIzaSyBFdy7gxtkwzy9e-IER9pXS-WHbuovuwjY',
+    appId: '1:93438539556:ios:9f7e21f59b77e74dcfe5b1',
+    messagingSenderId: '93438539556',
+    projectId: 'gps-cielo',
+    storageBucket: 'gps-cielo.firebasestorage.app',
+    androidClientId:
+        '93438539556-vi7dp5868dofivtlh00moh32c2cvgito.apps.googleusercontent.com',
+    iosClientId:
+        '93438539556-0ufdeljbdj5a47lvgifvi3jjt7k0ib5q.apps.googleusercontent.com',
     iosBundleId: 'org.gaccchurch.gpsceilo',
   );
 }

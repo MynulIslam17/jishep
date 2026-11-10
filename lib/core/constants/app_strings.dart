@@ -22,7 +22,8 @@ abstract final class AppStrings {
   static const String phoneNumber = 'Phone number';
   static const String phoneHint = '+1 (201) 555-0000';
   static const String passwordMinLength = 'Minimum 8 characters';
-  static const String agreeToTerms = 'I agree to the Terms of use and Privacy policy';
+  static const String agreeToTerms =
+      'I agree to the Terms of use and Privacy policy';
   static const String alreadyHaveAccount = 'Already have an account? ';
 
   // Navigation
@@ -35,7 +36,8 @@ abstract final class AppStrings {
   // Home
   static const String enterAddress = 'Enter your address';
   static const String searchNeighborhood = 'Search my neighborhood';
-  static const String searchHint = 'We\'ll find nearby households for you to pray for.';
+  static const String searchHint =
+      'We\'ll find nearby households for you to pray for.';
   static const String nearbyHouseholds = 'Nearby Households';
   static const String viewOnMap = 'View on map';
   static const String viewAllHouseholds = 'View all households';

@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/di/auth_binding.dart';
+import 'package:gps_cielo/core/di/donation_binding.dart';
 import 'package:gps_cielo/core/di/home_binding.dart';
 import 'package:gps_cielo/core/di/main_nav_binding.dart';
 import 'package:gps_cielo/core/di/neighborhood_binding.dart';
@@ -14,6 +15,8 @@ import 'package:gps_cielo/features/auth/presentation/pages/otp_verification_scre
 import 'package:gps_cielo/features/auth/presentation/pages/reset_password_screen.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/sign_in_screen.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/sign_up_screen.dart';
+import 'package:gps_cielo/features/auth/presentation/pages/verify_email_screen.dart';
+import 'package:gps_cielo/features/donation/presentation/pages/donation_screen.dart';
 import 'package:gps_cielo/features/home/presentation/pages/home_screen.dart';
 import 'package:gps_cielo/features/main_nav/presentation/pages/main_nav_screen.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/pages/neighborhood_screen.dart';
@@ -57,6 +60,12 @@ abstract class AppPages {
       name: AppRoutes.forgotPassword,
       page: () => const ForgotPasswordScreen(),
       binding: ForgotPasswordBinding(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: AppRoutes.verifyEmail,
+      page: () => const VerifyEmailScreen(),
+      binding: VerifyEmailBinding(),
       transition: Transition.rightToLeft,
     ),
     GetPage(
@@ -113,6 +122,12 @@ abstract class AppPages {
       page: () => const NotificationScreen(),
       binding: NotificationBinding(),
       transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: AppRoutes.donation,
+      page: () => const DonationScreen(),
+      binding: DonationBinding(),
+      transition: Transition.downToUp,
     ),
   ];
 }

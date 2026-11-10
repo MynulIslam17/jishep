@@ -7,7 +7,11 @@ class OnboardingBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<OnboardingRepository>(() => OnboardingRepository());
-    Get.lazyPut<OnboardingService>(() => OnboardingService(Get.find<OnboardingRepository>()));
-    Get.lazyPut<OnboardingController>(() => OnboardingController(Get.find<OnboardingService>()));
+    Get.lazyPut<OnboardingService>(
+      () => OnboardingService(Get.find<OnboardingRepository>()),
+    );
+    Get.lazyPut<OnboardingController>(
+      () => OnboardingController(Get.find<OnboardingService>()),
+    );
   }
 }

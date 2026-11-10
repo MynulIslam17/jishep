@@ -32,12 +32,14 @@ class SplashController extends GetxController {
         Get.offAllNamed(AppRoutes.onboarding);
         return;
       }
-      Get.offAllNamed(
-        profile.hasLocation ? AppRoutes.mainNav : AppRoutes.locationSetup,
-      );
+      _authController.routeAfterSignIn(profile);
     } catch (_) {
       // Offline or profile unreadable: the session is still valid.
-      Get.offAllNamed(AppRoutes.mainNav);
+      Get.offAllNamed(
+        _authController.needsEmailVerification
+            ? AppRoutes.verifyEmail
+            : AppRoutes.mainNav,
+      );
     }
   }
 }

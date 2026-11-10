@@ -15,8 +15,44 @@ class ForgotPasswordController extends GetxController {
   ForgotPasswordController(this._authService, this._globalAuthController);
 
   final phoneController = TextEditingController();
+  final emailController = TextEditingController();
   final completePhoneNumber = ''.obs;
   final isLoading = false.obs;
+
+  /// Reset by emailed link instead of an SMS code.
+  final useEmail = false.obs;
+
+  /// Set once the reset email was sent (shows the confirmation).
+  final emailSentTo = RxnString();
+
+  void setUseEmail(bool value) {
+    useEmail.value = value;
+    emailSentTo.value = null;
+  }
+
+  /// Emails a password reset link. Firebase does not reveal whether the
+  /// address has an account, so the message is the same either way.
+  Future<void> sendResetEmail() async {
+    if (isLoading.value) return;
+    final email = emailController.text.trim();
+    final error = AppValidator.email(email);
+    if (error != null) {
+      SnackbarService.showError('Validation', error);
+      return;
+    }
+    isLoading.value = true;
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      emailSentTo.value = email;
+    } catch (error) {
+      SnackbarService.showError(
+        'Could Not Send',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
 
   void updatePhoneNumber(String number) {
     completePhoneNumber.value = number;
@@ -28,7 +64,10 @@ class ForgotPasswordController extends GetxController {
 
     final phone = completePhoneNumber.value.trim();
     if (phone.isEmpty || AppValidator.phone(phoneController.text) != null) {
-      SnackbarService.showError('Validation', 'Please enter a valid phone number');
+      SnackbarService.showError(
+        'Validation',
+        'Please enter a valid phone number',
+      );
       return;
     }
 
@@ -66,6 +105,7 @@ class ForgotPasswordController extends GetxController {
   @override
   void onClose() {
     phoneController.dispose();
+    emailController.dispose();
     super.onClose();
   }
 }

@@ -40,7 +40,9 @@ class NotificationModel {
           : DateTime.now(),
       isRead: json['isRead'] == true,
       actionRoute: json['actionRoute']?.toString(),
-      payload: json['payload'] is Map<String, dynamic> ? json['payload'] as Map<String, dynamic> : null,
+      payload: json['payload'] is Map<String, dynamic>
+          ? json['payload'] as Map<String, dynamic>
+          : null,
     );
   }
 

@@ -3,7 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
-import 'package:gps_cielo/core/utils/app_system_insets.dart';
+import 'package:gps_cielo/shared/widgets/layout/collapsing_header_scroll_view.dart';
 import 'package:gps_cielo/features/profile/presentation/controllers/profile_controller.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_about_bottom_sheet.dart';
 import 'package:gps_cielo/shared/widgets/avatar/user_avatar_image.dart';
@@ -13,40 +13,22 @@ import 'package:gps_cielo/features/profile/presentation/widgets/profile_delete_a
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_impact_card.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_prayer_preferences_bottom_sheet.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 
 class ProfileScreen extends GetView<ProfileController> {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final topInset = AppSystemInsets.top(context);
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          children: [
-            // Navy Header
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.fromLTRB(20.w, topInset + 10.h, 20.w, 18.h),
-              color: AppColors.primaryNavy,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'My Profile',
-                  style: AppTypography.heading(
-                    color: AppColors.textWhite,
-                    fontSize: 22.sp,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: EdgeInsets.all(16.r),
+      body: CollapsingHeaderScrollView(
+        title: 'My Profile',
+        subtitle: const Text('Your account, your impact and your settings'),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.all(16.r),
+            sliver: SliverToBoxAdapter(
               child: Column(
                 children: [
                   // User Info Card with Edit Profile Button
@@ -179,8 +161,8 @@ class ProfileScreen extends GetView<ProfileController> {
                   Obx(() {
                     final user = controller.user.value;
                     return ProfileImpactCard(
-                      homesPrayed: user?.homesPrayed ?? 47,
-                      visitsMade: user?.visitsMade ?? 12,
+                      homesPrayed: user?.homesPrayed ?? 0,
+                      visitsMade: user?.visitsMade ?? 0,
                     );
                   }),
 
@@ -213,6 +195,7 @@ class ProfileScreen extends GetView<ProfileController> {
                               nearLongitude: controller.user.value?.longitude,
                               onSaveAddress: (newAddr, location) => controller
                                   .updateAddress(newAddr, location: location),
+                              onUseCurrentLocation: controller.locateDevice,
                             ),
                           ),
                         ),
@@ -224,7 +207,9 @@ class ProfileScreen extends GetView<ProfileController> {
                             icon: Icons.star_border_rounded,
                             title: 'Prayer preferences',
                             subtitle:
-                                '${controller.user.value?.dailyPrayerTarget ?? 5} households per day',
+                                '${controller.user.value?.dailyPrayerTarget ?? 5} households per day · '
+                                '${controller.user.value?.radiusHomes ?? SearchRange.defaultHomes} homes within '
+                                '${SearchRange.formatKm(controller.user.value?.searchRadiusKm ?? SearchRange.defaultKm)}',
                             onTap: () =>
                                 ProfilePrayerPreferencesBottomSheet.show(
                                   context,
@@ -234,10 +219,26 @@ class ProfileScreen extends GetView<ProfileController> {
                                           .value
                                           ?.dailyPrayerTarget ??
                                       5,
-                                  onSavePreferences: (target) => controller
-                                      .updatePrayerPreferences(target),
+                                  initialRadius:
+                                      controller.user.value?.radiusHomes ??
+                                      SearchRange.defaultHomes,
+                                  initialRangeKm:
+                                      controller.user.value?.searchRadiusKm ??
+                                      SearchRange.defaultKm,
+                                  onSavePreferences:
+                                      controller.updatePrayerPreferences,
                                 ),
                           ),
+                        ),
+                        const Divider(height: 1, color: AppColors.border),
+
+                        // Support the mission (donations)
+                        _buildMenuItem(
+                          icon: Icons.volunteer_activism_rounded,
+                          title: 'Support the mission',
+                          subtitle: 'Give once or monthly',
+                          iconColor: AppColors.primaryGoldDark,
+                          onTap: () => Get.toNamed(AppRoutes.donation),
                         ),
                         const Divider(height: 1, color: AppColors.border),
 
@@ -280,6 +281,7 @@ class ProfileScreen extends GetView<ProfileController> {
                           onTap: () => ProfileDeleteAccountDialog.show(
                             context,
                             requiresPassword: controller.accountUsesPassword,
+                            confirmWith: controller.deletionConfirmationLabel,
                             onDelete: (password) =>
                                 controller.deleteAccount(password: password),
                           ),
@@ -288,12 +290,12 @@ class ProfileScreen extends GetView<ProfileController> {
                     ),
                   ),
 
-                  SizedBox(height: 32.h),
+                  SizedBox(height: 8.h),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

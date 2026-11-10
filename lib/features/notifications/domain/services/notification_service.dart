@@ -1,4 +1,3 @@
-import 'package:gps_cielo/features/notifications/data/models/notification_model.dart';
 import 'package:gps_cielo/features/notifications/data/repositories/notification_repository.dart';
 
 class NotificationService {
@@ -6,12 +5,15 @@ class NotificationService {
 
   NotificationService(this._repository);
 
-  Stream<List<NotificationModel>> watchNotifications() {
-    return _repository.watchNotifications();
-  }
+  /// The newest page, live.
+  Stream<NotificationPage> watchLatest() => _repository.watchLatest();
 
-  Future<List<NotificationModel>> getNotifications() {
-    return _repository.getNotifications();
+  /// The newest page from the server.
+  Future<NotificationPage> getLatest() => _repository.getLatest();
+
+  /// The page older than [after].
+  Future<NotificationPage> fetchOlder(NotificationCursor after) {
+    return _repository.fetchOlder(after);
   }
 
   Future<void> markAsRead(String id) => _repository.markAsRead(id);

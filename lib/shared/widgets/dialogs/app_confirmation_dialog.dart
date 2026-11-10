@@ -96,7 +96,9 @@ class AppConfirmationDialog extends StatelessWidget {
                     label: confirmLabel,
                     height: 44,
                     fontSize: 14,
-                    backgroundColor: isDestructive ? AppColors.danger : AppColors.primaryNavy,
+                    backgroundColor: isDestructive
+                        ? AppColors.danger
+                        : AppColors.primaryNavy,
                     onPressed: () {
                       Get.back(result: true);
                       onConfirm();

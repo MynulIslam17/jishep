@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gps_cielo/core/constants/app_assets.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/app_system_insets.dart';
 
 class AppAuthHeader extends StatelessWidget {
-  const AppAuthHeader({
-    required this.title,
-    required this.subtitle,
-    super.key,
-  });
+  const AppAuthHeader({required this.title, required this.subtitle, super.key});
 
   final String title;
   final String subtitle;
@@ -28,8 +25,9 @@ class AppAuthHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Image.asset(
-            AppAssets.logo,
+          // Authentic logo_mark.svg with its original colors (no colorFilter tinting)
+          SvgPicture.asset(
+            AppAssets.logoMark,
             width: 52.w,
             height: 62.h,
             fit: BoxFit.contain,

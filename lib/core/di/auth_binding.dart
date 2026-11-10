@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
@@ -8,6 +9,7 @@ import 'package:gps_cielo/features/auth/presentation/controllers/otp_verificatio
 import 'package:gps_cielo/features/auth/presentation/controllers/reset_password_controller.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/sign_in_controller.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/sign_up_controller.dart';
+import 'package:gps_cielo/features/auth/presentation/controllers/verify_email_controller.dart';
 
 // Auth repositories, services and the global AuthController are registered
 // permanently in AppBinding.
@@ -16,10 +18,8 @@ class SignInBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<SignInController>(
-      () => SignInController(
-        Get.find<AuthService>(),
-        Get.find<AuthController>(),
-      ),
+      () =>
+          SignInController(Get.find<AuthService>(), Get.find<AuthController>()),
     );
   }
 }
@@ -28,10 +28,8 @@ class SignUpBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<SignUpController>(
-      () => SignUpController(
-        Get.find<AuthService>(),
-        Get.find<AuthController>(),
-      ),
+      () =>
+          SignUpController(Get.find<AuthService>(), Get.find<AuthController>()),
     );
   }
 }
@@ -64,9 +62,7 @@ class ResetPasswordBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<ResetPasswordController>(
-      () => ResetPasswordController(
-        Get.find<AuthService>(),
-      ),
+      () => ResetPasswordController(Get.find<AuthService>()),
     );
   }
 }
@@ -79,6 +75,7 @@ class LocationSetupBinding extends Bindings {
         Get.find<AuthService>(),
         Get.find<AuthController>(),
         Get.find<LocationService>(),
+        Get.find<HouseholdRepository>(),
       ),
     );
   }
@@ -89,5 +86,17 @@ class AuthBinding extends Bindings {
   void dependencies() {
     SignInBinding().dependencies();
     SignUpBinding().dependencies();
+  }
+}
+
+class VerifyEmailBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<VerifyEmailController>(
+      () => VerifyEmailController(
+        Get.find<AuthService>(),
+        Get.find<AuthController>(),
+      ),
+    );
   }
 }

@@ -50,15 +50,13 @@ class _OnboardingPageOneState extends State<OnboardingPageOne>
         curve: const Interval(0.40, 1.00, curve: Curves.easeIn),
       ),
     );
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.20),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0.40, 1.00, curve: Curves.easeOutCubic),
-      ),
-    );
+    _textSlide = Tween<Offset>(begin: const Offset(0.0, 0.20), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _animController,
+            curve: const Interval(0.40, 1.00, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _animController.forward();
   }
@@ -102,7 +100,11 @@ class _OnboardingPageOneState extends State<OnboardingPageOne>
               child: Column(
                 children: [
                   // Top Gold Divider
-                  Container(width: 48.w, height: 1.5, color: AppColors.primaryGold),
+                  Container(
+                    width: 48.w,
+                    height: 1.5,
+                    color: AppColors.primaryGold,
+                  ),
 
                   SizedBox(height: 24.h),
 
@@ -135,7 +137,11 @@ class _OnboardingPageOneState extends State<OnboardingPageOne>
                   SizedBox(height: 24.h),
 
                   // Bottom Gold Divider
-                  Container(width: 48.w, height: 1.5, color: AppColors.primaryGold),
+                  Container(
+                    width: 48.w,
+                    height: 1.5,
+                    color: AppColors.primaryGold,
+                  ),
                 ],
               ),
             ),

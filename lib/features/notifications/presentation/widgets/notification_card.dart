@@ -43,10 +43,14 @@ class NotificationCard extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.all(14.r),
           decoration: BoxDecoration(
-            color: notification.isRead ? AppColors.surface : const Color(0xFFF8FAFC),
+            color: notification.isRead
+                ? AppColors.surface
+                : const Color(0xFFF8FAFC),
             borderRadius: BorderRadius.circular(16.r),
             border: Border.all(
-              color: notification.isRead ? AppColors.border : AppColors.primaryNavy.withValues(alpha: 0.2),
+              color: notification.isRead
+                  ? AppColors.border
+                  : AppColors.primaryNavy.withValues(alpha: 0.2),
               width: notification.isRead ? 1.0 : 1.5,
             ),
           ),
@@ -61,11 +65,7 @@ class NotificationCard extends StatelessWidget {
                   color: style.bgColor,
                   borderRadius: BorderRadius.circular(12.r),
                 ),
-                child: Icon(
-                  style.icon,
-                  size: 22.r,
-                  color: style.iconColor,
-                ),
+                child: Icon(style.icon, size: 22.r, color: style.iconColor),
               ),
 
               SizedBox(width: 12.w),
@@ -153,30 +153,30 @@ class NotificationCard extends StatelessWidget {
   _NotificationStyle _getNotificationStyle(NotificationType type) {
     return switch (type) {
       NotificationType.prayerReminder => _NotificationStyle(
-          icon: Icons.notifications_active_rounded,
-          iconColor: const Color(0xFFD97706),
-          bgColor: const Color(0xFFFEF3C7),
-        ),
+        icon: Icons.notifications_active_rounded,
+        iconColor: const Color(0xFFD97706),
+        bgColor: const Color(0xFFFEF3C7),
+      ),
       NotificationType.followUpDue => _NotificationStyle(
-          icon: Icons.event_note_rounded,
-          iconColor: const Color(0xFFEA580C),
-          bgColor: const Color(0xFFFFEDD5),
-        ),
+        icon: Icons.event_note_rounded,
+        iconColor: const Color(0xFFEA580C),
+        bgColor: const Color(0xFFFFEDD5),
+      ),
       NotificationType.milestone => _NotificationStyle(
-          icon: Icons.emoji_events_rounded,
-          iconColor: const Color(0xFF2E7D32),
-          bgColor: const Color(0xFFE8F5E9),
-        ),
+        icon: Icons.emoji_events_rounded,
+        iconColor: const Color(0xFF2E7D32),
+        bgColor: const Color(0xFFE8F5E9),
+      ),
       NotificationType.scripture => _NotificationStyle(
-          icon: Icons.menu_book_rounded,
-          iconColor: AppColors.primaryNavy,
-          bgColor: const Color(0xFFE8EFF7),
-        ),
+        icon: Icons.menu_book_rounded,
+        iconColor: AppColors.primaryNavy,
+        bgColor: const Color(0xFFE8EFF7),
+      ),
       NotificationType.churchNews => _NotificationStyle(
-          icon: Icons.campaign_rounded,
-          iconColor: const Color(0xFF1E88E5),
-          bgColor: const Color(0xFFE3F2FD),
-        ),
+        icon: Icons.campaign_rounded,
+        iconColor: const Color(0xFF1E88E5),
+        bgColor: const Color(0xFFE3F2FD),
+      ),
     };
   }
 }

@@ -10,14 +10,22 @@ abstract final class FirebaseErrorMapper {
   }
 
   static String _authMessage(FirebaseAuthException e) {
+    final raw = e.message ?? '';
+    if (raw.contains('region enabled')) {
+      return 'SMS to this country is not enabled. In Firebase, allow it under '
+          'Authentication → Settings → SMS region policy.';
+    }
+    if (raw.contains('BILLING_NOT_ENABLED')) {
+      return 'Sending real SMS requires the Firebase Blaze plan. Use a test '
+          'phone number instead.';
+    }
     return switch (e.code) {
       'invalid-email' => 'The email address is not valid.',
       'user-disabled' => 'This account has been disabled.',
       'user-not-found' ||
       'wrong-password' ||
       'invalid-credential' ||
-      'INVALID_LOGIN_CREDENTIALS' =>
-        'Incorrect email or password.',
+      'INVALID_LOGIN_CREDENTIALS' => 'Incorrect email or password.',
       'email-already-in-use' => 'An account already exists with this email.',
       'weak-password' => 'Password is too weak. Use at least 8 characters.',
       'operation-not-allowed' =>
@@ -35,7 +43,12 @@ abstract final class FirebaseErrorMapper {
       'provider-already-linked' =>
         'This phone number is already linked to your account.',
       'account-exists-with-different-credential' =>
-        'An account already exists with this email using a different sign-in method.',
+        'An account already exists with this email using a different sign-in '
+            'method. Sign in that way instead.',
+      // Sign in with Apple (ASAuthorizationError).
+      'failed' ||
+      'invalid-response' ||
+      'not-handled' => 'Sign in with Apple did not complete. Please try again.',
       'requires-recent-login' =>
         'For security, please sign in again and retry.',
       'missing-client-identifier' || 'app-not-authorized' =>

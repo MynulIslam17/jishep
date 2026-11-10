@@ -11,7 +11,6 @@ import 'package:gps_cielo/features/auth/presentation/controllers/sign_up_control
 import 'package:gps_cielo/routes/app_routes.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_back_button.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
-import 'package:gps_cielo/shared/widgets/inputs/app_phone_input_field.dart';
 import 'package:gps_cielo/shared/widgets/inputs/app_text_field.dart';
 import 'package:gps_cielo/shared/widgets/layout/app_header.dart';
 
@@ -75,19 +74,6 @@ class SignUpScreen extends GetView<SignUpController> {
 
                     SizedBox(height: 16.h),
 
-                    // Phone Number
-                    AppPhoneInputField(
-                      label: AppStrings.phoneNumber,
-                      hint: AppStrings.phoneHint,
-                      controller: controller.phoneController,
-                      initialCountryCode: 'US',
-                      onChanged: (phone) {
-                        controller.updatePhoneNumber(phone.completeNumber);
-                      },
-                    ),
-
-                    SizedBox(height: 16.h),
-
                     // Password
                     Obx(
                       () => AppTextField(
@@ -96,9 +82,32 @@ class SignUpScreen extends GetView<SignUpController> {
                         controller: controller.passwordController,
                         isPassword: true,
                         isPasswordVisible: controller.isPasswordVisible.value,
-                        onPasswordVisibilityPressed: controller.togglePasswordVisibility,
+                        onPasswordVisibilityPressed:
+                            controller.togglePasswordVisibility,
+                        textInputAction: TextInputAction.next,
+                        validator: (val) =>
+                            AppValidator.password(val, minLength: 8),
+                      ),
+                    ),
+
+                    SizedBox(height: 16.h),
+
+                    // Confirm Password
+                    Obx(
+                      () => AppTextField(
+                        key: const ValueKey('confirm-password'),
+                        label: 'Confirm password',
+                        hint: 'Re-enter your password',
+                        controller: controller.confirmPasswordController,
+                        isPassword: true,
+                        isPasswordVisible: controller.isPasswordVisible.value,
+                        onPasswordVisibilityPressed:
+                            controller.togglePasswordVisibility,
                         textInputAction: TextInputAction.done,
-                        validator: (val) => AppValidator.password(val, minLength: 8),
+                        validator: (val) => AppValidator.confirmPassword(
+                          val,
+                          controller.passwordController.text,
+                        ),
                       ),
                     ),
 
@@ -114,7 +123,8 @@ class SignUpScreen extends GetView<SignUpController> {
                             height: 24.r,
                             child: Checkbox(
                               value: controller.agreeToTerms.value,
-                              onChanged: (val) => controller.agreeToTerms.value = val ?? false,
+                              onChanged: (val) =>
+                                  controller.agreeToTerms.value = val ?? false,
                               activeColor: AppColors.primaryNavy,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(4.r),

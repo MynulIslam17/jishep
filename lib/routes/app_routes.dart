@@ -4,6 +4,7 @@ abstract class AppRoutes {
   static const String signIn = '/sign-in';
   static const String signUp = '/sign-up';
   static const String forgotPassword = '/forgot-password';
+  static const String verifyEmail = '/verify-email';
   static const String otpVerification = '/otp-verification';
   static const String resetPassword = '/reset-password';
   static const String locationSetup = '/location-setup';
@@ -15,4 +16,5 @@ abstract class AppRoutes {
   static const String profile = '/profile';
   static const String editProfile = '/edit-profile';
   static const String notifications = '/notifications';
+  static const String donation = '/donation';
 }

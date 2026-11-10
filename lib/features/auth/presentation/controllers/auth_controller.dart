@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
+import 'package:gps_cielo/core/utils/show_snackbar.dart';
+import 'package:gps_cielo/features/auth/data/repositories/auth_repository.dart';
 import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
 
@@ -43,14 +45,31 @@ class AuthController extends GetxController {
       return;
     }
 
-    _profileSubscription = _userRepository.watchUser(user.uid).listen(
-      (profile) {
-        if (profile == null) return;
-        currentUser.value = profile;
-        _householdStore.bindUser(profile);
-      },
-      onError: (_) {},
-    );
+    // Another account signed in: drop the previous account's cached data.
+    if (currentUser.value != null && currentUser.value!.id != user.uid) {
+      currentUser.value = null;
+      _householdStore.clear();
+    }
+
+    _profileSubscription = _userRepository.watchUser(user.uid).listen((
+      profile,
+    ) {
+      if (profile == null) return;
+      currentUser.value = profile;
+      _householdStore.bindUser(profile);
+      _syncConfirmedEmail(user.uid, profile);
+    }, onError: (_) {});
+  }
+
+  /// After the user confirms an email change from the verification link,
+  /// Firebase Auth holds the new address; copy it to the profile.
+  void _syncConfirmedEmail(String uid, UserModel profile) {
+    final authUser = _authService.firebaseUser;
+    final authEmail = authUser?.email?.trim();
+    if (authUser == null || authUser.uid != uid) return;
+    if (authEmail == null || authEmail.isEmpty) return;
+    if (authEmail.toLowerCase() == profile.email.trim().toLowerCase()) return;
+    _userRepository.updateFields(uid, {'email': authEmail}).catchError((_) {});
   }
 
   /// Resolves the signed-in user's profile, or null when signed out.
@@ -62,9 +81,19 @@ class AuthController extends GetxController {
     return profile;
   }
 
-  /// Sends a freshly signed-in user to location setup or the main app.
-  void routeAfterSignIn(UserModel profile) {
+  bool get needsEmailVerification => _authService.needsEmailVerification;
+
+  /// Sends a signed-in user on: email verification first (email/password
+  /// accounts), then location setup or the main app.
+  void routeAfterSignIn(UserModel profile, {bool verificationSent = false}) {
     currentUser.value = profile;
+    if (needsEmailVerification) {
+      Get.offAllNamed(
+        AppRoutes.verifyEmail,
+        arguments: {'sent': verificationSent},
+      );
+      return;
+    }
     Get.offAllNamed(
       profile.hasLocation ? AppRoutes.mainNav : AppRoutes.locationSetup,
     );
@@ -81,9 +110,16 @@ class AuthController extends GetxController {
       case OtpPurpose.signIn:
         final profile = await _authService.signInWithPhone(credential);
         routeAfterSignIn(profile);
-      case OtpPurpose.linkPhone:
+      case OtpPurpose.addPhone:
         await _authService.linkPhone(credential, phone);
-        Get.offAllNamed(AppRoutes.locationSetup);
+        final current = currentUser.value;
+        if (current != null) updateUser(current.copyWith(phone: phone));
+        // Back to Edit Profile (an auto-verified code never opens the OTP page).
+        if (Get.currentRoute == AppRoutes.otpVerification) Get.back();
+        SnackbarService.showSuccess(
+          'Phone Verified',
+          '$phone can now be used to sign in and reset your password.',
+        );
       case OtpPurpose.resetPassword:
         await _authService.verifyPhoneForPasswordReset(credential);
         if (Get.currentRoute == AppRoutes.otpVerification) {
@@ -96,11 +132,24 @@ class AuthController extends GetxController {
 
   bool get accountUsesPassword => _authService.accountUsesPassword;
 
+  /// "Google" or "Apple" when deletion is confirmed with that account.
+  String? get deletionConfirmationLabel =>
+      switch (_authService.deletionConfirmationProvider) {
+        'google.com' => 'Google',
+        'apple.com' => 'Apple',
+        _ => null,
+      };
+
+  /// Sends an SMS code to [phone] for the signed-in account.
+  Future<SmsVerificationResult> sendPhoneCode(String phone) =>
+      _authService.sendPhoneCode(phone);
+
   /// Deletes the account and all its data, then returns to Sign In.
   /// Returns false if the user cancelled re-authentication.
   Future<bool> deleteAccount({String? password}) async {
-    final confirmed =
-        await _authService.reauthenticateForDeletion(password: password);
+    final confirmed = await _authService.reauthenticateForDeletion(
+      password: password,
+    );
     if (!confirmed) return false;
 
     // Stop listeners so they don't report errors while data is removed.

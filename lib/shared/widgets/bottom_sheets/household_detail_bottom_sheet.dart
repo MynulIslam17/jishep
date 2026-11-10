@@ -118,8 +118,13 @@ class _HouseholdDetailBottomSheetState
         isPrayed: !_currentHousehold.isPrayed,
       );
     });
-    widget.onPrayToggle?.call();
-    widget.onUpdated?.call(_currentHousehold);
+    // One save: the toggle when given, otherwise the full update.
+    final toggle = widget.onPrayToggle;
+    if (toggle != null) {
+      toggle();
+    } else {
+      widget.onUpdated?.call(_currentHousehold);
+    }
   }
 
   void _toggleVisited() {
@@ -307,7 +312,9 @@ class _HouseholdDetailBottomSheetState
                         ),
 
                         // Status Badges (Follow up / Visited / Invited)
-                        if (item.hasFollowUp || item.isVisited || item.isInvited) ...[
+                        if (item.hasFollowUp ||
+                            item.isVisited ||
+                            item.isInvited) ...[
                           SizedBox(height: 6.h),
                           Wrap(
                             spacing: 6.w,
@@ -379,7 +386,10 @@ class _HouseholdDetailBottomSheetState
                       ),
                       SizedBox(height: 8.h),
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10.w,
+                          vertical: 8.h,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(10.r),
@@ -397,7 +407,8 @@ class _HouseholdDetailBottomSheetState
                             height: 1.35,
                           ),
                           decoration: const InputDecoration(
-                            hintText: 'Write follow-up notes about this household...',
+                            hintText:
+                                'Write follow-up notes about this household...',
                             hintStyle: TextStyle(color: Color(0xFF94A3B8)),
                             border: InputBorder.none,
                             isDense: true,
@@ -418,7 +429,10 @@ class _HouseholdDetailBottomSheetState
                               });
                             },
                             style: TextButton.styleFrom(
-                              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12.w,
+                                vertical: 6.h,
+                              ),
                               foregroundColor: const Color(0xFF64748B),
                             ),
                             child: Text(
@@ -432,7 +446,11 @@ class _HouseholdDetailBottomSheetState
                           SizedBox(width: 8.w),
                           ElevatedButton.icon(
                             onPressed: _saveNotes,
-                            icon: Icon(Icons.check_rounded, size: 16.r, color: Colors.white),
+                            icon: Icon(
+                              Icons.check_rounded,
+                              size: 16.r,
+                              color: Colors.white,
+                            ),
                             label: Text(
                               'Put Notes',
                               style: TextStyle(
@@ -444,7 +462,10 @@ class _HouseholdDetailBottomSheetState
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryNavy,
                               elevation: 0,
-                              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 14.w,
+                                vertical: 8.h,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8.r),
                               ),
@@ -475,7 +496,10 @@ class _HouseholdDetailBottomSheetState
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12.r),
                       side: item.isPrayed
-                          ? const BorderSide(color: Color(0xFFC8E6C9), width: 1.2)
+                          ? const BorderSide(
+                              color: Color(0xFFC8E6C9),
+                              width: 1.2,
+                            )
                           : BorderSide.none,
                     ),
                   ),

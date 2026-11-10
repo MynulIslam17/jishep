@@ -1,7 +1,5 @@
 import 'package:get/get.dart';
-import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
-import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/notifications/data/repositories/notification_repository.dart';
@@ -9,44 +7,50 @@ import 'package:gps_cielo/features/notifications/data/repositories/notification_
 class HomeService {
   final HouseholdStore _store;
   final LocationService _locationService;
-  final UserRepository _userRepository;
   final NotificationRepository _notificationRepository;
 
-  HomeService(
-    this._store,
-    this._locationService,
-    this._userRepository,
-    this._notificationRepository,
-  );
+  HomeService(this._store, this._locationService, this._notificationRepository);
 
   RxList<HouseholdModel> get households => _store.households;
 
   RxBool get isLoading => _store.isLoading;
 
-  /// Moves the user's search center to [address] and reloads nearby
-  /// households. Pass [location] when coordinates are already known (from a
-  /// suggestion or GPS) to skip geocoding. Returns the updated user.
-  Future<UserModel> searchNeighborhood(
-    UserModel user,
+  Rxn<SearchCenter> get center => _store.center;
+
+  RxnDouble get rangeMeters => _store.rangeMeters;
+
+  /// Searches nearby households around [address] (or [location] when the
+  /// coordinates are already known from a suggestion or GPS).
+  ///
+  /// This is a temporary search: the saved home address is not changed.
+  Future<ResolvedLocation> searchNeighborhood(
     String address, {
     ResolvedLocation? location,
   }) async {
     location ??= await _locationService.resolveAddress(address);
-    final updated = user.copyWith(
-      address: location.address,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    );
-
-    await _userRepository.updateLocation(
-      uid: user.id,
-      address: location.address,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    );
-    await _store.bindUser(updated);
-    return updated;
+    await _store.searchAround(location);
+    return location;
   }
+
+  RxInt get activeRadius => _store.activeRadius;
+
+  RxBool get isRadiusFiltered => _store.isRadiusFiltered;
+
+  RxInt get defaultHomes => _store.defaultHomes;
+
+  RxInt get foundInRange => _store.foundInRange;
+
+  /// False while only part of the range has been read ("N+ in range").
+  RxBool get areaComplete => _store.areaComplete;
+
+  /// Shows the [homes] nearest households within the range. Not saved; the
+  /// default number and the range are set in Settings > My preferences.
+  Future<void> filterRadius(int? homes) => _store.filterRadius(homes);
+
+  Future<void> refreshHouseholds() => _store.refreshHouseholds();
+
+  /// Goes back to searching around the saved home address.
+  Future<void> useSavedLocation() => _store.useSavedLocation();
 
   Future<ResolvedLocation> currentLocation() {
     return _locationService.currentLocation();

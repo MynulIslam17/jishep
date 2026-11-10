@@ -2,24 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/core/services/location_selection.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
 import 'package:gps_cielo/shared/widgets/inputs/address_autocomplete.dart';
+import 'package:gps_cielo/shared/widgets/inputs/selected_location_note.dart';
 
-/// Called with the typed address and, when picked from suggestions, its
-/// coordinates.
+/// Called with the typed address and, when picked from suggestions or GPS,
+/// its coordinates.
 typedef SaveAddressCallback =
     void Function(String address, ResolvedLocation? location);
+
+/// Reads the device GPS; returns null when it failed (already reported).
+typedef LocateDeviceCallback = Future<ResolvedLocation?> Function();
 
 class ProfileAddressBottomSheet extends StatefulWidget {
   final String currentAddress;
   final SaveAddressCallback onSaveAddress;
+  final LocateDeviceCallback? onUseCurrentLocation;
   final double? nearLatitude;
   final double? nearLongitude;
 
   const ProfileAddressBottomSheet({
     required this.currentAddress,
     required this.onSaveAddress,
+    this.onUseCurrentLocation,
     this.nearLatitude,
     this.nearLongitude,
     super.key,
@@ -29,6 +36,7 @@ class ProfileAddressBottomSheet extends StatefulWidget {
     BuildContext context, {
     required String currentAddress,
     required SaveAddressCallback onSaveAddress,
+    LocateDeviceCallback? onUseCurrentLocation,
     double? nearLatitude,
     double? nearLongitude,
   }) {
@@ -39,6 +47,7 @@ class ProfileAddressBottomSheet extends StatefulWidget {
       builder: (ctx) => ProfileAddressBottomSheet(
         currentAddress: currentAddress,
         onSaveAddress: onSaveAddress,
+        onUseCurrentLocation: onUseCurrentLocation,
         nearLatitude: nearLatitude,
         nearLongitude: nearLongitude,
       ),
@@ -52,7 +61,35 @@ class ProfileAddressBottomSheet extends StatefulWidget {
 
 class _ProfileAddressBottomSheetState extends State<ProfileAddressBottomSheet> {
   final addressController = TextEditingController();
-  ResolvedLocation? _selectedLocation;
+  final LocationSelection _selection = LocationSelection();
+  bool _locating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    addressController.addListener(() {
+      if (_selection.picked != null &&
+          !_selection.appliesTo(addressController.text)) {
+        setState(_selection.clear);
+      }
+    });
+  }
+
+  void _pick(ResolvedLocation location) {
+    setState(() => _selection.pick(location));
+  }
+
+  Future<void> _useCurrentLocation() async {
+    final locate = widget.onUseCurrentLocation;
+    if (locate == null || _locating) return;
+    setState(() => _locating = true);
+    final location = await locate();
+    if (!mounted) return;
+    setState(() => _locating = false);
+    if (location == null) return;
+    _pick(location);
+    addressController.text = location.address;
+  }
 
   @override
   void dispose() {
@@ -131,7 +168,7 @@ class _ProfileAddressBottomSheetState extends State<ProfileAddressBottomSheet> {
               nearLatitude: widget.nearLatitude,
               nearLongitude: widget.nearLongitude,
               onSelected: (suggestion) =>
-                  _selectedLocation = suggestion.toResolvedLocation(),
+                  _pick(suggestion.toResolvedLocation()),
               fieldBuilder: (context, fieldController, focusNode) => Container(
                 height: 48.h,
                 padding: EdgeInsets.symmetric(horizontal: 14.w),
@@ -170,6 +207,36 @@ class _ProfileAddressBottomSheetState extends State<ProfileAddressBottomSheet> {
               ),
             ),
 
+            SelectedLocationNote(location: _selection.picked),
+
+            if (widget.onUseCurrentLocation != null) ...[
+              SizedBox(height: 10.h),
+              GestureDetector(
+                onTap: _locating ? null : _useCurrentLocation,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.my_location_rounded,
+                      color: AppColors.primaryNavy,
+                      size: 16.r,
+                    ),
+                    SizedBox(width: 6.w),
+                    Text(
+                      _locating
+                          ? 'Detecting GPS location...'
+                          : 'Use my current location',
+                      style: AppTypography.label(
+                        color: AppColors.primaryNavy,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             SizedBox(height: 24.h),
 
             AppPrimaryButton(
@@ -177,13 +244,7 @@ class _ProfileAddressBottomSheetState extends State<ProfileAddressBottomSheet> {
               onPressed: () {
                 final text = addressController.text.trim();
                 if (text.isNotEmpty) {
-                  final selected = _selectedLocation;
-                  widget.onSaveAddress(
-                    text,
-                    selected != null && selected.address == text
-                        ? selected
-                        : null,
-                  );
+                  widget.onSaveAddress(text, _selection.locationFor(text));
                 }
                 Navigator.of(context).pop();
               },

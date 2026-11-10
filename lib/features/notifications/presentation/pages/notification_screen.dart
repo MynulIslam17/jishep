@@ -59,7 +59,10 @@ class NotificationScreen extends GetView<NotificationController> {
                         final count = controller.unreadCount;
                         if (count == 0) return const SizedBox.shrink();
                         return Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8.w,
+                            vertical: 2.h,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.primaryGold,
                             borderRadius: BorderRadius.circular(12.r),
@@ -80,11 +83,16 @@ class NotificationScreen extends GetView<NotificationController> {
 
                 // Mark all as read button
                 Obx(() {
-                  if (controller.unreadCount == 0) return const SizedBox.shrink();
+                  if (controller.unreadCount == 0) {
+                    return const SizedBox.shrink();
+                  }
                   return GestureDetector(
                     onTap: () => controller.markAllAsRead(),
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10.w,
+                        vertical: 6.h,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8.r),
@@ -127,11 +135,11 @@ class NotificationScreen extends GetView<NotificationController> {
             child: Obx(
               () => SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
                 padding: EdgeInsets.symmetric(horizontal: 12.w),
                 child: Row(
                   children: NotificationFilter.values.map((filter) {
-                    final isSelected = controller.selectedFilter.value == filter;
+                    final isSelected =
+                        controller.selectedFilter.value == filter;
                     return GestureDetector(
                       onTap: () => controller.selectFilter(filter),
                       child: Container(
@@ -183,30 +191,38 @@ class NotificationScreen extends GetView<NotificationController> {
                   onRefresh: () => controller.loadNotifications(),
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [
-                      NotificationEmptyState(),
-                    ],
+                    children: const [NotificationEmptyState()],
                   ),
                 );
               }
 
               return RefreshIndicator(
                 onRefresh: () => controller.loadNotifications(),
-                child: ListView.separated(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
-                  itemCount: list.length,
-                  separatorBuilder: (context, index) => SizedBox(height: 10.h),
-                  itemBuilder: (context, index) {
-                    final notif = list[index];
-                    return NotificationCard(
-                      notification: notif,
-                      onTap: () => controller.handleNotificationTap(notif),
-                      onDelete: () => controller.deleteNotification(notif.id),
-                    );
+                child: NotificationListener<ScrollNotification>(
+                  // Older notifications load shortly before the end.
+                  onNotification: (notification) {
+                    if (notification.metrics.extentAfter < 300) {
+                      controller.loadMore();
+                    }
+                    return false;
                   },
+                  child: ListView.separated(
+                    key: const ValueKey('notification-list'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
+                    itemCount: list.length + 1,
+                    separatorBuilder: (context, index) =>
+                        SizedBox(height: 10.h),
+                    itemBuilder: (context, index) {
+                      if (index == list.length) return _buildFooter();
+                      final notif = list[index];
+                      return NotificationCard(
+                        notification: notif,
+                        onTap: () => controller.handleNotificationTap(notif),
+                        onDelete: () => controller.deleteNotification(notif.id),
+                      );
+                    },
+                  ),
                 ),
               );
             }),
@@ -214,5 +230,38 @@ class NotificationScreen extends GetView<NotificationController> {
         ],
       ),
     );
+  }
+
+  Widget _buildFooter() {
+    return Obx(() {
+      if (controller.isLoadingMore.value) {
+        return Padding(
+          key: const ValueKey('notifications-loading-more'),
+          padding: EdgeInsets.symmetric(vertical: 12.h),
+          child: Center(
+            child: SizedBox(
+              width: 22.r,
+              height: 22.r,
+              child: const CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+          ),
+        );
+      }
+      if (!controller.hasMore.value) return const SizedBox.shrink();
+      return Center(
+        child: TextButton(
+          key: const ValueKey('notifications-load-more'),
+          onPressed: controller.loadMore,
+          child: Text(
+            'Show older',
+            style: TextStyle(
+              color: AppColors.primaryNavy,
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    });
   }
 }

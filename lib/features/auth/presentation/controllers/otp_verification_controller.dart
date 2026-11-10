@@ -17,10 +17,14 @@ class OtpVerificationController extends GetxController {
   /// Firebase SMS codes are 6 digits.
   static const int codeLength = 6;
 
-  final List<TextEditingController> digitControllers =
-      List.generate(codeLength, (_) => TextEditingController());
-  final List<FocusNode> digitFocusNodes =
-      List.generate(codeLength, (_) => FocusNode());
+  final List<TextEditingController> digitControllers = List.generate(
+    codeLength,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> digitFocusNodes = List.generate(
+    codeLength,
+    (_) => FocusNode(),
+  );
 
   final phoneRx = ''.obs;
   String get phone => phoneRx.value;
@@ -43,8 +47,9 @@ class OtpVerificationController extends GetxController {
     _verificationId = args?['verificationId'] as String? ?? '';
     _resendToken = args?['resendToken'] as int?;
 
-    _autoVerifySubscription =
-        _authService.autoVerifiedCredentials.listen(_complete);
+    _autoVerifySubscription = _authService.autoVerifiedCredentials.listen(
+      _complete,
+    );
     startCountdown();
   }
 

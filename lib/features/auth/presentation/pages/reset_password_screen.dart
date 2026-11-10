@@ -22,7 +22,9 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
       barrierDismissible: false,
       builder: (ctx) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.r),
+          ),
           child: Padding(
             padding: EdgeInsets.all(24.r),
             child: Column(
@@ -118,9 +120,11 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
                           controller: controller.passwordController,
                           isPassword: true,
                           isPasswordVisible: controller.isPasswordVisible.value,
-                          onPasswordVisibilityPressed: controller.togglePasswordVisibility,
+                          onPasswordVisibilityPressed:
+                              controller.togglePasswordVisibility,
                           textInputAction: TextInputAction.next,
-                          validator: (value) => AppValidator.password(value, minLength: 8),
+                          validator: (value) =>
+                              AppValidator.password(value, minLength: 8),
                         ),
                       ),
 
@@ -133,8 +137,10 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
                           hint: 'Re-enter your new password',
                           controller: controller.confirmPasswordController,
                           isPassword: true,
-                          isPasswordVisible: controller.isConfirmPasswordVisible.value,
-                          onPasswordVisibilityPressed: controller.toggleConfirmPasswordVisibility,
+                          isPasswordVisible:
+                              controller.isConfirmPasswordVisible.value,
+                          onPasswordVisibilityPressed:
+                              controller.toggleConfirmPasswordVisibility,
                           textInputAction: TextInputAction.done,
                           validator: (value) {
                             if (value == null || value.isEmpty) {

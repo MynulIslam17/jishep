@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
@@ -9,7 +10,10 @@ class PrayerListBinding extends Bindings {
   void dependencies() {
     if (!Get.isRegistered<PrayerListService>()) {
       Get.lazyPut<PrayerListService>(
-        () => PrayerListService(Get.find<HouseholdStore>()),
+        () => PrayerListService(
+          Get.find<HouseholdStore>(),
+          Get.find<UserRepository>(),
+        ),
       );
     }
     if (!Get.isRegistered<PrayerListController>()) {

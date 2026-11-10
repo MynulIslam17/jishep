@@ -22,8 +22,6 @@ class _SplashScreenState extends State<SplashScreen>
   // Staggered Animations
   late final Animation<double> _logoScale;
   late final Animation<double> _logoFade;
-  late final Animation<double> _titleFade;
-  late final Animation<Offset> _titleSlide;
   late final Animation<double> _subtitleFade;
   late final Animation<Offset> _subtitleSlide;
 
@@ -53,39 +51,20 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // 2. App Name Slide & Fade (0.35 -> 0.70)
-    _titleFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0.35, 0.70, curve: Curves.easeIn),
-      ),
-    );
-    _titleSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.30),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0.35, 0.70, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    // 3. Subtitle Tagline Slide & Fade (0.65 -> 1.00)
+    // 2. Tagline Slide & Fade (0.45 -> 1.00)
     _subtitleFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animController,
-        curve: const Interval(0.65, 1.00, curve: Curves.easeIn),
+        curve: const Interval(0.45, 1.00, curve: Curves.easeIn),
       ),
     );
-    _subtitleSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.35),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0.65, 1.00, curve: Curves.easeOutCubic),
-      ),
-    );
+    _subtitleSlide =
+        Tween<Offset>(begin: const Offset(0.0, 0.35), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animController,
+            curve: const Interval(0.45, 1.00, curve: Curves.easeOutCubic),
+          ),
+        );
 
     _animController.forward();
   }
@@ -113,9 +92,7 @@ class _SplashScreenState extends State<SplashScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _SplashLogo(scale: _logoScale, fade: _logoFade),
-                  SizedBox(height: 28.h),
-                  _SplashTitle(slide: _titleSlide, fade: _titleFade),
-                  SizedBox(height: 28.h),
+                  SizedBox(height: 36.h),
                   _SplashSubtitle(slide: _subtitleSlide, fade: _subtitleFade),
                 ],
               ),
@@ -141,68 +118,37 @@ class _SplashLogo extends StatelessWidget {
       opacity: fade,
       child: ScaleTransition(
         scale: scale,
-        child: Image.asset(
-          AppAssets.logo,
-          width: 300,
-          height: 300,
-          fit: BoxFit.contain,
-        ),
-      ),
-    );
-  }
-}
-
-class _SplashTitle extends StatelessWidget {
-  const _SplashTitle({required this.slide, required this.fade});
-
-  final Animation<Offset> slide;
-  final Animation<double> fade;
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: fade,
-      child: SlideTransition(
-        position: slide,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  'GPS ',
-                  style: AppTypography.heading(
-                    color: AppColors.textWhite,
-                    fontSize: 36.sp,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                Text(
-                  'PARA EL',
-                  style: AppTypography.heading(
-                    color: AppColors.primaryGold,
-                    fontSize: 18.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              'CIELO',
-              style: AppTypography.heading(
-                color: AppColors.textWhite,
-                fontSize: 40.sp,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2.2,
-                height: 0.9,
+        child: Container(
+          width: 176.r,
+          height: 176.r,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(40.r),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryGold.withValues(alpha: 0.28),
+                blurRadius: 48,
+                spreadRadius: 2,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(40.r),
+            // The JPEG has a thin white margin around its rounded square;
+            // a slight zoom keeps that edge out of the clip.
+            child: Transform.scale(
+              scale: 1.06,
+              child: Image.asset(
+                AppAssets.appLogoRound,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -224,8 +170,8 @@ class _SplashSubtitle extends StatelessWidget {
         child: Text(
           'CONNECTING HOMES  :  REACHING LIVES',
           style: AppTypography.label(
-            color: AppColors.primaryGold.withValues(alpha: 0.85),
-            fontSize: 11.sp,
+            color: AppColors.background,
+            fontSize: 12.sp,
             fontWeight: FontWeight.w600,
             letterSpacing: 2.4,
           ),
@@ -240,10 +186,7 @@ class _DotGridBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _DotGridPainter(),
-    );
+    return CustomPaint(size: Size.infinite, painter: _DotGridPainter());
   }
 }
 

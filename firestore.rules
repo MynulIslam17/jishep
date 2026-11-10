@@ -1,5 +1,9 @@
 rules_version = '2';
 
+// GPS PARA EL CIELO — Firestore rules.
+// Every write is limited to the fields the app actually sends, with types
+// and sizes checked. The demo/seed tools use the Admin SDK (rules bypassed).
+
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -10,24 +14,137 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    // Profile, location and prayer preferences.
+    // Email/password accounts must click the verification link first.
+    // Google, Apple and phone sign-ins are verified by their provider.
+    function verified() {
+      return request.auth.token.get('email_verified', false) == true
+        || request.auth.token.firebase.sign_in_provider
+          in ['google.com', 'apple.com', 'phone'];
+    }
+
+    function data() {
+      return request.resource.data;
+    }
+
+    // Fields this write adds or changes.
+    function changed() {
+      return resource == null
+        ? data().keys()
+        : data().diff(resource.data).affectedKeys();
+    }
+
+    function optString(field, max) {
+      return !(field in data()) || data()[field] == null
+        || (data()[field] is string && data()[field].size() <= max);
+    }
+
+    function optNumberIn(field, lo, hi) {
+      return !(field in data()) || data()[field] == null
+        || (data()[field] is number && data()[field] >= lo && data()[field] <= hi);
+    }
+
+    function optIntIn(field, lo, hi) {
+      return !(field in data())
+        || (data()[field] is int && data()[field] >= lo && data()[field] <= hi);
+    }
+
+    function optTimestamp(field) {
+      return !(field in data()) || data()[field] is timestamp;
+    }
+
+    // ---------------------------------------------------------------
+    // users/{uid}: profile, home location and prayer preferences.
+    // ---------------------------------------------------------------
+    function validProfile() {
+      return data().keys().hasOnly([
+          'fullName', 'email', 'phone', 'avatarUrl', 'avatarBase64',
+          'address', 'churchAffiliation', 'dailyPrayerTarget',
+          'prayerCycleTarget', 'radiusHomes', 'searchRadiusKm',
+          'latitude', 'longitude', 'prayerCycleStartedAt',
+          'createdAt', 'updatedAt'])
+        && optString('fullName', 100)
+        && optString('email', 254)
+        && optString('phone', 20)
+        && optString('avatarUrl', 2048)
+        // Small profile photo (no Firebase Storage).
+        && optString('avatarBase64', 300000)
+        && optString('address', 300)
+        && optString('churchAffiliation', 150)
+        && optIntIn('dailyPrayerTarget', 1, 100)
+        && optIntIn('prayerCycleTarget', 1, 1000)
+        && optIntIn('radiusHomes', 1, 200)
+        && optNumberIn('searchRadiusKm', 0.1, 50)
+        && optNumberIn('latitude', -90, 90)
+        && optNumberIn('longitude', -180, 180)
+        && optTimestamp('prayerCycleStartedAt')
+        && optTimestamp('createdAt')
+        && optTimestamp('updatedAt');
+    }
+
+    // The profile email must be the account's own sign-in email
+    // (empty for phone-only accounts).
+    function emailMatchesAccount() {
+      return !('email' in changed())
+        || data().email == ''
+        || data().email.lower()
+          == request.auth.token.get('email', '').lower();
+    }
+
+    // A phone number is stored only after it was verified by SMS and
+    // linked to this account.
+    function phoneMatchesAccount() {
+      return !('phone' in changed())
+        || data().phone == null
+        || data().phone == request.auth.token.get('phone_number', '');
+    }
+
     match /users/{uid} {
-      // avatarBase64 holds a small profile photo (no Firebase Storage).
       allow read: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && (!('avatarBase64' in request.resource.data)
-            || request.resource.data.avatarBase64 == null
-            || request.resource.data.avatarBase64.size() <= 300000);
+        && validProfile()
+        && emailMatchesAccount()
+        && phoneMatchesAccount();
       allow delete: if isOwner(uid);
 
       // The user's own prayed / visited / invited / follow-up state.
       match /household_status/{householdId} {
-        allow read, write: if isOwner(uid);
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && verified()
+          && householdId.size() <= 128
+          && data().keys().hasOnly([
+              'isPrayed', 'isVisited', 'isInvited', 'hasFollowUp',
+              'followUpDate', 'notes', 'residentName', 'address',
+              'prayedAt', 'updatedAt'])
+          && data().isPrayed is bool
+          && data().isVisited is bool
+          && data().isInvited is bool
+          && data().hasFollowUp is bool
+          && optString('followUpDate', 64)
+          && optString('notes', 2000)
+          && optString('residentName', 200)
+          && optString('address', 300)
+          && optTimestamp('prayedAt')
+          && data().updatedAt == request.time;
       }
 
-      // In-app notifications.
+      // In-app notifications. Clients can only mark them read or delete.
       match /notifications/{notificationId} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && data().keys().hasOnly([
+              'title', 'message', 'type', 'isRead', 'actionRoute',
+              'timestamp'])
+          && data().title is string && data().title.size() <= 200
+          && data().message is string && data().message.size() <= 2000
+          && data().type in ['prayerReminder', 'followUpDue', 'milestone',
+                             'scripture', 'churchNews']
+          && data().isRead is bool
+          && optString('actionRoute', 200)
+          && data().timestamp == request.time;
+        allow update: if isOwner(uid)
+          && changed().hasOnly(['isRead'])
+          && data().isRead is bool;
       }
     }
 
@@ -38,13 +155,26 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Contact Support messages: users can send, only admins can read.
+    // Contact Support messages: users can send them, and read or delete
+    // only their own (account deletion removes them). Admins use the
+    // Admin SDK / console.
     match /support_messages/{messageId} {
       allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.message is string
-        && request.resource.data.message.size() <= 5000;
-      allow read, update, delete: if false;
+        && verified()
+        && data().keys().hasOnly(['uid', 'email', 'message', 'status',
+                                  'createdAt'])
+        && data().uid == request.auth.uid
+        && data().message is string
+        && data().message.size() > 0
+        && data().message.size() <= 5000
+        && optString('email', 254)
+        && data().status == 'open'
+        && data().createdAt == request.time;
+      allow read, delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+      allow update: if false;
     }
+
+    // Anything else is closed.
   }
 }

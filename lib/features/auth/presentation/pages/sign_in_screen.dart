@@ -10,8 +10,10 @@ import 'package:gps_cielo/core/utils/validators.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/sign_in_controller.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_outline_button.dart';
+import 'package:gps_cielo/shared/widgets/buttons/apple_sign_in_button.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
 import 'package:gps_cielo/shared/widgets/inputs/app_phone_input_field.dart';
+import 'package:gps_cielo/shared/widgets/inputs/app_segmented_switch.dart';
 import 'package:gps_cielo/shared/widgets/inputs/app_text_field.dart';
 import 'package:gps_cielo/shared/widgets/layout/app_header.dart';
 
@@ -41,32 +43,11 @@ class SignInScreen extends GetView<SignInController> {
                   children: [
                     // Login Method Switcher (Email / Phone)
                     Obx(
-                      () => Container(
-                        padding: EdgeInsets.all(4.r),
-                        decoration: BoxDecoration(
-                          color: AppColors.inputSurface,
-                          borderRadius: BorderRadius.circular(12.r),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildTabButton(
-                                title: 'Email',
-                                isSelected: !controller.isPhoneLogin.value,
-                                onTap: () => controller.setLoginMode(false),
-                              ),
-                            ),
-                            SizedBox(width: 4.w),
-                            Expanded(
-                              child: _buildTabButton(
-                                title: 'Phone Number',
-                                isSelected: controller.isPhoneLogin.value,
-                                onTap: () => controller.setLoginMode(true),
-                              ),
-                            ),
-                          ],
-                        ),
+                      () => AppSegmentedSwitch(
+                        key: const ValueKey('login-method'),
+                        labels: const ['Email', 'Phone Number'],
+                        selectedIndex: controller.isPhoneLogin.value ? 1 : 0,
+                        onChanged: (i) => controller.setLoginMode(i == 1),
                       ),
                     ),
 
@@ -79,7 +60,6 @@ class SignInScreen extends GetView<SignInController> {
                           label: 'Phone Number',
                           hint: 'Enter your phone number',
                           controller: controller.phoneController,
-                          initialCountryCode: 'US',
                           onChanged: (phone) {
                             controller.updatePhoneNumber(phone.completeNumber);
                           },
@@ -106,8 +86,10 @@ class SignInScreen extends GetView<SignInController> {
                               hint: AppStrings.passwordHint,
                               controller: controller.passwordController,
                               isPassword: true,
-                              isPasswordVisible: controller.isPasswordVisible.value,
-                              onPasswordVisibilityPressed: controller.togglePasswordVisibility,
+                              isPasswordVisible:
+                                  controller.isPasswordVisible.value,
+                              onPasswordVisibilityPressed:
+                                  controller.togglePasswordVisibility,
                               textInputAction: TextInputAction.done,
                             ),
                     ),
@@ -140,8 +122,11 @@ class SignInScreen extends GetView<SignInController> {
                         label: controller.isPhoneLogin.value
                             ? 'Send Verification Code'
                             : AppStrings.signIn,
-                        isLoading: controller.isLoading.value,
-                        onPressed: controller.signIn,
+                        isLoading:
+                            controller.busyWith.value == SignInMethod.form,
+                        onPressed: controller.isLoading.value
+                            ? null
+                            : controller.signIn,
                       ),
                     ),
 
@@ -150,7 +135,9 @@ class SignInScreen extends GetView<SignInController> {
                     // Divider
                     Row(
                       children: [
-                        const Expanded(child: Divider(color: AppColors.divider)),
+                        const Expanded(
+                          child: Divider(color: AppColors.divider),
+                        ),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16.w),
                           child: Text(
@@ -161,42 +148,64 @@ class SignInScreen extends GetView<SignInController> {
                             ),
                           ),
                         ),
-                        const Expanded(child: Divider(color: AppColors.divider)),
+                        const Expanded(
+                          child: Divider(color: AppColors.divider),
+                        ),
                       ],
                     ),
 
                     SizedBox(height: 20.h),
 
-                    // Google Sign-In Button
-                    AppOutlineButton(
-                      label: AppStrings.continueWithGoogle,
-                      icon: Container(
-                        width: 20.r,
-                        height: 20.r,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
+                    // Sign in with Apple (iOS only; App Store guideline
+                    // 4.8 asks for it next to Google sign-in).
+                    if (controller.showAppleSignIn) ...[
+                      Obx(
+                        () => AppleSignInButton(
+                          key: const ValueKey('apple-sign-in'),
+                          onPressed: controller.isLoading.value
+                              ? null
+                              : controller.signInWithApple,
                         ),
-                        child: Center(
-                          child: Text(
-                            'G',
-                            style: TextStyle(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF4285F4),
+                      ),
+                      SizedBox(height: 12.h),
+                    ],
+
+                    // Google Sign-In Button
+                    Obx(
+                      () => AppOutlineButton(
+                        label: AppStrings.continueWithGoogle,
+                        icon: Container(
+                          width: 20.r,
+                          height: 20.r,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'G',
+                              style: TextStyle(
+                                fontSize: 15.sp,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF4285F4),
+                              ),
                             ),
                           ),
                         ),
+                        onPressed: controller.isLoading.value
+                            ? null
+                            : controller.signInWithGoogle,
                       ),
-                      onPressed: controller.signInWithGoogle,
                     ),
 
                     SizedBox(height: 32.h),
 
                     // Sign Up Link
                     Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      // Wraps instead of overflowing with large text sizes.
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             AppStrings.dontHaveAccount,
@@ -223,44 +232,6 @@ class SignInScreen extends GetView<SignInController> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton({
-    required String title,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(vertical: 10.h),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(9.r),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Text(
-            title,
-            style: AppTypography.label(
-              color: isSelected ? AppColors.primaryNavy : AppColors.textSecondary,
-              fontSize: 13.sp,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            ),
           ),
         ),
       ),

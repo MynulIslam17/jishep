@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/features/notifications/data/models/notification_model.dart';
+import 'package:gps_cielo/features/notifications/data/repositories/notification_repository.dart';
 import 'package:gps_cielo/features/main_nav/presentation/controllers/main_nav_controller.dart';
 import 'package:gps_cielo/features/main_nav/presentation/models/main_nav_destination.dart';
 import 'package:gps_cielo/features/notifications/domain/services/notification_service.dart';
@@ -24,9 +25,24 @@ class NotificationController extends GetxController {
 
   NotificationController(this._service);
 
+  /// The newest page (live) followed by older pages read on scroll.
   final notifications = <NotificationModel>[].obs;
   final selectedFilter = NotificationFilter.all.obs;
   final isLoading = false.obs;
+
+  /// Older notifications may exist beyond those loaded.
+  final hasMore = false.obs;
+  final isLoadingMore = false.obs;
+
+  List<NotificationModel> _latest = const [];
+  final List<NotificationModel> _older = [];
+  final Set<String> _removed = {};
+
+  /// Where the newest page ends, and where older pages continue from.
+  NotificationCursor? _latestCursor;
+  NotificationCursor? _olderCursor;
+  bool _latestHasMore = false;
+  bool _olderHasMore = true;
 
   int get unreadCount => notifications.where((n) => !n.isRead).length;
 
@@ -46,15 +62,15 @@ class NotificationController extends GetxController {
     }).toList();
   }
 
-  StreamSubscription<List<NotificationModel>>? _subscription;
+  StreamSubscription<NotificationPage>? _subscription;
 
   @override
   void onInit() {
     super.onInit();
     isLoading.value = true;
-    _subscription = _service.watchNotifications().listen(
-      (list) {
-        notifications.assignAll(list);
+    _subscription = _service.watchLatest().listen(
+      (page) {
+        _applyLatest(page);
         isLoading.value = false;
       },
       onError: (Object error) {
@@ -67,10 +83,73 @@ class NotificationController extends GetxController {
     );
   }
 
-  /// Pull-to-refresh: fetches the latest notifications from the server.
+  void _applyLatest(NotificationPage page) {
+    if (_older.isNotEmpty) {
+      // Pushed out of the live page by newer ones: they sit between the
+      // live page and the older pages, so keep them.
+      final live = {for (final n in page.items) n.id};
+      final kept = {for (final n in _older) n.id};
+      _older
+        ..insertAll(0, [
+          for (final n in _latest)
+            if (!live.contains(n.id) && !kept.contains(n.id)) n,
+        ])
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
+    _latest = page.items;
+    _latestCursor = page.cursor;
+    _latestHasMore = page.hasMore;
+    _publish();
+  }
+
+  /// Newest page first, then older pages, without duplicates (a
+  /// notification can move between them as new ones arrive) and without
+  /// those deleted here.
+  void _publish() {
+    final seen = <String>{};
+    final local = {for (final n in notifications) n.id: n};
+    notifications.assignAll([
+      for (final n in [..._latest, ..._older])
+        if (!_removed.contains(n.id) && seen.add(n.id))
+          // Keep a read mark made here until the server echoes it.
+          (local[n.id]?.isRead == true && !n.isRead)
+              ? n.copyWith(isRead: true)
+              : n,
+    ]);
+    hasMore.value = _older.isEmpty ? _latestHasMore : _olderHasMore;
+  }
+
+  /// Reads the next page of older notifications.
+  Future<void> loadMore() async {
+    if (!hasMore.value || isLoadingMore.value || isLoading.value) return;
+    final after = _older.isEmpty ? _latestCursor : _olderCursor;
+    if (after == null) return;
+    isLoadingMore.value = true;
+    try {
+      final page = await _service.fetchOlder(after);
+      _older.addAll(page.items);
+      if (page.cursor != null) _olderCursor = page.cursor;
+      _olderHasMore = page.hasMore;
+      _publish();
+    } catch (error) {
+      SnackbarService.showError(
+        'Notifications',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isLoadingMore.value = false;
+    }
+  }
+
+  /// Pull-to-refresh: fetches the newest page from the server and drops
+  /// older pages (read again on scroll).
   Future<void> loadNotifications() async {
     try {
-      notifications.assignAll(await _service.getNotifications());
+      final page = await _service.getLatest();
+      _older.clear();
+      _olderCursor = null;
+      _olderHasMore = true;
+      _applyLatest(page);
     } catch (error) {
       SnackbarService.showError(
         'Notifications',
@@ -98,20 +177,30 @@ class NotificationController extends GetxController {
       notifications.map((n) => n.copyWith(isRead: true)).toList(),
     );
     if (await _run(_service.markAllAsRead)) {
-      SnackbarService.showSuccess('All Caught Up', 'Marked all notifications as read.');
+      SnackbarService.showSuccess(
+        'All Caught Up',
+        'Marked all notifications as read.',
+      );
     }
   }
 
   Future<void> deleteNotification(String id) async {
+    _removed.add(id);
     notifications.removeWhere((n) => n.id == id);
     await _run(() => _service.deleteNotification(id));
   }
 
   Future<void> clearAll() async {
     if (notifications.isEmpty) return;
+    _removed.addAll(notifications.map((n) => n.id));
+    _older.clear();
     notifications.clear();
+    hasMore.value = false;
     if (await _run(_service.clearAllNotifications)) {
-      SnackbarService.showSuccess('Cleared', 'All notifications have been removed.');
+      SnackbarService.showSuccess(
+        'Cleared',
+        'All notifications have been removed.',
+      );
     }
   }
 

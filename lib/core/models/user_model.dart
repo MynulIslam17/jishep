@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 
 class UserModel {
   final String id;
@@ -15,7 +16,16 @@ class UserModel {
   final int visitsMade;
   final int dailyPrayerTarget;
   final int prayerCycleTarget;
+
+  /// Default number of households to show (nearest first).
   final int radiusHomes;
+
+  /// Households are searched within this distance (km) of the center.
+  final double searchRadiusKm;
+
+  /// When the current prayer cycle started. A household counts as prayed for
+  /// only if it was prayed for after this (null = since the beginning).
+  final DateTime? prayerCycleStartedAt;
   final double? latitude;
   final double? longitude;
 
@@ -32,7 +42,9 @@ class UserModel {
     this.visitsMade = 0,
     this.dailyPrayerTarget = 5,
     this.prayerCycleTarget = 20,
-    this.radiusHomes = 10,
+    this.radiusHomes = SearchRange.defaultHomes,
+    this.searchRadiusKm = SearchRange.defaultKm,
+    this.prayerCycleStartedAt,
     this.latitude,
     this.longitude,
   });
@@ -54,7 +66,11 @@ class UserModel {
       visitsMade: (json['visitsMade'] as num?)?.toInt() ?? 0,
       dailyPrayerTarget: (json['dailyPrayerTarget'] as num?)?.toInt() ?? 5,
       prayerCycleTarget: (json['prayerCycleTarget'] as num?)?.toInt() ?? 20,
-      radiusHomes: (json['radiusHomes'] as num?)?.toInt() ?? 10,
+      radiusHomes: SearchRange.normalize(
+        (json['radiusHomes'] as num?)?.toInt(),
+      ),
+      searchRadiusKm: SearchRange.normalizeKm(json['searchRadiusKm'] as num?),
+      prayerCycleStartedAt: _toDate(json['prayerCycleStartedAt']),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
     );
@@ -79,6 +95,7 @@ class UserModel {
       'dailyPrayerTarget': dailyPrayerTarget,
       'prayerCycleTarget': prayerCycleTarget,
       'radiusHomes': radiusHomes,
+      'searchRadiusKm': searchRadiusKm,
       'latitude': latitude,
       'longitude': longitude,
     };
@@ -98,6 +115,7 @@ class UserModel {
       'dailyPrayerTarget': dailyPrayerTarget,
       'prayerCycleTarget': prayerCycleTarget,
       'radiusHomes': radiusHomes,
+      'searchRadiusKm': searchRadiusKm,
       'latitude': latitude,
       'longitude': longitude,
     };
@@ -117,6 +135,8 @@ class UserModel {
     int? dailyPrayerTarget,
     int? prayerCycleTarget,
     int? radiusHomes,
+    double? searchRadiusKm,
+    DateTime? prayerCycleStartedAt,
     double? latitude,
     double? longitude,
   }) {
@@ -134,8 +154,16 @@ class UserModel {
       dailyPrayerTarget: dailyPrayerTarget ?? this.dailyPrayerTarget,
       prayerCycleTarget: prayerCycleTarget ?? this.prayerCycleTarget,
       radiusHomes: radiusHomes ?? this.radiusHomes,
+      searchRadiusKm: searchRadiusKm ?? this.searchRadiusKm,
+      prayerCycleStartedAt: prayerCycleStartedAt ?? this.prayerCycleStartedAt,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
     );
+  }
+
+  static DateTime? _toDate(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
   }
 }

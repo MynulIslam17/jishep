@@ -1,58 +1,50 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gps_cielo/core/constants/firestore_paths.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
-import 'package:gps_cielo/core/utils/api_debug_log.dart';
 
 /// Reads and writes the `users/{uid}` profile document.
 class UserRepository {
   final FirebaseFirestore _db;
 
   UserRepository({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   DocumentReference<Map<String, dynamic>> _doc(String uid) =>
       _db.doc(FirestorePaths.user(uid));
 
-  Future<UserModel?> getUser(String uid) {
-    return ApiDebugLog.run('UserRepository.getUser', () async {
-      final snapshot = await _doc(uid).get();
-      if (!snapshot.exists) return null;
-      return UserModel.fromFirestore(snapshot);
-    }, details: uid);
+  Future<UserModel?> getUser(String uid) async {
+    final snapshot = await _doc(uid).get();
+    if (!snapshot.exists) return null;
+    return UserModel.fromFirestore(snapshot);
   }
 
   Stream<UserModel?> watchUser(String uid) {
-    return ApiDebugLog.stream(
-      'UserRepository.watchUser',
-      _doc(uid).snapshots().map(
-            (snapshot) =>
-                snapshot.exists ? UserModel.fromFirestore(snapshot) : null,
-          ),
-      details: uid,
+    return _doc(uid).snapshots().map(
+      (snapshot) => snapshot.exists ? UserModel.fromFirestore(snapshot) : null,
     );
   }
 
-  Future<void> createUser(UserModel user) {
-    return ApiDebugLog.run(
-      'UserRepository.createUser',
-      () => _doc(user.id).set({
+  /// Creates the profile only if it does not exist and returns the stored one.
+  Future<UserModel> createUser(UserModel user) {
+    final doc = _doc(user.id);
+    return _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(doc);
+      if (snapshot.exists) return UserModel.fromFirestore(snapshot);
+
+      transaction.set(doc, {
         ...user.toFirestore(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)),
-      details: user.id,
-    );
+      });
+      return user;
+    });
   }
 
   Future<void> updateFields(String uid, Map<String, dynamic> fields) {
-    return ApiDebugLog.run(
-      'UserRepository.updateFields',
-      () => _doc(uid).set({
-        ...fields,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)),
-      details: '$uid ${fields.keys.join(',')}',
-    );
+    return _doc(uid).set({
+      ...fields,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> updateLocation({
@@ -77,24 +69,44 @@ class UserRepository {
   }
 
   /// Deletes the profile and every per-user subcollection document.
-  Future<void> deleteUserData(String uid) {
-    return ApiDebugLog.run('UserRepository.deleteUserData', () async {
-      for (final path in [
-        FirestorePaths.userHouseholdStatus(uid),
-        FirestorePaths.userNotifications(uid),
-      ]) {
-        while (true) {
-          final page = await _db.collection(path).limit(400).get();
-          if (page.docs.isEmpty) break;
-          final batch = _db.batch();
-          for (final doc in page.docs) {
-            batch.delete(doc.reference);
-          }
-          await batch.commit();
+  Future<void> deleteUserData(String uid) async {
+    for (final path in [
+      FirestorePaths.userHouseholdStatus(uid),
+      FirestorePaths.userNotifications(uid),
+    ]) {
+      while (true) {
+        final page = await _db.collection(path).limit(400).get();
+        if (page.docs.isEmpty) break;
+        final batch = _db.batch();
+        for (final doc in page.docs) {
+          batch.delete(doc.reference);
         }
+        await batch.commit();
       }
-      await _doc(uid).delete();
-    }, details: uid);
+    }
+    await _deleteSupportMessages(uid);
+    await _doc(uid).delete();
+  }
+
+  /// The user's own Contact Support messages.
+  Future<void> _deleteSupportMessages(String uid) async {
+    final messages = _db
+        .collection(FirestorePaths.supportMessages)
+        .where('uid', isEqualTo: uid);
+    try {
+      while (true) {
+        final page = await messages.limit(400).get();
+        if (page.docs.isEmpty) break;
+        final batch = _db.batch();
+        for (final doc in page.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } on FirebaseException catch (e) {
+      // Rules that predate owner delete must not block account deletion.
+      if (e.code != 'permission-denied') rethrow;
+    }
   }
 
   Future<void> sendSupportMessage({
@@ -102,16 +114,12 @@ class UserRepository {
     required String email,
     required String message,
   }) {
-    return ApiDebugLog.run(
-      'UserRepository.sendSupportMessage',
-      () => _db.collection(FirestorePaths.supportMessages).add({
-        'uid': uid,
-        'email': email,
-        'message': message,
-        'status': 'open',
-        'createdAt': FieldValue.serverTimestamp(),
-      }),
-      details: uid,
-    );
+    return _db.collection(FirestorePaths.supportMessages).add({
+      'uid': uid,
+      'email': email,
+      'message': message,
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 }

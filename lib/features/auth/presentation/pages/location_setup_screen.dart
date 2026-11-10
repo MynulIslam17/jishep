@@ -1,464 +1,808 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/core/services/location_service.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/core/utils/system_ui_config.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/location_setup_controller.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
 import 'package:gps_cielo/shared/widgets/inputs/address_autocomplete.dart';
-import 'package:gps_cielo/shared/widgets/layout/app_header.dart';
+import 'package:gps_cielo/shared/widgets/inputs/selected_location_note.dart';
+import 'package:gps_cielo/shared/widgets/layout/collapsing_header_scroll_view.dart';
+import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
 
+/// First-run setup: home address, neighborhood range and daily prayer goal,
+/// with a live map of the households the Prayer List will use.
 class LocationSetupScreen extends GetView<LocationSetupController> {
   const LocationSetupScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiConfig.darkOverlay,
+      // Light status icons on the navy header; dark nav icons on the white
+      // bottom bar.
+      value: SystemUiConfig.darkOverlay.copyWith(
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
       child: Scaffold(
-        backgroundColor: AppColors.surface,
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Clean App Auth Header without any step indicators
-              const AppAuthHeader(
-                title: 'Where do you live?',
-                subtitle: 'Set your home address to find nearby neighbors.',
-              ),
-
-              // Interactive Form Body
-              Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 24.h, 20.w, 28.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        backgroundColor: AppColors.background,
+        body: GestureDetector(
+          // Tap outside the field closes the keyboard and suggestions.
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          behavior: HitTestBehavior.translucent,
+          child: CollapsingHeaderScrollView(
+            title: 'Set up your home',
+            subtitle: const Text(
+              'Your neighbors are found around this address',
+            ),
+            pinnedHeight: 46.h,
+            pinned: const _SummaryStrip(),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
+                sliver: SliverList.list(
                   children: [
-                    // Your address label
-                    Text(
-                      'Your address',
-                      style: AppTypography.label(
-                        color: AppColors.primaryNavy,
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    SizedBox(height: 8.h),
-
-                    // Address Input Field
-                    AddressAutocomplete(
-                      controller: controller.addressController,
-                      onSelected: controller.selectSuggestion,
-                      fieldBuilder: (context, fieldController, focusNode) =>
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12.r),
-                              border: Border.all(
-                                color: const Color(0xFF1B2A4A),
-                                width: 1.2,
-                              ),
-                            ),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 14.w,
-                              vertical: 4.h,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.location_on_outlined,
-                                  color: const Color(0xFF64748B),
-                                  size: 20.r,
-                                ),
-                                SizedBox(width: 10.w),
-                                Expanded(
-                                  child: TextField(
-                                    controller: fieldController,
-                                    focusNode: focusNode,
-                                    style: TextStyle(
-                                      color: AppColors.primaryNavy,
-                                      fontSize: 14.sp,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    decoration: const InputDecoration(
-                                      hintText: 'Enter your street address',
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                    ),
-
-                    SizedBox(height: 12.h),
-
-                    // Use my current location Button
-                    Obx(
-                      () => GestureDetector(
-                        onTap: controller.isLocating.value
-                            ? null
-                            : controller.useCurrentLocation,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.my_location_rounded,
-                              color: AppColors.primaryNavy,
-                              size: 16.r,
-                            ),
-                            SizedBox(width: 6.w),
-                            Text(
-                              controller.isLocating.value
-                                  ? 'Detecting GPS location...'
-                                  : 'Use my current location',
-                              style: AppTypography.label(
-                                color: AppColors.primaryNavy,
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: 20.h),
-
-                    // Interactive Map Preview Card
-                    _buildMapPreview(),
-
-                    SizedBox(height: 22.h),
-
-                    // Search Radius Slider Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Search radius',
-                          style: AppTypography.label(
-                            color: AppColors.primaryNavy,
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Obx(
-                          () => Text(
-                            '${controller.radius.value.toInt()} homes',
-                            style: AppTypography.heading(
-                              color: AppColors.primaryNavy,
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    SizedBox(height: 6.h),
-
-                    // Radius Slider
-                    Obx(
-                      () => SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 5.h,
-                          activeTrackColor: AppColors.primaryNavy,
-                          inactiveTrackColor: const Color(0xFFE2E8F0),
-                          thumbColor: AppColors.primaryNavy,
-                          thumbShape: RoundSliderThumbShape(
-                            enabledThumbRadius: 9.r,
-                          ),
-                          overlayShape: RoundSliderOverlayShape(
-                            overlayRadius: 18.r,
-                          ),
-                        ),
-                        child: Slider(
-                          value: controller.radius.value,
-                          min: 5,
-                          max: 25,
-                          divisions: 4,
-                          onChanged: controller.setRadius,
-                        ),
-                      ),
-                    ),
-
-                    // Scale labels
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10.w),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('5 homes', style: _scaleTextStyle()),
-                          Text('15 homes', style: _scaleTextStyle()),
-                          Text('25 homes', style: _scaleTextStyle()),
-                        ],
-                      ),
-                    ),
-
-                    SizedBox(height: 20.h),
-
-                    // Household Summary Card
-                    Container(
-                      padding: EdgeInsets.all(16.r),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 44.r,
-                            height: 44.r,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE2E8F0),
-                              borderRadius: BorderRadius.circular(12.r),
-                            ),
-                            child: Icon(
-                              Icons.home_rounded,
-                              color: AppColors.primaryNavy,
-                              size: 24.r,
-                            ),
-                          ),
-                          SizedBox(width: 14.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Obx(
-                                  () => Text(
-                                    '~${(controller.radius.value * 2.4).round()} households found',
-                                    style: AppTypography.heading(
-                                      color: AppColors.primaryNavy,
-                                      fontSize: 15.sp,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 2.h),
-                                Obx(
-                                  () => Text(
-                                    'within a radius of ${controller.radius.value.toInt()} homes',
-                                    style: AppTypography.body(
-                                      color: const Color(0xFF64748B),
-                                      fontSize: 12.sp,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    SizedBox(height: 24.h),
-
-                    // Confirm and Continue CTA Button
-                    Obx(
-                      () => AppPrimaryButton(
-                        label: 'Confirm and continue \u2192',
-                        backgroundColor: AppColors.primaryNavy,
-                        textColor: AppColors.textWhite,
-                        isLoading: controller.isSubmitting.value,
-                        onPressed: controller.confirmLocation,
-                      ),
-                    ),
+                    const _AddressSection(),
+                    SizedBox(height: 14.h),
+                    const _MapSection(),
+                    SizedBox(height: 14.h),
+                    const _RangeSection(),
+                    SizedBox(height: 14.h),
+                    const _GoalSection(),
+                    SizedBox(height: 10.h),
+                    _signOutLink(),
                   ],
                 ),
               ),
             ],
           ),
         ),
+        // Always reachable, out of the way while typing.
+        bottomNavigationBar: keyboardOpen ? null : const _ConfirmBar(),
       ),
     );
   }
 
-  Widget _buildMapPreview() {
-    return Obx(() {
-      final ringRadius = (50 + (controller.radius.value - 5) * 2.2).r;
-
-      return Container(
-        height: 180.h,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // City Map Grid Lines
-            CustomPaint(size: Size.infinite, painter: _CityGridPainter()),
-
-            // Dashed Radius Circle
-            CustomPaint(
-              size: Size(ringRadius * 2, ringRadius * 2),
-              painter: _MapRadiusPainter(
-                color: AppColors.primaryNavy.withValues(alpha: 0.7),
-              ),
+  Widget _signOutLink() {
+    return Center(
+      child: TextButton(
+        key: const ValueKey('setup-sign-out'),
+        onPressed: controller.signOut,
+        child: Obx(() {
+          final email = controller.accountLabel.value;
+          return Text(
+            email.isEmpty
+                ? 'Not you? Sign out'
+                : 'Signed in as $email · Sign out',
+            textAlign: TextAlign.center,
+            style: AppTypography.label(
+              color: AppColors.textSecondary,
+              fontSize: 12.5.sp,
+              fontWeight: FontWeight.w600,
             ),
-
-            // Center Navy Pin
-            Container(
-              width: 32.r,
-              height: 32.r,
-              decoration: BoxDecoration(
-                color: AppColors.primaryNavy,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.location_on_rounded,
-                color: Colors.white,
-                size: 18.r,
-              ),
-            ),
-
-            // Floating Address Pill at Bottom
-            Positioned(
-              bottom: 12.h,
-              left: 16.w,
-              right: 16.w,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  controller.addressRx.value.isEmpty
-                      ? 'Enter your address'
-                      : controller.addressRx.value,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.primaryNavy,
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  TextStyle _scaleTextStyle() {
-    return TextStyle(
-      color: const Color(0xFF94A3B8),
-      fontSize: 11.sp,
-      fontWeight: FontWeight.w500,
+          );
+        }),
+      ),
     );
   }
 }
 
-class _CityGridPainter extends CustomPainter {
+/// Sticky line under the header: where home is and how many neighbors.
+class _SummaryStrip extends GetView<LocationSetupController> {
+  const _SummaryStrip();
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final blockPaint = Paint()
-      ..color = const Color(0xFFE2E8F0).withValues(alpha: 0.7)
-      ..style = PaintingStyle.fill;
-
-    final roadPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 6.0
-      ..style = PaintingStyle.stroke;
-
-    // Draw city blocks
-    const double stepX = 54.0;
-    const double stepY = 40.0;
-
-    for (double x = 8.0; x < size.width; x += stepX) {
-      for (double y = 8.0; y < size.height; y += stepY) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(x, y, stepX - 8, stepY - 8),
-            const Radius.circular(4),
-          ),
-          blockPaint,
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      child: Obx(() {
+        final has = controller.hasLocation;
+        return Row(
+          children: [
+            Icon(
+              has ? Icons.home_rounded : Icons.home_outlined,
+              size: 18.r,
+              color: has ? AppColors.primaryNavy : AppColors.textSecondary,
+            ),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: Text(
+                has
+                    ? controller.previewSummary
+                    : 'Choose your home to see your neighbors',
+                key: const ValueKey('setup-summary'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.label(
+                  color: has ? AppColors.textPrimary : AppColors.textSecondary,
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (has && controller.isLoadingPreview.value)
+              SizedBox(
+                width: 14.r,
+                height: 14.r,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
         );
-      }
-    }
-
-    // Draw main roads
-    for (double x = stepX / 2; x < size.width; x += stepX) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), roadPaint);
-    }
-    for (double y = stepY / 2; y < size.height; y += stepY) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), roadPaint);
-    }
+      }),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _MapRadiusPainter extends CustomPainter {
-  final Color color;
+/// A white card with a numbered title.
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.step,
+    required this.title,
+    required this.child,
+    this.subtitle,
+  });
 
-  _MapRadiusPainter({required this.color});
+  final int step;
+  final String title;
+  final String? subtitle;
+  final Widget child;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6;
-
-    final fillPaint = Paint()
-      ..color = AppColors.primaryNavy.withValues(alpha: 0.05)
-      ..style = PaintingStyle.fill;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
-    canvas.drawCircle(center, radius, fillPaint);
-
-    const double dashWidth = 4.0;
-    const double dashSpace = 4.0;
-    final circumference = 2 * math.pi * radius;
-    final count = (circumference / (dashWidth + dashSpace)).floor();
-    final adjustedSweep = (2 * math.pi) / count;
-    final dashSweep = adjustedSweep * (dashWidth / (dashWidth + dashSpace));
-
-    for (int i = 0; i < count; i++) {
-      final startAngle = i * adjustedSweep;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        dashSweep,
-        false,
-        paint,
-      );
-    }
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(16.r),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 11.r,
+                backgroundColor: AppColors.primaryNavy,
+                child: Text(
+                  '$step',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTypography.heading(
+                    color: AppColors.primaryNavy,
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (subtitle != null) ...[
+            SizedBox(height: 6.h),
+            Text(
+              subtitle!,
+              style: AppTypography.body(
+                color: AppColors.textSecondary,
+                fontSize: 12.5.sp,
+                height: 1.35,
+              ),
+            ),
+          ],
+          SizedBox(height: 12.h),
+          child,
+        ],
+      ),
+    );
   }
+}
+
+class _AddressSection extends GetView<LocationSetupController> {
+  const _AddressSection();
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    return _Section(
+      step: 1,
+      title: 'Your home address',
+      subtitle: 'Start typing and pick your address from the list.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Obx(() {
+            final near = controller.selectedLocation.value;
+            return AddressAutocomplete(
+              key: const ValueKey('setup-address'),
+              controller: controller.addressController,
+              onSelected: controller.selectSuggestion,
+              nearLatitude: near?.latitude,
+              nearLongitude: near?.longitude,
+              fieldBuilder: (context, fieldController, focusNode) =>
+                  _AddressField(
+                    controller: fieldController,
+                    focusNode: focusNode,
+                  ),
+            );
+          }),
+          Obx(
+            () => SelectedLocationNote(
+              location: controller.selectedLocation.value,
+            ),
+          ),
+          SizedBox(height: 12.h),
+          Obx(
+            () => OutlinedButton.icon(
+              key: const ValueKey('use-current-location'),
+              onPressed: controller.isLocating.value
+                  ? null
+                  : controller.useCurrentLocation,
+              icon: controller.isLocating.value
+                  ? SizedBox(
+                      width: 16.r,
+                      height: 16.r,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(Icons.my_location_rounded, size: 18.r),
+              label: Text(
+                controller.isLocating.value
+                    ? 'Finding your location…'
+                    : 'Use my current location',
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+                minimumSize: Size.fromHeight(44.h),
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+                textStyle: AppTypography.label(
+                  fontSize: 13.5.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          Obx(() {
+            final error = controller.locationError.value;
+            if (error == null) return const SizedBox.shrink();
+            return _LocationErrorNote(
+              error: error,
+              onFix: controller.openLocationSettings,
+              onRetry: controller.useCurrentLocation,
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddressField extends StatelessWidget {
+  const _AddressField({required this.controller, required this.focusNode});
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([controller, focusNode]),
+      builder: (context, _) {
+        final focused = focusNode.hasFocus;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: AppColors.inputSurface,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(
+              color: focused ? AppColors.primaryNavy : AppColors.border,
+              width: focused ? 1.4 : 1,
+            ),
+          ),
+          padding: EdgeInsets.only(left: 12.w),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                color: AppColors.textSecondary,
+                size: 20.r,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  textInputAction: TextInputAction.search,
+                  textCapitalization: TextCapitalization.words,
+                  style: AppTypography.label(
+                    color: AppColors.textPrimary,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. House 12, Road 5, Demra, Dhaka',
+                    hintStyle: AppTypography.body(
+                      color: AppColors.textSecondary,
+                      fontSize: 13.5.sp,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 14.h),
+                  ),
+                ),
+              ),
+              if (controller.text.isNotEmpty)
+                IconButton(
+                  key: const ValueKey('clear-address'),
+                  tooltip: 'Clear',
+                  onPressed: () {
+                    controller.clear();
+                    focusNode.requestFocus();
+                  },
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18.r,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              else
+                SizedBox(width: 12.w),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LocationErrorNote extends StatelessWidget {
+  const _LocationErrorNote({
+    required this.error,
+    required this.onFix,
+    required this.onRetry,
+  });
+
+  final LocationException error;
+  final VoidCallback onFix;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final needsSettings =
+        error.reason == LocationFailure.servicesDisabled ||
+        error.reason == LocationFailure.permissionDeniedForever;
+    return Container(
+      key: const ValueKey('location-error'),
+      margin: EdgeInsets.only(top: 10.h),
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.location_off_outlined,
+            size: 18.r,
+            color: AppColors.danger,
+          ),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  error.message,
+                  style: AppTypography.body(
+                    color: AppColors.textPrimary,
+                    fontSize: 12.5.sp,
+                    height: 1.35,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'You can also type your address above.',
+                  style: AppTypography.body(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.sp,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: needsSettings ? onFix : onRetry,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      foregroundColor: AppColors.primaryNavy,
+                    ),
+                    child: Text(needsSettings ? 'Open settings' : 'Try again'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapSection extends StatefulWidget {
+  const _MapSection();
+
+  @override
+  State<_MapSection> createState() => _MapSectionState();
+}
+
+class _MapSectionState extends State<_MapSection> {
+  final _handle = HouseholdMapHandle();
+
+  LocationSetupController get controller => Get.find();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 230.h,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8EDF5),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Obx(() {
+        final location = controller.selectedLocation.value;
+        if (location == null) return const _MapPlaceholder();
+        final households = controller.previewHouseholds.toList();
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: HouseholdOsmMap(
+                key: const ValueKey('setup-map'),
+                centerLatitude: location.latitude,
+                centerLongitude: location.longitude,
+                households: households,
+                areaMeters: controller.rangeKm.value * 1000,
+                handle: _handle,
+                // The page scrolls; use the buttons to zoom.
+                interactive: false,
+                markerSize: 30,
+              ),
+            ),
+            Positioned(
+              left: 10.w,
+              top: 10.h,
+              child: _MapBadge(text: controller.previewSummary),
+            ),
+            Positioned(
+              right: 10.w,
+              bottom: 10.h,
+              child: Column(
+                children: [
+                  _MapButton(icon: Icons.add_rounded, onTap: _handle.zoomIn),
+                  SizedBox(height: 6.h),
+                  _MapButton(
+                    icon: Icons.remove_rounded,
+                    onTap: _handle.zoomOut,
+                  ),
+                  SizedBox(height: 6.h),
+                  _MapButton(
+                    icon: Icons.center_focus_strong_rounded,
+                    onTap: _handle.recenter,
+                  ),
+                ],
+              ),
+            ),
+            if (controller.previewError.value)
+              Positioned(
+                left: 10.w,
+                bottom: 10.h,
+                child: ActionChip(
+                  avatar: Icon(Icons.refresh_rounded, size: 16.r),
+                  label: const Text('Retry'),
+                  onPressed: controller.retryPreview,
+                ),
+              ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+class _MapPlaceholder extends StatelessWidget {
+  const _MapPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      key: const ValueKey('map-placeholder'),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 24.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.map_outlined,
+              size: 38.r,
+              color: AppColors.primaryNavy.withValues(alpha: 0.5),
+            ),
+            SizedBox(height: 10.h),
+            Text(
+              'Your neighborhood map appears here',
+              textAlign: TextAlign.center,
+              style: AppTypography.label(
+                color: AppColors.primaryNavy,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              'Pick your address or use your current location.',
+              textAlign: TextAlign.center,
+              style: AppTypography.body(
+                color: AppColors.textSecondary,
+                fontSize: 12.5.sp,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapBadge extends StatelessWidget {
+  const _MapBadge({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxWidth: 240.w),
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        color: AppColors.primaryNavy,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        text,
+        key: const ValueKey('map-badge'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.label(
+          color: Colors.white,
+          fontSize: 11.5.sp,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _MapButton extends StatelessWidget {
+  const _MapButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34.r,
+          height: 34.r,
+          child: Icon(icon, size: 18.r, color: AppColors.primaryNavy),
+        ),
+      ),
+    );
+  }
+}
+
+class _RangeSection extends GetView<LocationSetupController> {
+  const _RangeSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      step: 2,
+      title: 'Neighborhood range',
+      subtitle:
+          'Households within this distance of your home make up your '
+          'Prayer List.',
+      child: Obx(() {
+        final selected = controller.rangeKm.value;
+        return Wrap(
+          spacing: 8.w,
+          runSpacing: 8.h,
+          children: [
+            for (final km in SearchRange.distanceOptionsKm)
+              _Pill(
+                key: ValueKey('range-$km'),
+                label: SearchRange.formatKm(km),
+                selected: km == selected,
+                onTap: () => controller.setRange(km),
+              ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+class _GoalSection extends GetView<LocationSetupController> {
+  const _GoalSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      step: 3,
+      title: 'Daily prayer goal',
+      subtitle: 'How many neighbors to pray for each day.',
+      child: Obx(() {
+        final goal = controller.dailyGoal.value;
+        final days = controller.cycleDays;
+        final total = controller.previewHouseholds.length;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8.w,
+              runSpacing: 8.h,
+              children: [
+                for (final g in LocationSetupController.dailyGoals)
+                  _Pill(
+                    key: ValueKey('goal-$g'),
+                    label: '$g a day',
+                    selected: g == goal,
+                    onTap: () => controller.setDailyGoal(g),
+                  ),
+              ],
+            ),
+            if (days != null) ...[
+              SizedBox(height: 12.h),
+              Row(
+                children: [
+                  Icon(
+                    Icons.event_repeat_rounded,
+                    size: 16.r,
+                    color: AppColors.primaryGold,
+                  ),
+                  SizedBox(width: 6.w),
+                  Expanded(
+                    child: Text(
+                      'You’ll pray for all $total neighbors in about '
+                      '$days ${days == 1 ? 'day' : 'days'}.',
+                      key: const ValueKey('cycle-days'),
+                      style: AppTypography.body(
+                        color: AppColors.textSecondary,
+                        fontSize: 12.5.sp,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            SizedBox(height: 8.h),
+            Text(
+              'You can change the range and goal later in Profile.',
+              style: AppTypography.body(
+                color: AppColors.textSecondary,
+                fontSize: 11.5.sp,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+/// Selectable option pill (no ripple; the selection animates).
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 9.h),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primaryNavy : AppColors.inputSurface,
+            borderRadius: BorderRadius.circular(20.r),
+            border: Border.all(
+              color: selected ? AppColors.primaryNavy : AppColors.border,
+            ),
+          ),
+          child: Text(
+            label,
+            style: AppTypography.label(
+              color: selected ? Colors.white : AppColors.textPrimary,
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfirmBar extends GetView<LocationSetupController> {
+  const _ConfirmBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: const Border(top: BorderSide(color: AppColors.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 10.h),
+          child: Obx(
+            () => AppPrimaryButton(
+              key: const ValueKey('confirm-home'),
+              label: controller.hasLocation
+                  ? 'Save my home and continue'
+                  : 'Continue',
+              isLoading: controller.isSubmitting.value,
+              onPressed: controller.confirmLocation,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

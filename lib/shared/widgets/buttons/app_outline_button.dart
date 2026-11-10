@@ -58,10 +58,7 @@ class AppOutlineButton extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (icon != null) ...[
-                      icon!,
-                      SizedBox(width: 8.w),
-                    ],
+                    if (icon != null) ...[icon!, SizedBox(width: 8.w)],
                     Text(
                       label,
                       style: AppTypography.heading(

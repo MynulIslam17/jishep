@@ -54,7 +54,9 @@ class AppTextField extends StatelessWidget {
       return IconButton(
         onPressed: onPasswordVisibilityPressed,
         icon: Icon(
-          isPasswordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+          isPasswordVisible
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined,
           color: AppColors.textSecondary,
           size: 20.r,
         ),
@@ -92,10 +94,7 @@ class AppTextField extends StatelessWidget {
       onChanged: onChanged,
       validator: validator,
       maxLines: isPassword ? 1 : maxLines,
-      style: AppTypography.style(
-        color: AppColors.textPrimary,
-        fontSize: 14.sp,
-      ),
+      style: AppTypography.style(color: AppColors.textPrimary, fontSize: 14.sp),
       cursorColor: AppColors.primaryNavy,
       decoration: InputDecoration(
         isDense: true,
@@ -107,26 +106,20 @@ class AppTextField extends StatelessWidget {
         filled: true,
         fillColor: AppColors.inputSurface,
         prefixIcon: prefixIcon,
-        prefixIconConstraints: BoxConstraints(
-          minWidth: 44.w,
-          minHeight: 48.h,
-        ),
+        prefixIconConstraints: BoxConstraints(minWidth: 44.w, minHeight: 48.h),
         suffixIcon: _buildSuffixIcon(),
-        suffixIconConstraints: BoxConstraints(
-          minWidth: 44.w,
-          minHeight: 48.h,
-        ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 16.w,
-          vertical: 14.h,
-        ),
+        suffixIconConstraints: BoxConstraints(minWidth: 44.w, minHeight: 48.h),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.r),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.r),
-          borderSide: const BorderSide(color: AppColors.primaryNavy, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppColors.primaryNavy,
+            width: 1.5,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.r),

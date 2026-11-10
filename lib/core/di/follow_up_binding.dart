@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/features/follow_up/domain/services/follow_up_service.dart';
 import 'package:gps_cielo/features/follow_up/presentation/controllers/follow_up_controller.dart';
@@ -8,7 +9,10 @@ class FollowUpBinding extends Bindings {
   void dependencies() {
     if (!Get.isRegistered<FollowUpService>()) {
       Get.lazyPut<FollowUpService>(
-        () => FollowUpService(Get.find<HouseholdStore>()),
+        () => FollowUpService(
+          Get.find<HouseholdStore>(),
+          Get.find<HouseholdRepository>(),
+        ),
       );
     }
     if (!Get.isRegistered<FollowUpController>()) {

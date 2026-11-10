@@ -51,3 +51,8 @@ temp_interactive_push.bat
 
 # Seed tool
 /tool/seed_households/node_modules/
+
+# Local tool deps and backups
+**/node_modules/
+ios/Runner/Info.plist.backup
+ios/Runner/Info.plist.before-url-fix

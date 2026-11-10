@@ -31,10 +31,7 @@ class OnboardingScreen extends GetView<OnboardingController> {
                 child: PageView(
                   controller: controller.pageController,
                   onPageChanged: controller.onPageChanged,
-                  children: const [
-                    OnboardingPageOne(),
-                    OnboardingPageTwo(),
-                  ],
+                  children: const [OnboardingPageOne(), OnboardingPageTwo()],
                 ),
               ),
 

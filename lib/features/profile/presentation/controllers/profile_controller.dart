@@ -1,12 +1,17 @@
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/core/utils/validators.dart';
+import 'package:gps_cielo/features/auth/data/repositories/auth_repository.dart';
+import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:gps_cielo/routes/app_routes.dart';
 import 'package:gps_cielo/features/profile/domain/services/profile_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 
 class ProfileController extends GetxController {
   final ProfileService _service;
@@ -17,6 +22,11 @@ class ProfileController extends GetxController {
   final user = Rxn<UserModel>();
   final isLoading = false.obs;
   final isUploadingAvatar = false.obs;
+
+  /// Phone being added in Edit Profile (E.164) and its SMS send state.
+  final pendingPhone = ''.obs;
+  final phoneController = TextEditingController();
+  final isSendingPhoneCode = false.obs;
   final selectedPrayerTarget = 5.obs;
 
   final List<Worker> _workers = [];
@@ -75,18 +85,53 @@ class ProfileController extends GetxController {
     }
   }
 
-  Future<void> updatePrayerPreferences(int target) async {
+  /// Reads the device GPS for the address form. Returns null on failure
+  /// (after telling the user why). Nothing is saved here.
+  Future<ResolvedLocation?> locateDevice() async {
+    try {
+      return await _service.currentLocation();
+    } catch (error) {
+      SnackbarService.showError(
+        'Location Unavailable',
+        FirebaseErrorMapper.message(error),
+      );
+      return null;
+    }
+  }
+
+  Future<void> updatePrayerPreferences(
+    int target,
+    int radiusHomes,
+    double rangeKm,
+  ) async {
     final current = _authController.currentUser.value;
     if (current == null) return;
+    if (target == current.dailyPrayerTarget &&
+        radiusHomes == current.radiusHomes &&
+        rangeKm == current.searchRadiusKm) {
+      return;
+    }
 
     selectedPrayerTarget.value = target;
     isLoading.value = true;
     try {
-      _authController.updateUser(current.copyWith(dailyPrayerTarget: target));
-      await _service.updatePrayerPreferences(current.id, target);
+      _authController.updateUser(
+        current.copyWith(
+          dailyPrayerTarget: target,
+          radiusHomes: radiusHomes,
+          searchRadiusKm: rangeKm,
+        ),
+      );
+      await _service.updatePrayerPreferences(
+        current.id,
+        dailyTarget: target,
+        radiusHomes: radiusHomes,
+        searchRadiusKm: rangeKm,
+      );
       SnackbarService.showSuccess(
         'Preferences Saved',
-        'Target updated to $target households/day.',
+        '$target households/day · $radiusHomes homes within '
+            '${SearchRange.formatKm(rangeKm)}.',
       );
     } catch (error) {
       _authController.updateUser(current);
@@ -101,14 +146,12 @@ class ProfileController extends GetxController {
 
   Future<bool> updateProfileInfo({
     required String fullName,
-    required String email,
     required String churchAffiliation,
   }) async {
     final current = _authController.currentUser.value;
     if (current == null) return false;
 
-    final validationError =
-        AppValidator.name(fullName) ?? AppValidator.email(email);
+    final validationError = AppValidator.name(fullName);
     if (validationError != null) {
       SnackbarService.showError('Validation Error', validationError);
       return false;
@@ -116,10 +159,9 @@ class ProfileController extends GetxController {
 
     isLoading.value = true;
     try {
-      final emailLinkSent = await _service.updateProfileInfo(
+      await _service.updateProfileInfo(
         user: current,
         fullName: fullName.trim(),
-        email: email.trim(),
         churchAffiliation: churchAffiliation.trim(),
       );
       _authController.updateUser(
@@ -129,17 +171,10 @@ class ProfileController extends GetxController {
         ),
       );
 
-      if (emailLinkSent) {
-        SnackbarService.showInfo(
-          'Confirm Your Email',
-          'We sent a link to ${email.trim()}. Your email changes after you open it.',
-        );
-      } else {
-        SnackbarService.showSuccess(
-          'Profile Updated',
-          'Changes saved successfully.',
-        );
-      }
+      SnackbarService.showSuccess(
+        'Profile Updated',
+        'Changes saved successfully.',
+      );
       return true;
     } catch (error) {
       SnackbarService.showError(
@@ -203,9 +238,57 @@ class ProfileController extends GetxController {
     }
   }
 
+  /// Sends an SMS code to [pendingPhone] and opens the code screen. Once
+  /// verified, the number is linked to the account for phone sign-in.
+  Future<void> verifyPendingPhone(String typedNumber) async {
+    if (isSendingPhoneCode.value) return;
+    final phone = pendingPhone.value.trim();
+    final error = AppValidator.phone(typedNumber);
+    if (error != null || phone.isEmpty) {
+      SnackbarService.showError(
+        'Phone Number',
+        error ?? 'Please enter your phone number',
+      );
+      return;
+    }
+
+    isSendingPhoneCode.value = true;
+    try {
+      final result = await _authController.sendPhoneCode(phone);
+      switch (result) {
+        case SmsCodeSent(:final verificationId, :final resendToken):
+          Get.toNamed(
+            AppRoutes.otpVerification,
+            arguments: {
+              'phone': phone,
+              'purpose': OtpPurpose.addPhone,
+              'verificationId': verificationId,
+              'resendToken': resendToken,
+            },
+          );
+        case SmsAutoVerified(:final credential):
+          await _authController.completePhoneVerification(
+            purpose: OtpPurpose.addPhone,
+            credential: credential,
+            phone: phone,
+          );
+      }
+    } catch (error) {
+      SnackbarService.showError(
+        'Code Not Sent',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isSendingPhoneCode.value = false;
+    }
+  }
+
   Future<void> signOut() => _authController.signOut();
 
   bool get accountUsesPassword => _authController.accountUsesPassword;
+
+  String? get deletionConfirmationLabel =>
+      _authController.deletionConfirmationLabel;
 
   /// Returns true when the account was deleted.
   Future<bool> deleteAccount({String? password}) async {
@@ -232,6 +315,7 @@ class ProfileController extends GetxController {
     for (final worker in _workers) {
       worker.dispose();
     }
+    phoneController.dispose();
     super.onClose();
   }
 }

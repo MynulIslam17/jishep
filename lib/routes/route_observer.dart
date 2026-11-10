@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 
-final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 class AppRouteObserver extends RouteObserver<PageRoute<dynamic>> {
   final Logger _logger = Logger(

@@ -20,7 +20,8 @@ class AppBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveBgColor = backgroundColor ??
+    final effectiveBgColor =
+        backgroundColor ??
         (color == AppColors.textWhite
             ? Colors.white.withValues(alpha: 0.15)
             : AppColors.primaryNavy.withValues(alpha: 0.08));
@@ -41,10 +42,7 @@ class AppBackButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: effectiveBgColor,
             shape: BoxShape.circle,
-            border: Border.all(
-              color: effectiveBorderColor,
-              width: 1.2,
-            ),
+            border: Border.all(color: effectiveBorderColor, width: 1.2),
           ),
           child: Center(
             child: Padding(

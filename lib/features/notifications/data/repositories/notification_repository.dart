@@ -1,18 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gps_cielo/core/constants/firestore_paths.dart';
-import 'package:gps_cielo/core/utils/api_debug_log.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/features/notifications/data/models/notification_model.dart';
 
+typedef NotificationCursor = DocumentSnapshot<Map<String, dynamic>>;
+
+/// One page of notifications, newest first.
+class NotificationPage {
+  const NotificationPage({
+    required this.items,
+    required this.hasMore,
+    this.cursor,
+  });
+
+  final List<NotificationModel> items;
+
+  /// True when older notifications may follow [cursor].
+  final bool hasMore;
+  final NotificationCursor? cursor;
+}
+
 /// Firestore access for `users/{uid}/notifications`.
+///
+/// Reads are bounded: the screen listens to the newest [pageSize] and reads
+/// older ones a page at a time; the Home badge counts at most
+/// [unreadCountCap] unread (shown as "99+").
 class NotificationRepository {
+  static const int pageSize = 30;
+  static const int unreadCountCap = 100;
+
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
 
   NotificationRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   CollectionReference<Map<String, dynamic>> get _collection {
     final uid = _auth.currentUser?.uid;
@@ -21,30 +44,47 @@ class NotificationRepository {
   }
 
   Query<Map<String, dynamic>> get _ordered =>
-      _collection.orderBy('timestamp', descending: true).limit(100);
+      _collection.orderBy('timestamp', descending: true);
 
-  Stream<List<NotificationModel>> watchNotifications() {
-    return ApiDebugLog.stream(
-      'NotificationRepository.watchNotifications',
-      _ordered.snapshots().map(_mapDocs),
-    );
+  /// The newest [limit] notifications, live.
+  Stream<NotificationPage> watchLatest({int limit = pageSize}) {
+    return _ordered.limit(limit).snapshots().map((s) => _page(s, limit));
   }
 
-  Future<List<NotificationModel>> getNotifications() {
-    return ApiDebugLog.run('NotificationRepository.getNotifications', () async {
-      final snapshot =
-          await _ordered.get(const GetOptions(source: Source.server));
-      return _mapDocs(snapshot);
-    });
+  /// The newest [limit] notifications from the server (pull to refresh).
+  Future<NotificationPage> getLatest({int limit = pageSize}) async {
+    final snapshot = await _ordered
+        .limit(limit)
+        .get(const GetOptions(source: Source.server));
+    return _page(snapshot, limit);
   }
 
+  /// The [limit] notifications older than [after].
+  Future<NotificationPage> fetchOlder(
+    NotificationCursor after, {
+    int limit = pageSize,
+  }) async {
+    final snapshot = await _ordered
+        .startAfterDocument(after)
+        .limit(limit)
+        .get();
+    return _page(snapshot, limit);
+  }
+
+  /// Unread notifications, counted up to [unreadCountCap].
   Stream<int> watchUnreadCount() {
-    return ApiDebugLog.stream(
-      'NotificationRepository.watchUnreadCount',
-      _collection
-          .where('isRead', isEqualTo: false)
-          .snapshots()
-          .map((snapshot) => snapshot.size),
+    return _collection
+        .where('isRead', isEqualTo: false)
+        .limit(unreadCountCap)
+        .snapshots()
+        .map((snapshot) => snapshot.size);
+  }
+
+  NotificationPage _page(QuerySnapshot<Map<String, dynamic>> s, int limit) {
+    return NotificationPage(
+      items: _mapDocs(s),
+      hasMore: s.docs.length >= limit,
+      cursor: s.docs.isEmpty ? null : s.docs.last,
     );
   }
 
@@ -54,74 +94,74 @@ class NotificationRepository {
     required NotificationType type,
     String? actionRoute,
   }) {
-    return ApiDebugLog.run(
-      'NotificationRepository.addNotification',
-      () => _collection.add({
-        'title': title,
-        'message': message,
-        'type': type.name,
-        'isRead': false,
-        'actionRoute': actionRoute,
-        'timestamp': FieldValue.serverTimestamp(),
-      }),
-      details: type.name,
-    );
-  }
-
-  Future<void> markAsRead(String id) {
-    return ApiDebugLog.run(
-      'NotificationRepository.markAsRead',
-      () => _collection.doc(id).update({'isRead': true}),
-      details: id,
-    );
-  }
-
-  Future<void> markAllAsRead() {
-    return ApiDebugLog.run('NotificationRepository.markAllAsRead', () async {
-      final unread = await _collection.where('isRead', isEqualTo: false).get();
-      await _commitInChunks(
-        unread.docs,
-        (batch, doc) => batch.update(doc.reference, {'isRead': true}),
-      );
+    return _collection.add({
+      'title': title,
+      'message': message,
+      'type': type.name,
+      'isRead': false,
+      'actionRoute': actionRoute,
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> deleteNotification(String id) {
-    return ApiDebugLog.run(
-      'NotificationRepository.deleteNotification',
-      () => _collection.doc(id).delete(),
-      details: id,
-    );
+  Future<void> markAsRead(String id) {
+    return _collection.doc(id).update({'isRead': true});
   }
 
-  Future<void> clearAllNotifications() {
-    return ApiDebugLog.run(
-      'NotificationRepository.clearAllNotifications',
-      () async {
-        final all = await _collection.get();
-        await _commitInChunks(
-          all.docs,
-          (batch, doc) => batch.delete(doc.reference),
-        );
-      },
-    );
+  /// Marks every unread notification read, 450 per batch (never holding
+  /// them all in memory).
+  Future<void> markAllAsRead() async {
+    final unread = _collection.where('isRead', isEqualTo: false);
+    while (true) {
+      final chunk = await unread.limit(_chunkSize).get();
+      if (chunk.docs.isEmpty) return;
+      await _commitInChunks(
+        chunk.docs,
+        (batch, doc) => batch.update(doc.reference, {'isRead': true}),
+      );
+      if (chunk.docs.length < _chunkSize) return;
+    }
   }
+
+  Future<void> deleteNotification(String id) {
+    return _collection.doc(id).delete();
+  }
+
+  /// Deletes every notification, 450 per batch.
+  Future<void> clearAllNotifications() async {
+    while (true) {
+      final chunk = await _collection.limit(_chunkSize).get();
+      if (chunk.docs.isEmpty) return;
+      await _commitInChunks(
+        chunk.docs,
+        (batch, doc) => batch.delete(doc.reference),
+      );
+      if (chunk.docs.length < _chunkSize) return;
+    }
+  }
+
+  static const int _chunkSize = 450;
 
   Future<void> _commitInChunks(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    void Function(WriteBatch batch, QueryDocumentSnapshot<Map<String, dynamic>> doc) apply,
+    void Function(
+      WriteBatch batch,
+      QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    )
+    apply,
   ) async {
-    const chunkSize = 450;
-    for (var i = 0; i < docs.length; i += chunkSize) {
+    for (var i = 0; i < docs.length; i += _chunkSize) {
       final batch = _db.batch();
-      for (final doc in docs.skip(i).take(chunkSize)) {
+      for (final doc in docs.skip(i).take(_chunkSize)) {
         apply(batch, doc);
       }
       await batch.commit();
     }
   }
 
-  List<NotificationModel> _mapDocs(QuerySnapshot<Map<String, dynamic>> snapshot) {
+  List<NotificationModel> _mapDocs(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
     return snapshot.docs.map(NotificationModel.fromFirestore).toList();
   }
 }

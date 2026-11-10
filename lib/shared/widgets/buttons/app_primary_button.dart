@@ -41,6 +41,9 @@ class AppPrimaryButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: backgroundColor,
             foregroundColor: textColor,
+            // Keep the brand color behind the spinner while loading.
+            disabledBackgroundColor: isLoading ? backgroundColor : null,
+            disabledForegroundColor: isLoading ? textColor : null,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(borderRadius.r),
@@ -59,16 +62,17 @@ class AppPrimaryButton extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (icon != null) ...[
-                      icon!,
-                      SizedBox(width: 8.w),
-                    ],
-                    Text(
-                      label,
-                      style: AppTypography.heading(
-                        color: textColor,
-                        fontSize: fontSize.sp,
-                        fontWeight: FontWeight.w600,
+                    if (icon != null) ...[icon!, SizedBox(width: 8.w)],
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.heading(
+                          color: textColor,
+                          fontSize: fontSize.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],

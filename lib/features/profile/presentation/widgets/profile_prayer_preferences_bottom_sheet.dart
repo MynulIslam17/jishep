@@ -3,133 +3,249 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
 
-class ProfilePrayerPreferencesBottomSheet extends StatelessWidget {
+class ProfilePrayerPreferencesBottomSheet extends StatefulWidget {
   final int initialTarget;
-  final ValueChanged<int> onSavePreferences;
+  final int initialRadius;
+
+  final double initialRangeKm;
+
+  /// Called with (daily target, default number of households, range in km).
+  final void Function(int target, int radiusHomes, double rangeKm)
+  onSavePreferences;
+
+  /// From the [DraggableScrollableSheet] in [show], so dragging the content
+  /// down (when scrolled to the top) pulls the sheet down and closes it.
+  final ScrollController? scrollController;
 
   const ProfilePrayerPreferencesBottomSheet({
     required this.initialTarget,
     required this.onSavePreferences,
+    this.initialRadius = SearchRange.defaultHomes,
+    this.initialRangeKm = SearchRange.defaultKm,
+    this.scrollController,
     super.key,
   });
 
   static void show(
     BuildContext context, {
     required int initialTarget,
-    required ValueChanged<int> onSavePreferences,
+    required void Function(int target, int radiusHomes, double rangeKm)
+    onSavePreferences,
+    double initialRangeKm = SearchRange.defaultKm,
+    int initialRadius = SearchRange.defaultHomes,
   }) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      // Keeps the sheet (and its close button) below the status bar / notch.
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ProfilePrayerPreferencesBottomSheet(
-        initialTarget: initialTarget,
-        onSavePreferences: onSavePreferences,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.9,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        snap: true,
+        builder: (ctx, scrollController) => ProfilePrayerPreferencesBottomSheet(
+          initialTarget: initialTarget,
+          initialRadius: initialRadius,
+          initialRangeKm: initialRangeKm,
+          onSavePreferences: onSavePreferences,
+          scrollController: scrollController,
+        ),
       ),
     );
   }
 
   @override
+  State<ProfilePrayerPreferencesBottomSheet> createState() =>
+      _ProfilePrayerPreferencesBottomSheetState();
+}
+
+class _ProfilePrayerPreferencesBottomSheetState
+    extends State<ProfilePrayerPreferencesBottomSheet> {
+  static const _targets = [3, 5, 10, 15];
+
+  // Kept in State so a rebuild never resets what the user picked.
+  late final _selectedTargetRx = widget.initialTarget.obs;
+  late final _selectedRadiusRx = SearchRange.normalize(
+    widget.initialRadius,
+  ).obs;
+  late final _selectedKmRx = SearchRange.normalizeKm(widget.initialRangeKm).obs;
+
+  void _close() => Navigator.of(context).maybePop();
+
+  @override
   Widget build(BuildContext context) {
-    final targets = [3, 5, 10, 15];
-    final selectedTargetRx = initialTarget.obs;
+    final targets = _targets;
+    final selectedTargetRx = _selectedTargetRx;
+    final options = SearchRange.options;
+    final selectedRadiusRx = _selectedRadiusRx;
+    final selectedKmRx = _selectedKmRx;
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
       ),
-      padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 28.h),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildModalHandle(),
-          SizedBox(height: 12.h),
-          _buildModalHeader(context, title: 'Prayer Preferences'),
-          SizedBox(height: 12.h),
-          const Divider(color: AppColors.border, height: 1),
-          SizedBox(height: 16.h),
-
-          Text(
-            'How many households would you like to pray for each day?',
-            style: TextStyle(
-              color: const Color(0xFF64748B),
-              fontSize: 13.sp,
-              height: 1.35,
+          // Fixed top: dragging it moves the sheet; X closes it.
+          Padding(
+            padding: EdgeInsets.fromLTRB(20.w, 12.h, 12.w, 0),
+            child: Column(
+              children: [
+                _buildModalHandle(),
+                SizedBox(height: 8.h),
+                _buildModalHeader(title: 'Prayer Preferences'),
+                SizedBox(height: 8.h),
+              ],
             ),
           ),
-          SizedBox(height: 16.h),
-
-          Obx(
-            () => Column(
-              children: targets.map((target) {
-                final isSelected = selectedTargetRx.value == target;
-                return GestureDetector(
-                  onTap: () => selectedTargetRx.value = target,
-                  child: Container(
-                    margin: EdgeInsets.only(bottom: 10.h),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16.w,
-                      vertical: 14.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFFF1F5F9)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.primaryNavy
-                            : const Color(0xFFE2E8F0),
-                        width: isSelected ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '$target households / day',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 14.sp,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                          ),
-                        ),
-                        if (isSelected)
-                          Container(
-                            width: 22.r,
-                            height: 22.r,
-                            decoration: const BoxDecoration(
-                              color: AppColors.primaryNavy,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.check_rounded,
-                              size: 14.r,
-                              color: Colors.white,
-                            ),
-                          ),
-                      ],
+          const Divider(color: AppColors.border, height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: widget.scrollController,
+              padding: EdgeInsets.fromLTRB(
+                20.w,
+                16.h,
+                20.w,
+                20.h + bottomInset,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'How many households would you like to pray for each day?',
+                    style: TextStyle(
+                      color: const Color(0xFF64748B),
+                      fontSize: 13.sp,
+                      height: 1.35,
                     ),
                   ),
-                );
-              }).toList(),
+                  SizedBox(height: 16.h),
+
+                  Obx(
+                    () => Column(
+                      children: targets.map((target) {
+                        final isSelected = selectedTargetRx.value == target;
+                        return GestureDetector(
+                          onTap: () => selectedTargetRx.value = target,
+                          child: Container(
+                            margin: EdgeInsets.only(bottom: 10.h),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 14.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFF1F5F9)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(12.r),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.primaryNavy
+                                    : const Color(0xFFE2E8F0),
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '$target households / day',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 14.sp,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    width: 22.r,
+                                    height: 22.r,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.primaryNavy,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.check_rounded,
+                                      size: 14.r,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  SizedBox(height: 10.h),
+                  const Divider(color: AppColors.border, height: 1),
+                  SizedBox(height: 16.h),
+
+                  // Search range (distance)
+                  _OptionSlider(
+                    sliderKey: const ValueKey('range-km-slider'),
+                    title: 'Search range',
+                    description:
+                        'Households are searched within this distance of your '
+                        'home or a searched place.',
+                    valueText: () =>
+                        'Within ${SearchRange.formatKm(selectedKmRx.value)}',
+                    labels: [
+                      for (final km in SearchRange.distanceOptionsKm)
+                        SearchRange.formatKm(km),
+                    ],
+                    index: () => SearchRange.distanceOptionsKm.indexOf(
+                      selectedKmRx.value,
+                    ),
+                    onIndex: (i) =>
+                        selectedKmRx.value = SearchRange.distanceOptionsKm[i],
+                  ),
+
+                  SizedBox(height: 10.h),
+                  const Divider(color: AppColors.border, height: 1),
+                  SizedBox(height: 16.h),
+
+                  // Number of households (default for the Home filter)
+                  _OptionSlider(
+                    sliderKey: const ValueKey('default-radius-slider'),
+                    title: 'Households to show',
+                    description:
+                        'How many of the nearest households within the range to '
+                        'show. You can change this on Home anytime.',
+                    valueText: () => 'Nearest ${selectedRadiusRx.value} homes',
+                    labels: [for (final option in options) '$option'],
+                    index: () => options.indexOf(selectedRadiusRx.value),
+                    onIndex: (i) => selectedRadiusRx.value = options[i],
+                  ),
+
+                  SizedBox(height: 20.h),
+
+                  AppPrimaryButton(
+                    label: 'Save Preferences',
+                    onPressed: () {
+                      widget.onSavePreferences(
+                        selectedTargetRx.value,
+                        selectedRadiusRx.value,
+                        selectedKmRx.value,
+                      );
+                      _close();
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-
-          SizedBox(height: 20.h),
-
-          AppPrimaryButton(
-            label: 'Save Preferences',
-            onPressed: () {
-              onSavePreferences(selectedTargetRx.value);
-              Navigator.of(context).pop();
-            },
           ),
         ],
       ),
@@ -149,34 +265,150 @@ class ProfilePrayerPreferencesBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildModalHeader(BuildContext context, {required String title}) {
+  Widget _buildModalHeader({required String title}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Text(
+            title,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.heading(
+              color: AppColors.primaryNavy,
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        // 44px tap target around the 32px circle.
+        Semantics(
+          button: true,
+          label: 'Close',
+          child: GestureDetector(
+            key: const ValueKey('prefs-close'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _close,
+            child: Padding(
+              padding: EdgeInsets.all(6.r),
+              child: Container(
+                width: 32.r,
+                height: 32.r,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18.r,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A titled slider over a fixed list of options.
+class _OptionSlider extends StatelessWidget {
+  const _OptionSlider({
+    required this.sliderKey,
+    required this.title,
+    required this.description,
+    required this.valueText,
+    required this.labels,
+    required this.index,
+    required this.onIndex,
+  });
+
+  final Key sliderKey;
+  final String title;
+  final String description;
+  final String Function() valueText;
+  final List<String> labels;
+  final int Function() index;
+  final ValueChanged<int> onIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           title,
           style: AppTypography.heading(
-            color: AppColors.primaryNavy,
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            width: 32.r,
-            height: 32.r,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF1F5F9),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.close_rounded,
-              size: 18.r,
-              color: const Color(0xFF64748B),
-            ),
+        SizedBox(height: 4.h),
+        Text(
+          description,
+          style: TextStyle(
+            color: const Color(0xFF64748B),
+            fontSize: 13.sp,
+            height: 1.35,
           ),
         ),
+        SizedBox(height: 8.h),
+        Obx(() {
+          final current = index().clamp(0, labels.length - 1);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                valueText(),
+                style: AppTypography.heading(
+                  color: AppColors.primaryNavy,
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4.h,
+                  activeTrackColor: AppColors.primaryNavy,
+                  inactiveTrackColor: const Color(0xFFE2E8F0),
+                  thumbColor: AppColors.primaryNavy,
+                  overlayColor: AppColors.primaryNavy.withValues(alpha: 0.12),
+                  activeTickMarkColor: Colors.white.withValues(alpha: 0.7),
+                  inactiveTickMarkColor: AppColors.primaryNavy.withValues(
+                    alpha: 0.25,
+                  ),
+                ),
+                child: Slider(
+                  key: sliderKey,
+                  value: current.toDouble(),
+                  max: (labels.length - 1).toDouble(),
+                  divisions: labels.length - 1,
+                  label: labels[current],
+                  onChanged: (v) => onIndex(v.round()),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14.r),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (var i = 0; i < labels.length; i++)
+                      Text(
+                        labels[i],
+                        style: TextStyle(
+                          color: i == current
+                              ? AppColors.primaryNavy
+                              : const Color(0xFF64748B),
+                          fontSize: 10.5.sp,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }

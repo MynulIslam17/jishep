@@ -11,16 +11,22 @@ class FollowUpHouseholdItem extends StatelessWidget {
   final FollowUpTab selectedTab;
   final ValueChanged<HouseholdModel> onUpdated;
 
+  /// False when the household is outside the user's home neighborhood
+  /// (found by searching another place on Home).
+  final bool nearHome;
+
   const FollowUpHouseholdItem({
     required this.item,
     required this.selectedTab,
     required this.onUpdated,
+    this.nearHome = true,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    final showNotesAndEdit = item.hasFollowUp &&
+    final showNotesAndEdit =
+        item.hasFollowUp &&
         (selectedTab == FollowUpTab.followUp || selectedTab == FollowUpTab.all);
 
     return InkWell(
@@ -28,7 +34,8 @@ class FollowUpHouseholdItem extends StatelessWidget {
         HouseholdDetailBottomSheet.show(
           context,
           household: item,
-          initialOpenNotes: item.hasFollowUp || selectedTab == FollowUpTab.followUp,
+          initialOpenNotes:
+              item.hasFollowUp || selectedTab == FollowUpTab.followUp,
           onUpdated: onUpdated,
         );
       },
@@ -114,13 +121,40 @@ class FollowUpHouseholdItem extends StatelessWidget {
                           fontSize: 12.sp,
                         ),
                       ),
-                      Text(
-                        item.cityStateZip,
-                        style: AppTypography.body(
-                          color: const Color(0xFF94A3B8),
-                          fontSize: 11.sp,
+                      if (item.cityStateZip.isNotEmpty)
+                        Text(
+                          item.cityStateZip,
+                          style: AppTypography.body(
+                            color: const Color(0xFF94A3B8),
+                            fontSize: 11.sp,
+                          ),
                         ),
-                      ),
+                      if (!nearHome) ...[
+                        SizedBox(height: 4.h),
+                        Row(
+                          key: const ValueKey('outside-neighborhood'),
+                          children: [
+                            Icon(
+                              Icons.travel_explore_rounded,
+                              size: 12.r,
+                              color: const Color(0xFF7C3AED),
+                            ),
+                            SizedBox(width: 4.w),
+                            Flexible(
+                              child: Text(
+                                'Outside your neighborhood',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.label(
+                                  color: const Color(0xFF7C3AED),
+                                  fontSize: 10.5.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -197,7 +231,8 @@ class FollowUpHouseholdItem extends StatelessWidget {
               ],
 
               // Follow-up Date Row
-              if (item.followUpDate != null && item.followUpDate!.isNotEmpty) ...[
+              if (item.followUpDate != null &&
+                  item.followUpDate!.isNotEmpty) ...[
                 SizedBox(height: 6.h),
                 Padding(
                   padding: EdgeInsets.only(left: 42.w),

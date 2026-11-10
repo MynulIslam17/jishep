@@ -167,7 +167,10 @@ class _DashedCirclePainter extends CustomPainter {
     for (int i = 0; i < dashCount; i++) {
       final startAngle = i * adjustedDashAngle;
       canvas.drawArc(
-        Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: radius),
+        Rect.fromCircle(
+          center: Offset(size.width / 2, size.height / 2),
+          radius: radius,
+        ),
         startAngle,
         dashSweep,
         false,

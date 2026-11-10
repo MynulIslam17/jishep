@@ -18,7 +18,9 @@ abstract final class AppValidator {
   static String? email(String? value) {
     final requiredError = required(value, fieldName: 'Email');
     if (requiredError != null) return requiredError;
-    if (!_emailPattern.hasMatch(value!.trim())) return 'Enter a valid email address';
+    if (!_emailPattern.hasMatch(value!.trim())) {
+      return 'Enter a valid email address';
+    }
     return null;
   }
 

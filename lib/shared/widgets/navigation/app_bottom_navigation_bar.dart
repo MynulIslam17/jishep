@@ -33,7 +33,12 @@ class AppBottomNavigationBar extends StatelessWidget {
           ),
         ],
       ),
-      padding: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, bottomInset > 0 ? bottomInset : 8.h),
+      padding: EdgeInsets.fromLTRB(
+        12.w,
+        8.h,
+        12.w,
+        bottomInset > 0 ? bottomInset : 8.h,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -100,7 +105,9 @@ class AppBottomNavigationBar extends StatelessWidget {
                 child: Icon(
                   isSelected ? activeIcon : icon,
                   size: 20.r,
-                  color: isSelected ? AppColors.textWhite : AppColors.textSecondary,
+                  color: isSelected
+                      ? AppColors.textWhite
+                      : AppColors.textSecondary,
                 ),
               ),
             ),
@@ -108,7 +115,9 @@ class AppBottomNavigationBar extends StatelessWidget {
             Text(
               label,
               style: AppTypography.label(
-                color: isSelected ? AppColors.primaryNavy : AppColors.textSecondary,
+                color: isSelected
+                    ? AppColors.primaryNavy
+                    : AppColors.textSecondary,
                 fontSize: 10.sp,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
