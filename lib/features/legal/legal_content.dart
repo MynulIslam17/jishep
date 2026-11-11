@@ -57,7 +57,7 @@ abstract final class LegalContent {
           'fellowship of churches in the United States '
           '(${LegalInfo.operatorWebsite}). We are responsible for the '
           'information described in this policy. You can reach us at '
-          '$_email or ${LegalInfo.mailingAddress}.',
+          '$_email.',
         ),
       ]),
       LegalSection('2. Information you give us', [
@@ -73,8 +73,8 @@ abstract final class LegalContent {
               'and the home location you save, and your prayer preferences '
               '(daily goal, cycle goal, number of homes and search range).',
           'Outreach activity: the households you mark as prayed for, '
-              'visited or invited, follow-up dates, and any notes or '
-              'resident names you choose to enter.',
+              'visited or invited, follow-up dates, and any notes you '
+              'write.',
           'Support messages: what you write to us through Contact Support, '
               'together with your account email.',
         ]),
@@ -104,7 +104,7 @@ abstract final class LegalContent {
         LegalBlock.p(
           'If you allow notifications, we store a push notification token '
           'for your device and its platform (iOS or Android) so we can send '
-          'prayer reminders, follow-up reminders and ministry news. Your '
+          'you reminders and ministry news. Your '
           'notifications are also kept in your in-app inbox. Signing out or '
           'deleting your account removes the token. Our service providers '
           'may also process technical data such as your IP address, device '
@@ -116,8 +116,8 @@ abstract final class LegalContent {
           'The App shows listings of nearby households so that members can '
           'pray for their neighbors. A listing contains a street address, an '
           'approximate map location and, in some cases, a resident or family '
-          'name. Listings come from information we compile from publicly '
-          'available sources and from participating churches. Your own '
+          'name. Listings are added to the App by $_org; users cannot add '
+          'or change them. Your own '
           'notes, statuses and follow-ups about a household are private to '
           'your account; other users cannot see them.',
         ),
@@ -181,8 +181,10 @@ abstract final class LegalContent {
           'can delete your account at any time in the App under Profile > '
           'Delete account. This permanently deletes your account, profile, '
           'outreach history and notes, notifications, device tokens and '
-          'support messages. Copies may remain in secure backups for a '
-          'limited time before being overwritten.',
+          'support messages from our database. Our service provider, '
+          'Google, may take some time to remove deleted data completely '
+          'from its systems. Household listings are not part of your '
+          'account and are not affected.',
         ),
       ]),
       LegalSection('10. Security', [
@@ -240,10 +242,7 @@ abstract final class LegalContent {
         ),
       ]),
       LegalSection('15. Contact us', [
-        LegalBlock.p(
-          'Questions or requests about your privacy: $_email, or '
-          '$_org, ${LegalInfo.mailingAddress}.',
-        ),
+        LegalBlock.p('Questions or requests about your privacy: $_email.'),
       ]),
     ],
   );
@@ -403,18 +402,7 @@ abstract final class LegalContent {
           'toward others while using the App.',
         ),
       ]),
-      LegalSection('15. Governing law', [
-        LegalBlock.p(
-          'These Terms are governed by the laws of the State of '
-          '${LegalInfo.governingState}, United States, without regard to '
-          'conflict-of-law rules. Disputes will be resolved in the state or '
-          'federal courts located in ${LegalInfo.venueCounty}, '
-          '${LegalInfo.governingState}, unless the law where you live gives '
-          'you the right to bring a claim locally. Before filing a claim, '
-          'please contact us so we can try to resolve it informally.',
-        ),
-      ]),
-      LegalSection('16. Apple App Store', [
+      LegalSection('15. Apple App Store', [
         LegalBlock.p(
           'If you downloaded the App from the Apple App Store: these Terms '
           'are between you and $_org only, not Apple, and $_org, not Apple, '
@@ -431,7 +419,7 @@ abstract final class LegalContent {
           'the App must also follow the App Store Terms of Service.',
         ),
       ]),
-      LegalSection('17. Changes to these Terms', [
+      LegalSection('16. Changes to these Terms', [
         LegalBlock.p(
           'We may update these Terms from time to time. We will change the '
           '"Last updated" date above and, for significant changes, notify '
@@ -439,11 +427,8 @@ abstract final class LegalContent {
           'effect means you accept them.',
         ),
       ]),
-      LegalSection('18. Contact us', [
-        LegalBlock.p(
-          'Questions about these Terms: $_email, or $_org, '
-          '${LegalInfo.mailingAddress}.',
-        ),
+      LegalSection('17. Contact us', [
+        LegalBlock.p('Questions about these Terms: $_email.'),
       ]),
     ],
   );

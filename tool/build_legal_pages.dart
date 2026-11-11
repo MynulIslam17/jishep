@@ -1,5 +1,5 @@
-// Regenerates legal_site/ (the public Terms of Use and Privacy Policy pages)
-// from lib/features/legal/legal_content.dart.
+// Regenerates legal_site/ (the public website: home, support, account
+// deletion, Terms of Use and Privacy Policy) from lib/features/legal/.
 //
 //   dart run tool/build_legal_pages.dart
 //   firebase deploy --only hosting --project gps-cielo
@@ -14,4 +14,6 @@ void main() {
     File('${dir.path}/$name').writeAsStringSync(html);
     stdout.writeln('wrote legal_site/$name');
   });
+  File('assets/icons/logo_mark.svg').copySync('${dir.path}/logo.svg');
+  stdout.writeln('wrote legal_site/logo.svg');
 }

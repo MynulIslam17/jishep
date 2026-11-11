@@ -3,32 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GPS Para El Cielo</title>
+<title>GPS Para El Cielo · Pray for your neighbors</title>
+<meta name="description" content="GPS Para El Cielo helps believers pray for the households around them, record visits and invitations, and follow up with their neighbors.">
+<meta property="og:title" content="GPS Para El Cielo · Pray for your neighbors">
+<meta property="og:description" content="GPS Para El Cielo helps believers pray for the households around them, record visits and invitations, and follow up with their neighbors.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#1B2A4A">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
 <style>
-:root { --bg: #ffffff; --text: #1e293b; --muted: #64748b; --accent: #0b2a4a; --line: #e2e8f0; }
+:root { --bg: #f8fafc; --surface: #ffffff; --text: #1e293b; --muted: #64748b;
+  --navy: #1b2a4a; --gold: #a58133; --line: #e2e8f0; --link: #1b2a4a; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0f172a; --text: #e2e8f0; --muted: #94a3b8; --accent: #93c5fd; --line: #1e293b; }
+  :root { --bg: #0f172a; --surface: #1e293b; --text: #e2e8f0; --muted: #94a3b8;
+    --navy: #e2e8f0; --gold: #e2bc68; --line: #334155; --link: #93c5fd; }
 }
+* { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-h1 { color: var(--accent); font-size: 28px; margin: 0 0 4px; }
-h2 { color: var(--accent); font-size: 19px; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+a { color: var(--link); overflow-wrap: anywhere; }
+header { background: #1b2a4a; color: #fff; }
+.bar { max-width: 960px; margin: 0 auto; padding: 12px 16px; display: flex;
+  flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.brand { color: #fff; text-decoration: none; font-weight: 700; letter-spacing: .3px;
+  display: flex; align-items: center; gap: 8px; }
+.brand img { width: 30px; height: 32px; padding: 3px 4px; background: #fff; border-radius: 8px; }
+.brand span { color: #e2bc68; }
+nav { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 15px; }
+nav a { color: #cbd5e1; text-decoration: none; padding: 4px 0; }
+nav a:hover, nav a[aria-current="page"] { color: #fff; border-bottom: 2px solid #e2bc68; }
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 56px; }
+.doc { max-width: 760px; }
+h1 { color: var(--navy); font-size: 30px; line-height: 1.25; margin: 0 0 8px; }
+h2 { color: var(--navy); font-size: 21px; margin: 36px 0 10px; }
+.doc h2 { font-size: 19px; padding-top: 16px; border-top: 1px solid var(--line); }
+h3 { color: var(--navy); font-size: 17px; margin: 8px 0 4px; }
 .meta { color: var(--muted); margin-top: 0; }
-a { color: var(--accent); overflow-wrap: anywhere; }
-li { margin: 6px 0; }
-footer { color: var(--muted); font-size: 14px; margin-top: 48px; }
+.lead { font-size: 18px; color: var(--muted); max-width: 680px; }
+.hero { text-align: center; padding: 16px 0 8px; }
+.hero h1 { font-size: 34px; margin-top: 12px; }
+.hero .lead { margin: 8px auto 0; }
+.tagline { color: var(--gold); font-weight: 600; margin: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card, .contact, details { background: var(--surface); border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px 18px; }
+.card p { margin: 0; color: var(--muted); }
+.icon { font-size: 26px; }
+.steps li, li { margin: 6px 0; }
+.contact h2 { margin-top: 0; }
+.faq { display: grid; gap: 10px; }
+details summary { cursor: pointer; font-weight: 600; color: var(--navy); }
+details p { margin: 8px 0 0; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer .bar { display: block; padding: 20px 16px 32px; }
+footer nav a { color: var(--muted); }
+footer nav a:hover { color: var(--text); border: 0; }
+footer p { margin: 8px 0 0; }
 </style>
 </head>
 <body>
+<header><div class="bar">
+<a class="brand" href="/"><img src="/logo.svg" alt="">GPS <span>Para El</span> Cielo</a>
+<nav aria-label="Main"><a href="/" aria-current="page">Home</a><a href="/support">Support</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete account</a></nav>
+</div></header>
 <main>
-<h1>GPS Para El Cielo</h1>
-<p>A faith-based outreach app by Global Alliance of Christian Churches, Inc..</p>
-<ul>
-<li><a href="/privacy">Privacy Policy</a></li>
-<li><a href="/terms">Terms of Use</a></li>
-</ul>
-<footer>&copy; Global Alliance of Christian Churches, Inc. · <a href="mailto:support@gpscielochurch.org">support@gpscielochurch.org</a></footer>
+<section class="hero">
+  <img src="/logo.svg" alt="" width="72" height="85">
+  <h1>GPS Para El Cielo</h1>
+  <p class="tagline">Conectando hogares, alcanzando vidas.</p>
+  <p class="lead">A free app that helps believers pray for every household in
+  their neighborhood by name, visit and invite their neighbors, and follow up
+  so no one is forgotten.</p>
+</section>
+
+<h2>What you can do</h2>
+<div class="grid">
+<div class="card"><div class="icon" aria-hidden="true">&#x1F3E0;</div><h3>Your neighborhood</h3><p>Save your home address and see the households nearest to you, on a list and on a map.</p></div>
+<div class="card"><div class="icon" aria-hidden="true">&#x1F64F;</div><h3>Pray by name</h3><p>Pray for each family on your street and mark them as prayed for.</p></div>
+<div class="card"><div class="icon" aria-hidden="true">&#x1F3AF;</div><h3>Daily goals and rounds</h3><p>Set a daily prayer goal and follow your progress until every neighbor has been prayed for, then start a new round.</p></div>
+<div class="card"><div class="icon" aria-hidden="true">&#x1F6AA;</div><h3>Visits and invitations</h3><p>Record the homes you have visited or invited to church.</p></div>
+<div class="card"><div class="icon" aria-hidden="true">&#x1F4C5;</div><h3>Follow-ups and notes</h3><p>Schedule follow-up dates and keep private notes that only you can see.</p></div>
+<div class="card"><div class="icon" aria-hidden="true">&#x1F514;</div><h3>Notifications</h3><p>Receive reminders and ministry news, kept in an in-app inbox.</p></div>
+</div>
+
+<h2>Getting started</h2>
+<ol class="steps">
+  <li>Create an account with your email, Google or Apple.</li>
+  <li>Enter your home address, or use your current location.</li>
+  <li>Choose your daily prayer goal and start praying for the homes around
+  you.</li>
+</ol>
+
+<h2>About us</h2>
+<p>GPS Para El Cielo is provided by Global Alliance of Christian Churches, Inc. (<a href="https://gaccchurch.org">gaccchurch.org</a>).</p>
+
+<h2>Help and contact</h2>
+<p>Questions or problems? Visit <a href="/support">Support</a> or email
+<a href="mailto:office@gaccchurch.org">office@gaccchurch.org</a>.</p>
 </main>
+<footer><div class="bar">
+<nav aria-label="Footer"><a href="/" aria-current="page">Home</a><a href="/support">Support</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete account</a></nav>
+<p>&copy; 2026 Global Alliance of Christian Churches, Inc. · <a href="mailto:office@gaccchurch.org">office@gaccchurch.org</a></p>
+</div></footer>
 </body>
 </html>

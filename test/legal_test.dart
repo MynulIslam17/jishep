@@ -27,6 +27,60 @@ void main() {
       });
     });
 
+    test('the site has every page App Store Connect links to', () {
+      final site = LegalHtml.site();
+      for (final name in [
+        'index.html',
+        'support.html',
+        'delete-account.html',
+        'privacy.html',
+        'terms.html',
+        '404.html',
+      ]) {
+        expect(site, contains(name));
+        expect(site[name], contains('<meta name="description"'));
+        expect(site[name], contains('name="viewport"'));
+      }
+      expect(File('legal_site/logo.svg').existsSync(), isTrue);
+      expect(LegalInfo.supportUrl, endsWith('/support'));
+      expect(LegalInfo.deleteAccountUrl, endsWith('/delete-account'));
+    });
+
+    test('no placeholder, fictional or outdated details anywhere', () {
+      final everything = [
+        ...LegalHtml.site().values,
+        for (final doc in LegalContent.all) _plain(doc),
+      ].join('\n').toLowerCase();
+      for (final banned in [
+        'houston',
+        'texas',
+        'harris county',
+        'main street',
+        'gpscielochurch',
+        'placeholder',
+        'donat',
+        'stripe',
+        'lorem',
+      ]) {
+        expect(everything, isNot(contains(banned)), reason: banned);
+      }
+      expect(LegalInfo.contactEmail, 'office@gaccchurch.org');
+    });
+
+    test('account deletion page lists what the app really deletes', () {
+      final html = LegalHtml.site()['delete-account.html']!;
+      for (final item in [
+        'Profile',
+        'Delete account',
+        'notes',
+        'push notification tokens',
+        'Contact support',
+        'Household listings',
+      ]) {
+        expect(html, contains(item), reason: item);
+      }
+    });
+
     test('pages are escaped and link the contact email', () {
       final html = LegalHtml.page(LegalContent.privacyPolicy);
       expect(html, contains('<title>Privacy Policy'));
@@ -72,10 +126,9 @@ void main() {
       }
     });
 
-    test('terms include the Apple App Store section and governing law', () {
+    test('terms include the Apple App Store section', () {
       final text = _plain(LegalContent.termsOfUse);
       expect(text, contains('Apple App Store'));
-      expect(text, contains('State of ${LegalInfo.governingState}'));
     });
   });
 

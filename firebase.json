@@ -1,1 +1,43 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"gps-cielo","appId":"1:93438539556:android:80e7f904cfad0096cfe5b1","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"gps-cielo","appId":"1:93438539556:ios:9f7e21f59b77e74dcfe5b1","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"gps-cielo","configurations":{"android":"1:93438539556:android:80e7f904cfad0096cfe5b1","ios":"1:93438539556:ios:9f7e21f59b77e74dcfe5b1"}}}}},"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"hosting":{"public":"legal_site","cleanUrls":true,"ignore":["firebase.json","**/.*"]}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "gps-cielo",
+          "appId": "1:93438539556:android:80e7f904cfad0096cfe5b1",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "gps-cielo",
+          "appId": "1:93438539556:ios:9f7e21f59b77e74dcfe5b1",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "gps-cielo",
+          "configurations": {
+            "android": "1:93438539556:android:80e7f904cfad0096cfe5b1",
+            "ios": "1:93438539556:ios:9f7e21f59b77e74dcfe5b1"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "legal_site",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*"
+    ],
+    "trailingSlash": false
+  }
+}
