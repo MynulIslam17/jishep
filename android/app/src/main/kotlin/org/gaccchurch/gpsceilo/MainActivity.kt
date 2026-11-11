@@ -7,6 +7,17 @@ import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity() {
+    /**
+     * Always start at the app's own first screen (splash).
+     *
+     * FlutterActivity otherwise uses an intent extra named "route" as the
+     * initial route, and a tapped push notification carries its `data` (which
+     * has a "route" key) as intent extras. That opened e.g. /prayer-list as a
+     * bare page with no tab bar and skipped sign-in checks. The tapped route
+     * is handled by PushNotificationService once the main app is ready.
+     */
+    override fun getInitialRoute(): String = "/"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNotificationChannel()
