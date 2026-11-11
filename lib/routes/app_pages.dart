@@ -1,6 +1,5 @@
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/di/auth_binding.dart';
-import 'package:gps_cielo/core/di/donation_binding.dart';
 import 'package:gps_cielo/core/di/home_binding.dart';
 import 'package:gps_cielo/core/di/main_nav_binding.dart';
 import 'package:gps_cielo/core/di/neighborhood_binding.dart';
@@ -16,7 +15,6 @@ import 'package:gps_cielo/features/auth/presentation/pages/reset_password_screen
 import 'package:gps_cielo/features/auth/presentation/pages/sign_in_screen.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/sign_up_screen.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/verify_email_screen.dart';
-import 'package:gps_cielo/features/donation/presentation/pages/donation_screen.dart';
 import 'package:gps_cielo/features/home/presentation/pages/home_screen.dart';
 import 'package:gps_cielo/features/legal/legal_content.dart';
 import 'package:gps_cielo/features/legal/presentation/pages/legal_screen.dart';
@@ -124,12 +122,6 @@ abstract class AppPages {
       page: () => const NotificationScreen(),
       binding: NotificationBinding(),
       transition: Transition.rightToLeft,
-    ),
-    GetPage(
-      name: AppRoutes.donation,
-      page: () => const DonationScreen(),
-      binding: DonationBinding(),
-      transition: Transition.downToUp,
     ),
     GetPage(
       name: AppRoutes.terms,

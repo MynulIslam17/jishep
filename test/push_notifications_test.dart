@@ -82,7 +82,7 @@ void main() {
       for (final route in [
         '/delete-account',
         AppRoutes.signIn,
-        AppRoutes.donation,
+        '/donation', // removed screen
         'https://evil.example',
         '',
       ]) {

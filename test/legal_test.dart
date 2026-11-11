@@ -31,7 +31,6 @@ void main() {
       final html = LegalHtml.page(LegalContent.privacyPolicy);
       expect(html, contains('<title>Privacy Policy'));
       expect(html, contains('<a href="mailto:${LegalInfo.contactEmail}">'));
-      expect(html, contains('<a href="https://stripe.com/privacy">'));
       expect(html, contains('&quot;we&quot;'));
     });
 
@@ -48,11 +47,19 @@ void main() {
   });
 
   group('legal content', () {
+    test('has no donation or payment terms (feature removed)', () {
+      for (final doc in LegalContent.all) {
+        final text = _plain(doc).toLowerCase();
+        for (final word in ['donat', 'stripe', 'payment']) {
+          expect(text, isNot(contains(word)), reason: '${doc.title}: $word');
+        }
+      }
+    });
+
     test('covers what the App collects and shares', () {
       final text = _plain(LegalContent.privacyPolicy);
       for (final topic in [
         'location',
-        'Stripe',
         'push notification token',
         'Photon',
         'OpenStreetMap',
@@ -101,11 +108,14 @@ void main() {
       expect(find.text('Privacy Policy'), findsOneWidget);
       expect(find.text(LegalContent.privacyPolicy.lastUpdated), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('16. Contact us'),
+        find.text(LegalContent.privacyPolicy.sections.last.heading),
         400,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('16. Contact us'), findsOneWidget);
+      expect(
+        find.text(LegalContent.privacyPolicy.sections.last.heading),
+        findsOneWidget,
+      );
     });
 
     for (final (label, title) in [

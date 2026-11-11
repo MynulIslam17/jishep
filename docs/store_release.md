@@ -32,7 +32,7 @@ App Store Connect (manual):
 - [ ] Age rating questionnaire
 - [ ] Screenshots: 6.9" iPhone (and 6.5" if asked)
 - [ ] **App Review notes with a demo account** (email + password, home location already set) so the reviewer can see households. Without one, review is usually rejected.
-- [ ] Explain in the review notes that donations open Stripe in Safari and are charitable donations to a nonprofit (allowed outside in-app purchase, guideline 3.2.1(vi)); the org must be a registered nonprofit.
+- [x] No payments of any kind: donations were removed, and there are no in-app purchases or subscriptions.
 - [ ] APNs key uploaded in Firebase (see push doc)
 
 ## Android (`android/app/src/main/AndroidManifest.xml`)

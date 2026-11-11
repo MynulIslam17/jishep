@@ -232,16 +232,6 @@ class ProfileScreen extends GetView<ProfileController> {
                         ),
                         const Divider(height: 1, color: AppColors.border),
 
-                        // Support the mission (donations)
-                        _buildMenuItem(
-                          icon: Icons.volunteer_activism_rounded,
-                          title: 'Support the mission',
-                          subtitle: 'Give once or monthly',
-                          iconColor: AppColors.primaryGoldDark,
-                          onTap: () => Get.toNamed(AppRoutes.donation),
-                        ),
-                        const Divider(height: 1, color: AppColors.border),
-
                         // 3. About GPS PARA EL CIELO
                         _buildMenuItem(
                           icon: Icons.info_outline_rounded,

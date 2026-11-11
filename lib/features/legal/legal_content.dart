@@ -111,19 +111,7 @@ abstract final class LegalContent {
           'type and operating system version in order to run the service.',
         ),
       ]),
-      LegalSection('6. Donations', [
-        LegalBlock.p(
-          'Donations are optional and are processed by Stripe, Inc. on a '
-          'secure Stripe web page in your browser. To start a donation we '
-          'send Stripe the amount, frequency, your account identifier and '
-          'your email address. Your card or bank details go directly to '
-          'Stripe; we never receive or store them. Stripe handles payment '
-          'information under its own privacy policy '
-          '(https://stripe.com/privacy). We keep donation records as '
-          'required for accounting and tax purposes.',
-        ),
-      ]),
-      LegalSection('7. Information about households and neighbors', [
+      LegalSection('6. Information about households and neighbors', [
         LegalBlock.p(
           'The App shows listings of nearby households so that members can '
           'pray for their neighbors. A listing contains a street address, an '
@@ -141,14 +129,13 @@ abstract final class LegalContent {
           'respond promptly.',
         ),
       ]),
-      LegalSection('8. How we use information', [
+      LegalSection('7. How we use information', [
         LegalBlock.list([
           'To create and secure your account and let you sign in.',
           'To show households near your home location and track your prayer '
               'and outreach progress.',
           'To send the notifications you allow.',
           'To answer your support messages.',
-          'To process donations you choose to make.',
           'To keep the App safe, prevent abuse, fix problems and improve '
               'it.',
           'To comply with the law.',
@@ -159,7 +146,7 @@ abstract final class LegalContent {
           'apps or websites.',
         ),
       ]),
-      LegalSection('9. Service providers we share with', [
+      LegalSection('8. Service providers we share with', [
         LegalBlock.p(
           'We share information only with providers that help us run the '
           'App, and only for that purpose:',
@@ -173,7 +160,6 @@ abstract final class LegalContent {
                 'notifications.',
           'Google Sign-In and Sign in with Apple: if you choose them to sign '
               'in.',
-          'Stripe, Inc.: donation payments.',
           'OpenStreetMap Foundation: map images. Loading the map sends your '
               'IP address and the map area being viewed to its tile '
               'servers.',
@@ -189,18 +175,17 @@ abstract final class LegalContent {
           'to your information.',
         ),
       ]),
-      LegalSection('10. How long we keep information', [
+      LegalSection('9. How long we keep information', [
         LegalBlock.p(
           'We keep your information for as long as your account exists. You '
           'can delete your account at any time in the App under Profile > '
           'Delete account. This permanently deletes your account, profile, '
           'outreach history and notes, notifications, device tokens and '
           'support messages. Copies may remain in secure backups for a '
-          'limited time before being overwritten. Donation records are kept '
-          'for as long as accounting and tax laws require.',
+          'limited time before being overwritten.',
         ),
       ]),
-      LegalSection('11. Security', [
+      LegalSection('10. Security', [
         LegalBlock.p(
           'Information is sent over encrypted connections and stored with '
           'Google Firebase, with access rules that let only you read and '
@@ -209,7 +194,7 @@ abstract final class LegalContent {
           'Please use a strong password and keep it private.',
         ),
       ]),
-      LegalSection('12. Your choices and rights', [
+      LegalSection('11. Your choices and rights', [
         LegalBlock.list([
           'View and update your profile, address and preferences in the '
               'App at any time.',
@@ -230,7 +215,7 @@ abstract final class LegalContent {
           'acting on a request.',
         ),
       ]),
-      LegalSection('13. Children', [
+      LegalSection('12. Children', [
         LegalBlock.p(
           'The App is not intended for children under '
           '${LegalInfo.minimumAge}, and we do not knowingly collect '
@@ -239,7 +224,7 @@ abstract final class LegalContent {
           '$_email and we will delete it.',
         ),
       ]),
-      LegalSection('14. Where information is processed', [
+      LegalSection('13. Where information is processed', [
         LegalBlock.p(
           'We are based in the United States, and our service providers may '
           'process information in the United States and other countries. '
@@ -247,14 +232,14 @@ abstract final class LegalContent {
           'international transfers.',
         ),
       ]),
-      LegalSection('15. Changes to this policy', [
+      LegalSection('14. Changes to this policy', [
         LegalBlock.p(
           'We may update this policy from time to time. We will change the '
           '"Last updated" date above and, for significant changes, notify '
           'you in the App before they take effect.',
         ),
       ]),
-      LegalSection('16. Contact us', [
+      LegalSection('15. Contact us', [
         LegalBlock.p(
           'Questions or requests about your privacy: $_email, or '
           '$_org, ${LegalInfo.mailingAddress}.',
@@ -286,7 +271,7 @@ abstract final class LegalContent {
           'You must be at least ${LegalInfo.minimumAge} years old to use '
           'the App. If you are under the age of majority where you live, '
           'you may use the App only with the involvement of a parent or '
-          'guardian, and you must be an adult to make a donation.',
+          'guardian.',
         ),
       ]),
       LegalSection('3. Your account', [
@@ -354,27 +339,14 @@ abstract final class LegalContent {
           'may remove content that breaks these Terms.',
         ),
       ]),
-      LegalSection('8. Donations', [
-        LegalBlock.p(
-          'Donations are voluntary gifts to $_org to support the ministry '
-          'and are processed by Stripe under Stripe\'s terms. Donations are '
-          'generally non-refundable; if you believe a donation was made in '
-          'error, contact us at $_email within 30 days. Monthly donations '
-          'continue until you cancel them through the link in your Stripe '
-          'receipt or by contacting us. Whether a donation is tax-deductible '
-          'depends on applicable law and your situation; we provide '
-          'receipts on request. Donating does not give you any goods, '
-          'services or special treatment in the App.',
-        ),
-      ]),
-      LegalSection('9. Notifications', [
+      LegalSection('8. Notifications', [
         LegalBlock.p(
           'If you allow notifications, we may send reminders and ministry '
           'messages. You can turn them off at any time in your device '
           'settings.',
         ),
       ]),
-      LegalSection('10. Our rights in the App', [
+      LegalSection('9. Our rights in the App', [
         LegalBlock.p(
           'The App, its design, text, graphics, logos and software belong to '
           '$_org or its licensors. We give you a personal, revocable, '
@@ -384,15 +356,15 @@ abstract final class LegalContent {
           'available under the Open Database License.',
         ),
       ]),
-      LegalSection('11. Third-party services', [
+      LegalSection('10. Third-party services', [
         LegalBlock.p(
           'The App relies on services from others, such as Google, Apple, '
-          'Stripe, OpenStreetMap and Photon by komoot. Your use of those '
+          'OpenStreetMap and Photon by komoot. Your use of those '
           'services may also be governed by their own terms, and we are not '
           'responsible for them.',
         ),
       ]),
-      LegalSection('12. Suspension and termination', [
+      LegalSection('11. Suspension and termination', [
         LegalBlock.p(
           'You may stop using the App and delete your account at any time. '
           'We may suspend or close an account that breaks these Terms, puts '
@@ -401,7 +373,7 @@ abstract final class LegalContent {
           'of significant changes.',
         ),
       ]),
-      LegalSection('13. Disclaimers', [
+      LegalSection('12. Disclaimers', [
         LegalBlock.p(
           'The App is provided "as is" and "as available". To the fullest '
           'extent allowed by law, we disclaim all warranties, express or '
@@ -412,7 +384,7 @@ abstract final class LegalContent {
           'when visiting anyone.',
         ),
       ]),
-      LegalSection('14. Limitation of liability', [
+      LegalSection('13. Limitation of liability', [
         LegalBlock.p(
           'To the fullest extent allowed by law, $_org and its officers, '
           'volunteers and partner churches will not be liable for any '
@@ -424,14 +396,14 @@ abstract final class LegalContent {
           'apply to you.',
         ),
       ]),
-      LegalSection('15. Indemnity', [
+      LegalSection('14. Indemnity', [
         LegalBlock.p(
           'You agree to defend and hold harmless $_org from claims and '
           'costs arising from your breach of these Terms or your conduct '
           'toward others while using the App.',
         ),
       ]),
-      LegalSection('16. Governing law', [
+      LegalSection('15. Governing law', [
         LegalBlock.p(
           'These Terms are governed by the laws of the State of '
           '${LegalInfo.governingState}, United States, without regard to '
@@ -442,7 +414,7 @@ abstract final class LegalContent {
           'please contact us so we can try to resolve it informally.',
         ),
       ]),
-      LegalSection('17. Apple App Store', [
+      LegalSection('16. Apple App Store', [
         LegalBlock.p(
           'If you downloaded the App from the Apple App Store: these Terms '
           'are between you and $_org only, not Apple, and $_org, not Apple, '
@@ -459,7 +431,7 @@ abstract final class LegalContent {
           'the App must also follow the App Store Terms of Service.',
         ),
       ]),
-      LegalSection('18. Changes to these Terms', [
+      LegalSection('17. Changes to these Terms', [
         LegalBlock.p(
           'We may update these Terms from time to time. We will change the '
           '"Last updated" date above and, for significant changes, notify '
@@ -467,7 +439,7 @@ abstract final class LegalContent {
           'effect means you accept them.',
         ),
       ]),
-      LegalSection('19. Contact us', [
+      LegalSection('18. Contact us', [
         LegalBlock.p(
           'Questions about these Terms: $_email, or $_org, '
           '${LegalInfo.mailingAddress}.',
