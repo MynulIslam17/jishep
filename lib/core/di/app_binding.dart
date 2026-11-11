@@ -7,6 +7,8 @@ import 'package:gps_cielo/core/services/address_suggestion_service.dart';
 import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
+import 'package:gps_cielo/core/services/push/app_badge.dart';
+import 'package:gps_cielo/core/services/push/push_inbox.dart';
 import 'package:gps_cielo/core/services/push/push_messaging_client.dart';
 import 'package:gps_cielo/core/services/push/push_notification_service.dart';
 import 'package:gps_cielo/core/storage/local_storage_service.dart';
@@ -79,10 +81,18 @@ class AppBinding extends Bindings {
         authController.currentUser,
         platform: isIOS ? 'ios' : 'android',
         showForegroundInApp: !isIOS,
+        inbox: PushInbox(),
       ),
       permanent: true,
     );
     authController.addBeforeSignOut(push.unregister);
+
+    // App icon badge = unread notifications (iOS), cleared on sign-out.
+    AppBadgeSync(
+      currentUser: authController.currentUser,
+      unreadCount: notificationRepository.watchUnreadCount,
+      setBadge: AppBadge().setCount,
+    ).start();
     if (isIOS) client.configureForeground().catchError((_) {});
     push.start();
   }

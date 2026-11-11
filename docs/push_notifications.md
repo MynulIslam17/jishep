@@ -9,8 +9,10 @@
 | Token refresh replaces the old document | `PushNotificationService._onTokenRefresh` |
 | Sign-out / account deletion removes the document and deletes the token | `AuthController.addBeforeSignOut` → `PushNotificationService.unregister`; `UserRepository.deleteUserData` |
 | Foreground: iOS shows the system banner; Android shows an in-app banner | `FirebasePushMessagingClient.configureForeground`, `_onForeground` |
-| Background / terminated: shown by the system (iOS APNs, Android channel `gps_cielo_general`) | `main.dart` background handler (does no work) |
-| Tap opens a screen (launch taps wait for sign-in and the main app) | `_onTap`, `PushPayload` |
+| Background / terminated: shown by the system (iOS APNs, Android channel `gps_cielo_general`) | `main.dart` background handler (adds the push to the inbox when it runs) |
+| Tap opens a screen (launch taps wait for sign-in and the main app) and marks the push read | `_onTap`, `PushPayload`, `PushInbox.recordOpened` |
+| Every push is kept in the in-app inbox `users/{uid}/notifications` (received = unread, tapped = read; one entry per push) | `PushInbox` |
+| Home bell badge and iOS app icon badge = unread count; cleared on sign-out | `HomeController.notificationCount`, `AppBadgeSync` (`AppDelegate.swift` channel `gps_cielo/app_badge`) |
 
 Notifications never change prayers, visits or any household status.
 
@@ -23,8 +25,23 @@ Send a **notification** message (title + body) with this optional `data`:
 | `type` | `prayerReminder`, `followUpDue`, `milestone`, `scripture`, `churchNews` | Picks the default screen |
 | `route` | `/home`, `/neighborhood`, `/prayer-list`, `/follow-up`, `/profile`, `/notifications` | Screen a tap opens. Anything else opens the inbox |
 | `householdId` | a household id | Reserved for later; not used for access |
+| `notificationId` | id of an inbox entry the sender already wrote at `users/{uid}/notifications/{id}` (`[A-Za-z0-9_-]`, max 128) | The app reuses that entry instead of adding its own |
 
 Defaults: `prayerReminder` and `milestone` open the Prayer List, `followUpDue` opens Follow-up, everything else opens Notifications.
+
+### Inbox and badge: what the app can and can't see
+
+The app adds a push to the inbox when it is in the foreground, when it is
+tapped, and on Android when the background handler runs. A plain
+notification that arrives on **iOS while the app is in the background and is
+never tapped** does not reach the app, so it only shows up in the inbox if a
+sender wrote it there. A future backend should therefore:
+
+1. write the inbox entry first (`title`, `message`, `type`, `isRead: false`, `actionRoute`, `timestamp`),
+2. send the push with `data.notificationId` = that entry's id, and
+3. set `apns.payload.aps.badge` to the user's new unread count.
+
+The app then keeps the icon badge in step with the inbox the next time it opens.
 
 ## Sending today (Spark plan, no backend)
 

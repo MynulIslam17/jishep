@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/device_token_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
+import 'package:gps_cielo/core/services/push/push_inbox.dart';
 import 'package:gps_cielo/core/services/push/push_messaging_client.dart';
 import 'package:gps_cielo/core/services/push/push_payload.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
@@ -27,6 +28,8 @@ import 'package:gps_cielo/routes/app_routes.dart';
 ///  * **Taps** open the screen named by the payload ([PushPayload]); a tap
 ///    that launches the app waits until the user is signed in and the main
 ///    app is on screen.
+///  * **Inbox**: pushes are kept in the in-app inbox ([PushInbox]) so the
+///    unread badge counts them: received ones unread, tapped ones read.
 ///
 /// Nothing here changes prayers, visits or any household status.
 class PushNotificationService extends GetxService {
@@ -44,6 +47,9 @@ class PushNotificationService extends GetxService {
   /// Opens a screen; replaceable in tests.
   final void Function(String route) _open;
 
+  /// Where pushes are kept for the in-app inbox (null: not kept).
+  final PushInbox? _inbox;
+
   PushNotificationService(
     this._client,
     this._tokens,
@@ -51,7 +57,9 @@ class PushNotificationService extends GetxService {
     required this.platform,
     required this.showForegroundInApp,
     void Function(String route)? open,
-  }) : _open = open ?? openAppRoute;
+    PushInbox? inbox,
+  }) : _open = open ?? openAppRoute,
+       _inbox = inbox;
 
   /// The account the stored token belongs to, and the token.
   String? _uid;
@@ -62,6 +70,7 @@ class PushNotificationService extends GetxService {
 
   /// A tapped notification waiting for the app to be ready.
   PushPayload? pendingTap;
+  PushMessage? _pendingTapMessage;
 
   /// Message ids already opened (the launch message can be reported twice).
   final Set<String> _openedIds = {};
@@ -104,8 +113,11 @@ class PushNotificationService extends GetxService {
       // Notifications are optional; the app works without them.
     }
     final tap = pendingTap;
+    final tapMessage = _pendingTapMessage;
+    _pendingTapMessage = null;
     if (tap != null) {
       pendingTap = null;
+      if (tapMessage != null) await _keep(user.id, tapMessage, opened: true);
       _open(tap.route);
     }
   }
@@ -115,6 +127,7 @@ class PushNotificationService extends GetxService {
   Future<void> unregister(String uid) async {
     _appReady = false;
     pendingTap = null;
+    _pendingTapMessage = null;
     final token = _token;
     _token = null;
     _uid = null;
@@ -177,6 +190,8 @@ class PushNotificationService extends GetxService {
   }
 
   void _onForeground(PushMessage message) {
+    final uid = _currentUser.value?.id;
+    if (uid != null) unawaited(_keep(uid, message, opened: false));
     if (!showForegroundInApp) return; // the system shows it (iOS)
     final title = message.title;
     final body = message.body;
@@ -188,11 +203,31 @@ class PushNotificationService extends GetxService {
     final id = message.id;
     if (id != null && !_openedIds.add(id)) return;
     final payload = PushPayload.fromData(message.data);
-    if (_appReady && _currentUser.value != null) {
+    final uid = _currentUser.value?.id;
+    if (_appReady && uid != null) {
+      unawaited(_keep(uid, message, opened: true));
       _open(payload.route);
     } else {
       pendingTap = payload;
+      _pendingTapMessage = message;
     }
+  }
+
+  /// Adds [message] to [uid]'s inbox (read when [opened]). Never throws:
+  /// the notification itself was already shown.
+  Future<void> _keep(
+    String uid,
+    PushMessage message, {
+    required bool opened,
+  }) async {
+    final inbox = _inbox;
+    if (inbox == null) return;
+    try {
+      await (opened
+              ? inbox.recordOpened(uid, message)
+              : inbox.recordReceived(uid, message))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 
   /// Opens [route]: a main tab is selected inside the main app (closing any
