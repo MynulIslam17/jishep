@@ -21,6 +21,7 @@ class RadiusMapCard extends StatefulWidget {
     this.isRadiusFiltered = false,
     this.onResetRadius,
     this.onRadiusChanged,
+    this.onRadiusChangeEnd,
     this.centerLatitude,
     this.centerLongitude,
     this.centerLabel = '',
@@ -46,6 +47,10 @@ class RadiusMapCard extends StatefulWidget {
   final bool isRadiusFiltered;
   final VoidCallback? onResetRadius;
   final ValueChanged<int>? onRadiusChanged;
+
+  /// The slider was let go at a new number (e.g. to ask whether to save it
+  /// as the neighborhood size).
+  final ValueChanged<int>? onRadiusChangeEnd;
   final List<HouseholdModel> households;
 
   /// The current search center. Without it a placeholder is shown.
@@ -220,7 +225,7 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
               Expanded(
                 child: Text(
                   rangeText == null
-                      ? 'Households to show'
+                      ? 'Homes in my neighborhood'
                       : 'Search range $rangeText · change it in Settings',
                   key: const ValueKey('radius-caption'),
                   maxLines: 1,
@@ -307,6 +312,9 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
                         setState(() => _draggingRadius = homes);
                         onChanged(homes);
                       },
+                onChangeEnd: widget.onRadiusChangeEnd == null
+                    ? null
+                    : (v) => widget.onRadiusChangeEnd!(v.round()),
               ),
             ),
             Padding(

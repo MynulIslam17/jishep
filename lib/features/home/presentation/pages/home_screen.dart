@@ -27,6 +27,7 @@ class HomeScreen extends GetView<HomeController> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // Floating & Blending App Bar with reduced height & compact margins
@@ -202,6 +203,7 @@ class HomeScreen extends GetView<HomeController> {
                       radiusOptions: HomeController.radiusOptions,
                       rangeMeters: controller.rangeMeters.value,
                       onRadiusChanged: controller.changeRadius,
+                      onRadiusChangeEnd: _confirmNeighborhoodSize,
                       defaultRadius: controller.defaultRadius.value,
                       isRadiusFiltered: controller.isRadiusFiltered.value,
                       onResetRadius: controller.resetRadius,
@@ -517,6 +519,28 @@ class HomeScreen extends GetView<HomeController> {
         ],
       ),
     );
+  }
+
+  /// The Home slider is the neighborhood size: it previews live, and on
+  /// release asks to save it, so Home, Neighborhood and the Prayer List never
+  /// disagree. Cancel goes back to the saved size.
+  Future<void> _confirmNeighborhoodSize(int homes) async {
+    final change = controller.neighborhoodSizeChange(homes);
+    if (change == null) {
+      await controller.resetRadius();
+      return;
+    }
+    final confirmed = await AppConfirmationDialog.show(
+      title: 'Change your neighborhood to $homes homes?',
+      message: change.dialogMessage,
+      confirmLabel: 'Save',
+      onConfirm: () {},
+    );
+    if (confirmed == true) {
+      await controller.saveNeighborhoodSize(change);
+    } else {
+      await controller.resetRadius();
+    }
   }
 
   void _confirmSetAsHome(String place) {

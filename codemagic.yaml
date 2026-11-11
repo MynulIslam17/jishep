@@ -8,6 +8,9 @@
 #   App Store provisioning profile: gps_cielo_appstore (expires 2027-10-12)
 # Apple Developer Team ID: T83PP9TMXS
 # Firebase project: gps-cielo (ios/Runner/GoogleService-Info.plist is committed)
+# Push notifications: Release signs with ios/Runner/RunnerRelease.entitlements
+#   (aps-environment; App Store export sets it to production from the profile).
+#   The App Store profile must be created after Push Notifications was enabled.
 # TestFlight is manual: pushing code will not upload a release.
 
 workflows:
@@ -140,6 +143,23 @@ workflows:
             echo "Runner is not using $BUNDLE_ID, so the App Store profile cannot be applied."
             exit 1
           fi
+          # Push notifications need a profile made after Push Notifications
+          # was enabled for the App ID (it carries aps-environment).
+          for PROFILE in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            security cms -D -i "$PROFILE" > /tmp/profile_check.plist
+            if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/profile_check.plist)" = "$TEAM_ID.$BUNDLE_ID" ]; then
+              APS=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' /tmp/profile_check.plist 2>/dev/null || true)
+              NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/profile_check.plist)
+              if [ "$APS" != "production" ]; then
+                echo "Profile '$NAME' has no Push Notifications (aps-environment)."
+                echo "Create a new App Store profile for $BUNDLE_ID in Apple Developer > Profiles,"
+                echo "fetch it in Codemagic (Code signing identities > iOS provisioning profiles),"
+                echo "and reference it under ios_signing.provisioning_profiles."
+                exit 1
+              fi
+              echo "Profile '$NAME' includes push (aps-environment=$APS)."
+            fi
+          done
           xcode-project use-profiles
           if ! grep -q "<string>app-store" /Users/builder/export_options.plist; then
             echo "Export options are not App Store. Check certificate gps_cielo_distribution and profile gps_cielo_appstore."
@@ -180,6 +200,7 @@ workflows:
           codesign -d --entitlements - --xml "$APP" > /tmp/ipa_check/ent.plist 2>/dev/null
           grep -q "com.apple.developer.applesignin" /tmp/ipa_check/ent.plist || { echo "Apple Sign-In entitlement missing"; exit 1; }
           grep -A1 "get-task-allow" /tmp/ipa_check/ent.plist | grep -q "<false/>" || { echo "get-task-allow is not false"; exit 1; }
+          grep -A1 "aps-environment" /tmp/ipa_check/ent.plist | grep -q "<string>production</string>" || { echo "Push entitlement missing or not production"; exit 1; }
           echo "Version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist"))"
     artifacts:
       - build/ios/ipa/*.ipa

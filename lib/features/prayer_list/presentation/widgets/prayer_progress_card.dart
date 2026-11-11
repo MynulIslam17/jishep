@@ -4,9 +4,9 @@ import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 
-/// Today's progress in the ring (prayed of today's households, which follows
-/// the daily goal) and the cycle progress in text (households of the
-/// neighborhood prayed for in this cycle).
+/// Today's progress toward the daily goal in the ring (extra prayers shown
+/// apart, so the goal never changes), then the round: how many neighbors of
+/// the whole neighborhood were prayed for in this round.
 class PrayerProgressCard extends StatelessWidget {
   final PrayerPlan plan;
 
@@ -17,33 +17,52 @@ class PrayerProgressCard extends StatelessWidget {
     final todayHouseholds = plan.today;
     final cycleCompleted = plan.cyclePrayed;
     final cycleTarget = plan.cycleTotal;
-    final prayedTodayCount = todayHouseholds.where((h) => h.isPrayed).length;
-    // Today's list is the daily goal, or fewer when the cycle is nearly done.
-    final todayTotal = todayHouseholds.isNotEmpty
-        ? todayHouseholds.length
-        : plan.dailyTarget;
+    final goal = plan.todayGoal;
+    final counted = plan.countedToday;
+    final extra = plan.extraToday;
     final todayDone = plan.isTodayDone;
-    final leftToday = todayTotal - prayedTodayCount;
+    final leftToday = plan.leftToday;
+
     final String todayNote;
-    if (todayHouseholds.isEmpty) {
-      todayNote = 'Nothing to pray for today';
-    } else if (todayDone) {
-      todayNote = "Today's prayers are done!";
+    String? todayDetail;
+    if (todayDone) {
+      todayNote = "Today's goal reached!";
+      if (extra > 0) {
+        todayDetail =
+            'You prayed for ${plan.prayedToday} households today, '
+            '$extra above your goal.';
+      }
+    } else if (goal == 0) {
+      todayNote = plan.isCycleComplete
+          ? 'Round complete!'
+          : 'Nothing to pray for today';
     } else {
       todayNote =
           '$leftToday ${leftToday == 1 ? 'household' : 'households'} '
           'left to pray for today';
+      if (plan.goalAboveNeighborhood) {
+        todayDetail =
+            'Your goal is ${plan.dailyTarget} a day, but your neighborhood '
+            'has only $cycleTarget homes. Show more homes in Prayer '
+            'preferences.';
+      } else if (goal < plan.dailyTarget) {
+        todayDetail = 'This is the last day of this round.';
+      }
     }
-    final String cycleNote;
+
+    final String roundNote;
     if (plan.isCycleComplete) {
-      cycleNote = 'You have prayed for all $cycleTarget neighbors!';
+      roundNote =
+          'You prayed for all $cycleTarget neighbors! '
+          'A new round starts at midnight.';
     } else if (cycleTarget == 0) {
-      cycleNote = 'No households in your neighborhood yet.';
+      roundNote = 'No households in your neighborhood yet.';
     } else {
+      final left = plan.cycleRemaining;
       final days = plan.daysLeft;
-      cycleNote =
-          '$cycleCompleted of your $cycleTarget neighbors prayed for '
-          '· about $days ${days == 1 ? 'day' : 'days'} to go';
+      roundNote =
+          '$left ${left == 1 ? 'neighbor' : 'neighbors'} left '
+          '\u00b7 about $days ${days == 1 ? 'day' : 'days'} to go';
     }
 
     return Container(
@@ -74,7 +93,7 @@ class PrayerProgressCard extends StatelessWidget {
               SizedBox(width: 8.w),
               Expanded(
                 child: Text(
-                  "Today's Households",
+                  "Today's Prayer Goal",
                   style: AppTypography.heading(
                     color: AppColors.textPrimary,
                     fontSize: 14.5.sp,
@@ -118,12 +137,12 @@ class PrayerProgressCard extends StatelessWidget {
                         height: 72.r,
                         child: CircularProgressIndicator(
                           key: const ValueKey('today-ring'),
-                          value: todayTotal > 0
-                              ? (prayedTodayCount / todayTotal).clamp(0.0, 1.0)
-                              : 0,
+                          value: goal > 0
+                              ? (counted / goal).clamp(0.0, 1.0)
+                              : (plan.isCycleComplete ? 1 : 0),
                           backgroundColor: const Color(0xFFE2E8F0),
                           valueColor: AlwaysStoppedAnimation(
-                            todayDone
+                            todayDone || plan.isCycleComplete
                                 ? const Color(0xFF2E7D32)
                                 : AppColors.primaryGold,
                           ),
@@ -141,7 +160,7 @@ class PrayerProgressCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '$prayedTodayCount/$todayTotal',
+                                '$counted/$goal',
                                 style: AppTypography.heading(
                                   color: AppColors.textPrimary,
                                   fontSize: 12.5.sp,
@@ -180,15 +199,39 @@ class PrayerProgressCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: 4.h),
-                    Text(
-                      cycleNote,
-                      key: const ValueKey('cycle-note'),
-                      style: AppTypography.body(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5.sp,
+                    if (extra > 0) ...[
+                      SizedBox(height: 4.h),
+                      Container(
+                        key: const ValueKey('extra-today'),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8.w,
+                          vertical: 2.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(20.r),
+                        ),
+                        child: Text(
+                          '+$extra extra',
+                          style: AppTypography.body(
+                            color: const Color(0xFF2E7D32),
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
+                    if (todayDetail != null) ...[
+                      SizedBox(height: 4.h),
+                      Text(
+                        todayDetail,
+                        key: const ValueKey('today-detail'),
+                        style: AppTypography.body(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5.sp,
+                        ),
+                      ),
+                    ],
                     SizedBox(height: 10.h),
                     // One circle per household on today's list.
                     // Wraps so a daily target of 10-15 never overflows.
@@ -222,10 +265,59 @@ class PrayerProgressCard extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: 12.h),
+          if (cycleTarget > 0) ...[
+            SizedBox(height: 14.h),
+            Divider(height: 1, color: AppColors.border),
+            SizedBox(height: 12.h),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'This round',
+                    style: AppTypography.heading(
+                      color: AppColors.textPrimary,
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$cycleCompleted/$cycleTarget neighbors',
+                  key: const ValueKey('round-count'),
+                  style: AppTypography.body(
+                    color: AppColors.textPrimary,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8.h),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4.r),
+              child: LinearProgressIndicator(
+                key: const ValueKey('round-bar'),
+                value: (cycleCompleted / cycleTarget).clamp(0.0, 1.0),
+                minHeight: 6.h,
+                backgroundColor: const Color(0xFFE2E8F0),
+                valueColor: const AlwaysStoppedAnimation(Color(0xFF2E7D32)),
+              ),
+            ),
+            SizedBox(height: 6.h),
+          ] else
+            SizedBox(height: 12.h),
           Text(
-            'Daily goal, search range and number of neighbors are set in '
-            'Profile \u203a Prayer preferences.',
+            roundNote,
+            key: const ValueKey('cycle-note'),
+            style: AppTypography.body(
+              color: AppColors.textSecondary,
+              fontSize: 11.5.sp,
+            ),
+          ),
+          SizedBox(height: 10.h),
+          Text(
+            'Your daily goal resets at midnight. Goal, search range and '
+            'number of neighbors are set in Profile \u203a Prayer preferences.',
             key: const ValueKey('goal-hint'),
             style: AppTypography.body(
               color: AppColors.textSecondary,

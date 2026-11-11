@@ -49,6 +49,14 @@ void main() {
       expect(controller.isLoading.value, isFalse);
     });
 
+    test('resets by email while phone sign-in is off', () {
+      final controller = ForgotPasswordController(
+        _FakeAuthService(),
+        _FakeAuthController(),
+      );
+      expect(controller.useEmail.value, isTrue);
+    });
+
     test('switching method clears the confirmation', () async {
       final controller = ForgotPasswordController(
         _FakeAuthService(),

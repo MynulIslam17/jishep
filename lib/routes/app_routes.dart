@@ -17,4 +17,6 @@ abstract class AppRoutes {
   static const String editProfile = '/edit-profile';
   static const String notifications = '/notifications';
   static const String donation = '/donation';
+  static const String terms = '/terms';
+  static const String privacy = '/privacy';
 }

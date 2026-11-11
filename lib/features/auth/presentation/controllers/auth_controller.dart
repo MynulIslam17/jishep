@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -25,6 +26,24 @@ class AuthController extends GetxController {
   final currentUser = Rxn<UserModel>();
 
   StreamSubscription<User?>? _authSubscription;
+
+  /// Run before signing out or deleting the account, while the user can
+  /// still write their own data (e.g. removing this device's push token).
+  final List<Future<void> Function(String uid)> _beforeSignOut = [];
+
+  void addBeforeSignOut(Future<void> Function(String uid) hook) =>
+      _beforeSignOut.add(hook);
+
+  Future<void> _runBeforeSignOut() async {
+    final uid = _authService.firebaseUser?.uid ?? currentUser.value?.id;
+    if (uid == null) return;
+    for (final hook in _beforeSignOut) {
+      try {
+        await hook(uid);
+      } catch (_) {}
+    }
+  }
+
   StreamSubscription<UserModel?>? _profileSubscription;
 
   bool get isAuthenticated => _authService.firebaseUser != null;
@@ -144,14 +163,18 @@ class AuthController extends GetxController {
   Future<SmsVerificationResult> sendPhoneCode(String phone) =>
       _authService.sendPhoneCode(phone);
 
-  /// Deletes the account and all its data, then returns to Sign In.
-  /// Returns false if the user cancelled re-authentication.
+  /// Deletes the account and all its data. Returns false if the user
+  /// cancelled re-authentication; throws when the deletion failed.
+  ///
+  /// Does not navigate: the caller closes its dialog first, then calls
+  /// [finishAccountDeletion].
   Future<bool> deleteAccount({String? password}) async {
     final confirmed = await _authService.reauthenticateForDeletion(
       password: password,
     );
     if (!confirmed) return false;
 
+    await _runBeforeSignOut();
     // Stop listeners so they don't report errors while data is removed.
     await _profileSubscription?.cancel();
     _profileSubscription = null;
@@ -160,13 +183,30 @@ class AuthController extends GetxController {
     try {
       await _authService.deleteAccount();
     } catch (_) {
+      // The Firebase user is gone: the deletion itself succeeded (only a
+      // later clean-up step failed).
+      if (_authService.firebaseUser == null) {
+        currentUser.value = null;
+        return true;
+      }
       _onAuthChanged(_authService.firebaseUser);
       rethrow;
     }
 
     currentUser.value = null;
-    Get.offAllNamed(AppRoutes.signIn);
     return true;
+  }
+
+  /// After a successful deletion: replaces the whole stack with Sign In and
+  /// confirms once that screen is showing.
+  void finishAccountDeletion() {
+    Get.offAllNamed(AppRoutes.signIn);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SnackbarService.showSuccess(
+        'Account Deleted',
+        'Your account and data have been permanently deleted.',
+      );
+    });
   }
 
   /// Applies a local profile change immediately (Firestore sync follows).
@@ -181,6 +221,7 @@ class AuthController extends GetxController {
   }
 
   Future<void> clearSession() async {
+    await _runBeforeSignOut();
     await _profileSubscription?.cancel();
     _profileSubscription = null;
     _householdStore.clear();

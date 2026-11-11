@@ -6,17 +6,30 @@ import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 
-/// Today's prayers and the prayer cycle, worked out from "my neighborhood":
-/// the Settings number of households within the Settings range around the
-/// saved home ([HouseholdStore.homeHouseholds]).
+/// Today's prayers and the prayer round ("cycle" in data), worked out from
+/// "my neighborhood": the Settings number of households within the Settings
+/// range around the saved home ([HouseholdStore.homeHouseholds]).
+///
+/// A day runs from midnight to midnight on the phone. Each day lists the
+/// nearest households not yet prayed for in this round, up to the daily goal.
+/// When every neighbor has been prayed for, a new round starts on its own at
+/// the next midnight ([needsNewRound]).
 class PrayerPlan {
   /// Today's households: those already prayed for today, then the nearest
-  /// not yet prayed for in this cycle, up to the daily target.
+  /// not yet prayed for in this round, up to the daily goal.
   final List<HouseholdModel> today;
+
+  /// Households prayed for today, extras included.
   final int prayedToday;
+
+  /// The daily goal from Settings.
   final int dailyTarget;
 
-  /// Households in the neighborhood prayed for in this cycle / all of them.
+  /// Today's goal: the daily goal, or fewer when fewer neighbors are left in
+  /// this round. Extra prayers never raise it.
+  final int todayGoal;
+
+  /// Households in the neighborhood prayed for in this round / all of them.
   final int cyclePrayed;
   final int cycleTotal;
 
@@ -24,6 +37,7 @@ class PrayerPlan {
     required this.today,
     required this.prayedToday,
     required this.dailyTarget,
+    required this.todayGoal,
     required this.cyclePrayed,
     required this.cycleTotal,
   });
@@ -32,19 +46,43 @@ class PrayerPlan {
     today: [],
     prayedToday: 0,
     dailyTarget: 0,
+    todayGoal: 0,
     cyclePrayed: 0,
     cycleTotal: 0,
   );
 
   int get cycleRemaining => cycleTotal - cyclePrayed;
 
-  /// Every household in the neighborhood has been prayed for this cycle.
+  /// Prayed for today, counted toward today's goal (at most the goal).
+  int get countedToday => math.min(prayedToday, todayGoal);
+
+  /// Prayers today beyond today's goal.
+  int get extraToday => math.max(0, prayedToday - todayGoal);
+
+  /// Households still to pray for to reach today's goal.
+  int get leftToday => todayGoal - countedToday;
+
+  /// Every household in the neighborhood has been prayed for this round.
   bool get isCycleComplete => cycleTotal > 0 && cyclePrayed >= cycleTotal;
 
-  /// Today's target reached (or nothing left to pray for in this cycle).
-  bool get isTodayDone => today.isNotEmpty && today.every((h) => h.isPrayed);
+  /// Today's goal is reached.
+  bool get isTodayDone => todayGoal > 0 && prayedToday >= todayGoal;
 
-  /// Days left in the cycle at the daily target (today included).
+  /// Households on tomorrow's list, if today's goal is reached.
+  int get tomorrowCount => math.min(dailyTarget, cycleRemaining);
+
+  /// Tomorrow's list holds the last neighbors of this round.
+  bool get tomorrowIsLast =>
+      cycleRemaining > 0 && cycleRemaining <= dailyTarget;
+
+  /// The daily goal is more than the whole neighborhood (Settings "Households
+  /// to show"), so the goal can never be met as set.
+  bool get goalAboveNeighborhood => cycleTotal > 0 && dailyTarget > cycleTotal;
+
+  /// The round was finished on an earlier day: time for a new round.
+  bool get needsNewRound => isCycleComplete && prayedToday == 0;
+
+  /// Days left in the round at the daily goal (today included).
   int get daysLeft =>
       dailyTarget <= 0 ? 0 : (cycleRemaining / dailyTarget).ceil();
 }
@@ -81,6 +119,10 @@ class PrayerListService {
         if (!h.isPrayed) h,
     ];
     final slots = math.max(0, dailyTarget - prayedToday.length);
+    final todayGoal = math.min(
+      math.max(0, dailyTarget),
+      prayedToday.length + notYet.length,
+    );
     final today = [...prayedToday, ...notYet.take(slots)]
       ..sort((a, b) => a.number.compareTo(b.number));
 
@@ -88,13 +130,15 @@ class PrayerListService {
       today: today,
       prayedToday: prayedToday.length,
       dailyTarget: dailyTarget,
+      todayGoal: todayGoal,
       cyclePrayed: neighborhood.where((h) => h.isPrayed).length,
       cycleTotal: neighborhood.length,
     );
   }
 
-  /// Starts praying through the neighborhood again. Earlier prayers stay in
-  /// the lifetime totals.
+  /// Starts a new round: every neighbor can be prayed for again. Earlier
+  /// prayers stay in the lifetime totals; visits, invitations, follow-ups and
+  /// notes are not touched.
   Future<void> startNewCycle(String uid) {
     return _users.updateFields(uid, {
       // Client time: the new cycle applies immediately, even offline.

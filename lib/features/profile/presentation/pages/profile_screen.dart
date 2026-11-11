@@ -250,6 +250,20 @@ class ProfileScreen extends GetView<ProfileController> {
                         ),
                         const Divider(height: 1, color: AppColors.border),
 
+                        // Legal
+                        _buildMenuItem(
+                          icon: Icons.privacy_tip_outlined,
+                          title: 'Privacy Policy',
+                          onTap: () => Get.toNamed(AppRoutes.privacy),
+                        ),
+                        const Divider(height: 1, color: AppColors.border),
+                        _buildMenuItem(
+                          icon: Icons.description_outlined,
+                          title: 'Terms of Use',
+                          onTap: () => Get.toNamed(AppRoutes.terms),
+                        ),
+                        const Divider(height: 1, color: AppColors.border),
+
                         // 4. Contact Support
                         _buildMenuItem(
                           icon: Icons.headset_mic_outlined,
@@ -278,13 +292,19 @@ class ProfileScreen extends GetView<ProfileController> {
                           title: 'Delete account',
                           titleColor: AppColors.danger,
                           iconColor: AppColors.danger,
-                          onTap: () => ProfileDeleteAccountDialog.show(
-                            context,
-                            requiresPassword: controller.accountUsesPassword,
-                            confirmWith: controller.deletionConfirmationLabel,
-                            onDelete: (password) =>
-                                controller.deleteAccount(password: password),
-                          ),
+                          onTap: () async {
+                            final deleted =
+                                await ProfileDeleteAccountDialog.show(
+                                  context,
+                                  requiresPassword:
+                                      controller.accountUsesPassword,
+                                  confirmWith:
+                                      controller.deletionConfirmationLabel,
+                                  onDelete: (password) => controller
+                                      .deleteAccount(password: password),
+                                );
+                            if (deleted) controller.finishAccountDeletion();
+                          },
                         ),
                       ],
                     ),

@@ -128,6 +128,19 @@ service cloud.firestore {
           && data().updatedAt == request.time;
       }
 
+      // Devices that receive push notifications: one document per FCM
+      // token (the document id), so a device is never stored twice. Only
+      // the owner reads or writes them; a server (Admin SDK) sends.
+      match /devices/{token} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && token.size() <= 4096
+          && data().keys().hasOnly(['token', 'platform', 'updatedAt'])
+          && data().token == token
+          && data().platform in ['ios', 'android']
+          && data().updatedAt == request.time;
+      }
+
       // In-app notifications. Clients can only mark them read or delete.
       match /notifications/{notificationId} {
         allow read, delete: if isOwner(uid);

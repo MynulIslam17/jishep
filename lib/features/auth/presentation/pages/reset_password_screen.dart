@@ -84,6 +84,7 @@ class ResetPasswordScreen extends GetView<ResetPasswordController> {
       child: Scaffold(
         backgroundColor: AppColors.surface,
         body: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             children: [
               // Header with Back Button

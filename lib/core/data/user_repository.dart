@@ -70,10 +70,17 @@ class UserRepository {
 
   /// Deletes the profile and every per-user subcollection document.
   Future<void> deleteUserData(String uid) async {
-    for (final path in [
-      FirestorePaths.userHouseholdStatus(uid),
-      FirestorePaths.userNotifications(uid),
-    ]) {
+    await _deleteCollection(FirestorePaths.userHouseholdStatus(uid));
+    await _deleteCollection(FirestorePaths.userNotifications(uid));
+    // Push-token documents are optional clean-up: rules deployed before
+    // `devices` existed deny access, which must not block deletion.
+    await _deleteCollection(FirestorePaths.userDevices(uid), optional: true);
+    await _deleteSupportMessages(uid);
+    await _doc(uid).delete();
+  }
+
+  Future<void> _deleteCollection(String path, {bool optional = false}) async {
+    try {
       while (true) {
         final page = await _db.collection(path).limit(400).get();
         if (page.docs.isEmpty) break;
@@ -83,9 +90,9 @@ class UserRepository {
         }
         await batch.commit();
       }
+    } on FirebaseException catch (e) {
+      if (!optional || e.code != 'permission-denied') rethrow;
     }
-    await _deleteSupportMessages(uid);
-    await _doc(uid).delete();
   }
 
   /// The user's own Contact Support messages.

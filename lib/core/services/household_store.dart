@@ -166,6 +166,9 @@ class HouseholdStore extends GetxService {
   Set<String> _homeIds = const {};
   ({double latitude, double longitude, double rangeKm})? _homeKey;
 
+  /// The "outside your neighborhood" note was shown this session.
+  bool _toldOutsideNeighborhood = false;
+
   /// Incremented per load so a slow, outdated query cannot overwrite a newer one.
   int _loadGeneration = 0;
   int _homeGeneration = 0;
@@ -363,6 +366,7 @@ class HouseholdStore extends GetxService {
     _savedRadius = 0;
     _rangeKm = 0;
     _radiusFilter = null;
+    _toldOutsideNeighborhood = false;
     activeRadius.value = 0;
     defaultHomes.value = 0;
     isRadiusFiltered.value = false;
@@ -611,6 +615,21 @@ class HouseholdStore extends GetxService {
     final becameFollowUp =
         updated.hasFollowUp && !(current?.hasFollowUp ?? false);
 
+    // A prayer outside "my neighborhood" (a searched place, or beyond the
+    // Settings count) is saved but is not part of the prayer round. Say so
+    // once per session, so the Prayer List never seems to lose it.
+    if (becamePrayed &&
+        !_toldOutsideNeighborhood &&
+        homeHouseholds.isNotEmpty &&
+        !homeHouseholds.any((h) => h.id == updated.id)) {
+      _toldOutsideNeighborhood = true;
+      SnackbarService.showInfo(
+        'Prayer saved',
+        'This home is outside your neighborhood, so it is not on your '
+            'Prayer List and does not count toward today\'s goal.',
+      );
+    }
+
     // Optimistic update of every list; the snapshot listener confirms it.
     final next = <String, dynamic>{
       ...?previous,
@@ -632,8 +651,12 @@ class HouseholdStore extends GetxService {
         household: updated,
         wasPrayed: wasPrayedInCycle,
       );
-      if (firstPrayer) _notifyMilestoneIfReached(prayedCount.value);
-      if (becameFollowUp) _notifyFollowUpScheduled(updated);
+      // A notification failing (even synchronously) must never undo a
+      // prayer that is already being written.
+      try {
+        if (firstPrayer) _notifyMilestoneIfReached(prayedCount.value);
+        if (becameFollowUp) _notifyFollowUpScheduled(updated);
+      } catch (_) {}
       await write;
     } catch (error) {
       _countChange(next, previous);

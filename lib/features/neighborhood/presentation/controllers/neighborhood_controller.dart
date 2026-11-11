@@ -33,11 +33,36 @@ class NeighborhoodController extends GetxController {
   static const int pageSize = 10;
   final visibleCount = pageSize.obs;
 
-  List<HouseholdModel> get pagedHouseholds =>
-      areaHouseholds.take(visibleCount.value).toList();
+  /// False: the list shows the neighborhood (the same homes as Home, the
+  /// map and the Prayer List). True: it pages through everything in range.
+  final showAllInRange = false.obs;
+
+  /// True when Home shows a searched place rather than the saved home.
+  final isTemporary = false.obs;
+
+  List<HouseholdModel> get pagedHouseholds => showAllInRange.value
+      ? areaHouseholds.take(visibleCount.value).toList()
+      : households.toList();
 
   bool get hasMore =>
-      visibleCount.value < areaHouseholds.length || !areaComplete.value;
+      showAllInRange.value &&
+      (visibleCount.value < areaHouseholds.length || !areaComplete.value);
+
+  /// More households are in range than in the neighborhood.
+  bool get hasMoreInRange =>
+      areaHouseholds.length > households.length || !areaComplete.value;
+
+  /// Pages through every household in range, starting after the
+  /// neighborhood (or back to only the neighborhood).
+  void setShowAllInRange(bool value) {
+    if (showAllInRange.value == value) return;
+    showAllInRange.value = value;
+    _pageWaiting = false;
+    visibleCount.value = value
+        ? ((households.length ~/ pageSize) + 1) * pageSize
+        : pageSize;
+    if (value) _prefetch();
+  }
 
   /// Shows the next page. Returns false when everything is shown.
   bool loadMore() {
@@ -74,6 +99,7 @@ class NeighborhoodController extends GetxController {
   void _resetPaging() {
     _pageWaiting = false;
     visibleCount.value = pageSize;
+    showAllInRange.value = false;
   }
 
   /// Reads two pages past the visible ones, so scrolling rarely waits —
@@ -134,6 +160,7 @@ class NeighborhoodController extends GetxController {
   void _applyCenter(SearchCenter? center) {
     centerLatitude.value = center?.latitude;
     centerLongitude.value = center?.longitude;
+    isTemporary.value = center?.isTemporary ?? false;
   }
 
   /// "Nearest 10 homes · within 1.2 km".

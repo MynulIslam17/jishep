@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Gps Cielo</string>
+	<string>GPS Cielo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -43,15 +43,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Take a profile photo.</string>
+	<string>Take a photo to use as your profile picture.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Your location is used to find households near you to pray for.</string>
+	<string>GPS Para El Cielo uses your location only while you use the app, to set your home and show the households near you to pray for.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Your location is used to find households near you to pray for.</string>
+	<string>GPS Para El Cielo uses your location only while you use the app, to set your home and show the households near you to pray for.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is used to find households near you to pray for.</string>
+	<string>GPS Para El Cielo uses your location while you use the app to set your home and show the households near you to pray for.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose a profile photo from your library.</string>
+	<string>Choose a photo from your library to use as your profile picture.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -75,6 +75,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -82,8 +86,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>

@@ -211,6 +211,29 @@ test('notifications: well-formed create; clients only mark read', async () => {
   await assertSucceeds(updateDoc(doc(alice(), 'users/alice/notifications/n1'), { isRead: true }));
 });
 
+test('devices: owner registers and removes own push tokens only', async () => {
+  const token = 'fcm-token:APA91b_abc-123';
+  const device = (over = {}) => ({
+    token, platform: 'ios', updatedAt: serverTimestamp(), ...over,
+  });
+  await assertSucceeds(setDoc(doc(alice(), `users/alice/devices/${token}`), device()));
+  // Re-registering the same token overwrites the one document.
+  await assertSucceeds(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ platform: 'ios' })));
+  await assertSucceeds(getDocs(collection(alice(), 'users/alice/devices')));
+  await assertSucceeds(deleteDoc(doc(alice(), `users/alice/devices/${token}`)));
+
+  // The document id must be the token; known platforms and fields only.
+  await assertFails(setDoc(doc(alice(), 'users/alice/devices/other'), device()));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ platform: 'web' })));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ extra: 1 })));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ updatedAt: new Date(0) })));
+
+  // Nobody else can read or add devices for Alice.
+  await assertFails(getDocs(collection(bob(), 'users/alice/devices')));
+  await assertFails(setDoc(doc(bob(), `users/alice/devices/${token}`), device()));
+  await assertFails(getDocs(collection(guest(), 'users/alice/devices')));
+});
+
 test('unknown collections are denied by default', async () => {
   await assertFails(getDoc(doc(alice(), 'admin/config')));
   await assertFails(setDoc(doc(alice(), 'anything/x'), { a: 1 }));

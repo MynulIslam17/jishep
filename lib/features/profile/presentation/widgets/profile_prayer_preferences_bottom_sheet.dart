@@ -67,13 +67,23 @@ class ProfilePrayerPreferencesBottomSheet extends StatefulWidget {
 
 class _ProfilePrayerPreferencesBottomSheetState
     extends State<ProfilePrayerPreferencesBottomSheet> {
-  static const _targets = [3, 5, 10, 15];
+  static const _targets = SearchRange.goalOptions;
 
   // Kept in State so a rebuild never resets what the user picked.
-  late final _selectedTargetRx = widget.initialTarget.obs;
   late final _selectedRadiusRx = SearchRange.normalize(
     widget.initialRadius,
   ).obs;
+
+  /// A goal saved before the limit existed (e.g. 15 a day among 10 homes)
+  /// opens already lowered, with the note saying why.
+  late final _selectedTargetRx = SearchRange.clampGoal(
+    widget.initialTarget,
+    _selectedRadiusRx.value,
+  ).obs;
+
+  /// True after the goal was lowered to fit a smaller neighborhood.
+  late final _goalLoweredRx =
+      (_selectedTargetRx.value != widget.initialTarget).obs;
   late final _selectedKmRx = SearchRange.normalizeKm(widget.initialRangeKm).obs;
 
   void _close() => Navigator.of(context).maybePop();
@@ -109,6 +119,7 @@ class _ProfilePrayerPreferencesBottomSheetState
           const Divider(color: AppColors.border, height: 1),
           Expanded(
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               controller: widget.scrollController,
               padding: EdgeInsets.fromLTRB(
                 20.w,
@@ -134,8 +145,16 @@ class _ProfilePrayerPreferencesBottomSheetState
                     () => Column(
                       children: targets.map((target) {
                         final isSelected = selectedTargetRx.value == target;
+                        // More than the neighborhood holds can never be met.
+                        final fits = target <= selectedRadiusRx.value;
                         return GestureDetector(
-                          onTap: () => selectedTargetRx.value = target,
+                          key: ValueKey('goal-$target'),
+                          onTap: fits
+                              ? () {
+                                  selectedTargetRx.value = target;
+                                  _goalLoweredRx.value = false;
+                                }
+                              : null,
                           child: Container(
                             margin: EdgeInsets.only(bottom: 10.h),
                             padding: EdgeInsets.symmetric(
@@ -157,14 +176,30 @@ class _ProfilePrayerPreferencesBottomSheetState
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  '$target households / day',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 14.sp,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      text: '$target households / day',
+                                      children: [
+                                        if (!fits)
+                                          TextSpan(
+                                            text: '  more than your homes',
+                                            style: TextStyle(
+                                              fontSize: 11.sp,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    style: TextStyle(
+                                      color: fits
+                                          ? AppColors.textPrimary
+                                          : AppColors.textSecondary,
+                                      fontSize: 14.sp,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                                 if (isSelected)
@@ -220,15 +255,53 @@ class _ProfilePrayerPreferencesBottomSheetState
                   // Number of households (default for the Home filter)
                   _OptionSlider(
                     sliderKey: const ValueKey('default-radius-slider'),
-                    title: 'Households to show',
+                    title: 'Homes in my neighborhood',
                     description:
-                        'How many of the nearest households within the range to '
-                        'show. You can change this on Home anytime.',
+                        'Your neighborhood is this many homes nearest your '
+                        'home, within the search range. Home, Neighborhood '
+                        'and your prayer rounds all use it.',
                     valueText: () => 'Nearest ${selectedRadiusRx.value} homes',
                     labels: [for (final option in options) '$option'],
                     index: () => options.indexOf(selectedRadiusRx.value),
-                    onIndex: (i) => selectedRadiusRx.value = options[i],
+                    onIndex: (i) {
+                      final homes = options[i];
+                      selectedRadiusRx.value = homes;
+                      // Keep the daily goal within the neighborhood.
+                      final goal = SearchRange.clampGoal(
+                        selectedTargetRx.value,
+                        homes,
+                      );
+                      if (goal != selectedTargetRx.value) {
+                        selectedTargetRx.value = goal;
+                        _goalLoweredRx.value = true;
+                      }
+                    },
                   ),
+
+                  // Says why the daily goal just changed.
+                  Obx(() {
+                    final goal = selectedTargetRx.value;
+                    final homes = selectedRadiusRx.value;
+                    if (!_goalLoweredRx.value) return const SizedBox.shrink();
+                    return Container(
+                      key: const ValueKey('goal-above-homes'),
+                      margin: EdgeInsets.only(top: 12.h),
+                      padding: EdgeInsets.all(12.r),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      child: Text(
+                        'Your daily goal is now $goal a day, so it fits the '
+                        '$homes homes in your neighborhood.',
+                        style: AppTypography.body(
+                          color: const Color(0xFF92400E),
+                          fontSize: 12.sp,
+                          height: 1.35,
+                        ),
+                      ),
+                    );
+                  }),
 
                   SizedBox(height: 20.h),
 

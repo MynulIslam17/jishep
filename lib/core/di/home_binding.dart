@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
@@ -25,6 +26,7 @@ class HomeBinding extends Bindings {
           Get.find<HomeService>(),
           Get.find<AuthController>(),
           Get.find<HomeAddressService>(),
+          Get.find<UserRepository>(),
         ),
       );
     }

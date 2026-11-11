@@ -110,11 +110,10 @@ class PrayerListScreen extends GetView<PrayerListController> {
       if (plan.isCycleComplete) _buildCycleComplete(plan),
       if (!plan.isCycleComplete && plan.isTodayDone)
         AppNoticeCard(
+          key: const ValueKey('today-done'),
           icon: Icons.check_circle_rounded,
-          title: "Today's prayers are done",
-          message:
-              'Thank you! Tomorrow brings the next '
-              '${plan.dailyTarget} neighbors.',
+          title: "Today's goal reached",
+          message: _tomorrowMessage(plan),
         ),
     ];
 
@@ -247,21 +246,36 @@ class PrayerListScreen extends GetView<PrayerListController> {
     );
   }
 
+  /// What tomorrow brings, from the neighbors actually left in this round.
+  static String _tomorrowMessage(PrayerPlan plan) {
+    final n = plan.tomorrowCount;
+    final neighbors = n == 1 ? 'neighbor' : 'neighbors';
+    if (plan.tomorrowIsLast) {
+      return n == 1
+          ? 'Thank you! Tomorrow: your last neighbor in this round.'
+          : 'Thank you! Tomorrow: your last $n $neighbors in this round.';
+    }
+    return 'Thank you! Tomorrow brings the next $n $neighbors '
+        'at midnight.';
+  }
+
   Widget _buildCycleComplete(PrayerPlan plan) {
     return AppNoticeCard(
+      key: const ValueKey('round-complete'),
       icon: Icons.celebration_rounded,
       highlight: true,
-      title: 'Prayer cycle complete',
+      title: 'Round complete!',
       message:
-          'You have prayed for all ${plan.cycleTotal} households in '
-          'your neighborhood. Start a new cycle to pray for them again.',
+          'You prayed for all ${plan.cycleTotal} neighbors. A new round '
+          'starts on its own at midnight, with every neighbor on your list '
+          'again. Your prayer history, visits and invitations are kept.',
       actions: [
         Obx(
           () => SizedBox(
             width: 180.w,
             child: AppPrimaryButton(
               key: const ValueKey('start-new-cycle'),
-              label: 'Start new cycle',
+              label: 'Start now',
               height: 42,
               isLoading: controller.isStartingCycle.value,
               onPressed: controller.startNewCycle,
@@ -281,8 +295,9 @@ class _TodayStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = plan.today.length;
-    final done = plan.today.where((h) => h.isPrayed).length;
+    final total = plan.todayGoal;
+    final done = plan.countedToday;
+    final extra = plan.extraToday;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w),
       child: Row(
@@ -294,7 +309,11 @@ class _TodayStrip extends StatelessWidget {
           ),
           SizedBox(width: 8.w),
           Text(
-            total == 0 ? 'Nothing to pray for yet' : '$done of $total today',
+            total == 0
+                ? (plan.isCycleComplete
+                      ? 'Round complete'
+                      : 'Nothing to pray for yet')
+                : '$done of $total today${extra > 0 ? ' (+$extra)' : ''}',
             key: const ValueKey('today-strip'),
             style: AppTypography.label(
               color: AppColors.textPrimary,
@@ -307,7 +326,9 @@ class _TodayStrip extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4.r),
               child: LinearProgressIndicator(
-                value: total == 0 ? 0 : done / total,
+                value: total == 0
+                    ? (plan.isCycleComplete ? 1 : 0)
+                    : done / total,
                 minHeight: 6.h,
                 backgroundColor: const Color(0xFFE2E8F0),
                 valueColor: const AlwaysStoppedAnimation(Color(0xFF2E7D32)),

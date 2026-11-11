@@ -23,7 +23,7 @@ abstract final class AppStrings {
   static const String phoneHint = '+1 (201) 555-0000';
   static const String passwordMinLength = 'Minimum 8 characters';
   static const String agreeToTerms =
-      'I agree to the Terms of use and Privacy policy';
+      'I agree to the Terms of Use and Privacy Policy';
   static const String alreadyHaveAccount = 'Already have an account? ';
 
   // Navigation

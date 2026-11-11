@@ -81,7 +81,9 @@ void main() {
       find.byKey(const ValueKey('view-mode')).hitTestable(),
       findsOneWidget,
     );
-    expect(c.pagedHouseholds.length, greaterThan(10)); // paged on scroll
+    // The list is the neighborhood: the same 10 homes as Home.
+    expect(c.pagedHouseholds.length, 10);
+    expect(find.text('10 homes in your neighborhood'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -103,6 +105,16 @@ void main() {
     final c = await pump(tester);
     await tester.tap(find.text('List'));
     await tester.pumpAndSettle();
+    expect(c.hasMore, isFalse); // only the neighborhood until asked
+    await tester.fling(
+      find.byType(CustomScrollView),
+      const Offset(0, -3000),
+      4000,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('browse-all')));
+    await tester.pumpAndSettle();
+    expect(c.showAllInRange.value, isTrue);
     for (var i = 0; i < 30 && c.hasMore; i++) {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
       await tester.pumpAndSettle();

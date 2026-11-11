@@ -67,15 +67,31 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
               final total = controller.areaHouseholds.length;
               final shown = controller.pagedHouseholds.length;
               // Until the whole range is read, the count is a lower bound.
-              final count = controller.areaComplete.value
+              final inRange = controller.areaComplete.value
                   ? '$total'
                   : '$total+';
+              final String title;
+              final String detail;
+              if (controller.showAllInRange.value) {
+                title =
+                    '$inRange ${total == 1 ? 'household' : 'households'} '
+                    'in range';
+                detail = 'Nearest first \u2022 showing $shown';
+              } else {
+                final n = controller.households.length;
+                title = controller.isTemporary.value
+                    ? 'Nearest $n ${n == 1 ? 'home' : 'homes'} here'
+                    : '$n ${n == 1 ? 'home' : 'homes'} in your neighborhood';
+                detail = total == 0
+                    ? 'Nearest first'
+                    : 'Nearest first \u2022 $inRange in range';
+              }
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$count ${total == 1 ? 'household' : 'households'} in range',
+                    title,
                     key: const ValueKey('area-count'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -87,9 +103,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
                   ),
                   SizedBox(height: 2.h),
                   Text(
-                    total == 0
-                        ? 'Nearest first'
-                        : 'Nearest first \u2022 showing $shown',
+                    detail,
                     key: const ValueKey('paging-status'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -155,13 +169,21 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
     }
     final hasMore = controller.hasMore;
     final loadingMore = controller.isLoadingMore.value;
+    final showAll = controller.showAllInRange.value;
+    final neighborhoodSize = controller.households.length;
+    // In "all in range", say first that only the neighborhood counts.
+    final lead = showAll ? 1 : 0;
     return SliverList.separated(
       key: const ValueKey('neighborhood-list'),
-      itemCount: items.length + 1,
+      itemCount: lead + items.length + 1,
       separatorBuilder: (context, _) => SizedBox(height: 10.h),
-      itemBuilder: (context, index) {
+      itemBuilder: (context, i) {
+        if (showAll && i == 0) return _buildAllInRangeNote(neighborhoodSize);
+        final index = i - lead;
         if (index == items.length) {
-          return _buildListFooter(hasMore, items.length, loadingMore);
+          return showAll
+              ? _buildListFooter(hasMore, items.length, loadingMore)
+              : _buildNeighborhoodFooter(items.length);
         }
         final household = items[index];
         return NeighborhoodHouseholdCard(
@@ -171,6 +193,84 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
           onUpdated: controller.updateHousehold,
         );
       },
+    );
+  }
+
+  /// Under the neighborhood: what it is, and the way to see beyond it.
+  Widget _buildNeighborhoodFooter(int shown) {
+    final inRange = controller.areaComplete.value
+        ? '${controller.areaHouseholds.length}'
+        : '${controller.areaHouseholds.length}+';
+    return Padding(
+      key: const ValueKey('list-footer'),
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      child: Column(
+        children: [
+          Text(
+            controller.isTemporary.value
+                ? 'The nearest $shown homes to the place you searched.'
+                : 'These $shown homes are your neighborhood: the same homes '
+                      'as Home and your Prayer List. Change the number on '
+                      'Home or in Profile \u203a Prayer preferences.',
+            textAlign: TextAlign.center,
+            style: AppTypography.body(
+              color: AppColors.textSecondary,
+              fontSize: 12.sp,
+            ),
+          ),
+          if (controller.hasMoreInRange)
+            TextButton(
+              key: const ValueKey('browse-all'),
+              onPressed: () => controller.setShowAllInRange(true),
+              child: Text(
+                'Browse all $inRange in range',
+                style: AppTypography.label(
+                  color: AppColors.primaryNavy,
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllInRangeNote(int neighborhoodSize) {
+    return Container(
+      key: const ValueKey('all-in-range-note'),
+      padding: EdgeInsets.all(12.r),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Only the nearest $neighborhoodSize are your neighborhood. '
+            'Prayers for homes further out are saved, but do not count '
+            'toward your daily goal.',
+            style: AppTypography.body(
+              color: AppColors.textSecondary,
+              fontSize: 12.sp,
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('back-to-neighborhood'),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            onPressed: () => controller.setShowAllInRange(false),
+            child: Text(
+              'Show only my neighborhood',
+              style: AppTypography.label(
+                color: AppColors.primaryNavy,
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

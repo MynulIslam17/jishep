@@ -12,6 +12,18 @@ abstract final class SearchRange {
   static const List<int> options = [5, 10, 15, 20, 25];
   static const int defaultHomes = 10;
 
+  /// Daily prayer goals offered (Settings > Prayer preferences).
+  static const List<int> goalOptions = [3, 5, 10, 15];
+
+  /// A daily goal can never be more than the homes in the neighborhood
+  /// (you cannot pray for 15 different neighbors a day among 10). Returns
+  /// [goal], or the largest goal option that fits in [homes].
+  static int clampGoal(int goal, int homes) {
+    if (goal <= homes) return goal;
+    final fitting = goalOptions.where((g) => g <= homes);
+    return fitting.isEmpty ? goalOptions.first : fitting.last;
+  }
+
   /// The largest number of households the Home filter can show.
   static int get maxHomes => options.last;
 

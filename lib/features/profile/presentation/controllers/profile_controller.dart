@@ -290,14 +290,18 @@ class ProfileController extends GetxController {
   String? get deletionConfirmationLabel =>
       _authController.deletionConfirmationLabel;
 
-  /// Returns true when the account was deleted.
+  /// Returns true when the account was deleted. Shows a message when the
+  /// user cancelled the confirmation or the deletion failed.
   Future<bool> deleteAccount({String? password}) async {
     try {
       final deleted = await _authController.deleteAccount(password: password);
-      if (deleted) {
-        SnackbarService.showSuccess(
-          'Account Deleted',
-          'Your account and data have been permanently deleted.',
+      if (!deleted) {
+        final via = deletionConfirmationLabel;
+        SnackbarService.showInfo(
+          'Account Not Deleted',
+          via == null
+              ? 'Deletion was cancelled.'
+              : 'Confirm with your $via account to delete it.',
         );
       }
       return deleted;
@@ -309,6 +313,9 @@ class ProfileController extends GetxController {
       return false;
     }
   }
+
+  /// Call after the delete dialog has closed.
+  void finishAccountDeletion() => _authController.finishAccountDeletion();
 
   @override
   void onClose() {

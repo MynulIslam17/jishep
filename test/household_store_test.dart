@@ -12,6 +12,7 @@ import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_ser
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/home/domain/services/home_service.dart';
+import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 
 import 'support/fake_household_repository.dart';
 
@@ -487,7 +488,23 @@ void main() {
   group('Neighborhood paging', () {
     tearDown(Get.reset);
 
-    test('lists every household in range, 10 at a time', () async {
+    test('the list is the neighborhood: the same homes as Home', () async {
+      repository.available = 40;
+      await store.bindUser(user(radiusHomes: 20, rangeKm: 5));
+      final controller = Get.put(
+        NeighborhoodController(NeighborhoodService(store)),
+      );
+      expect(
+        controller.pagedHouseholds.map((h) => h.id),
+        store.households.map((h) => h.id),
+      );
+      expect(controller.pagedHouseholds.length, 20);
+      expect(controller.hasMore, isFalse); // no paging inside it
+      expect(controller.hasMoreInRange, isTrue); // "Browse all in range"
+      expect(controller.loadMore(), isFalse);
+    });
+
+    test('browsing all in range lists them 10 at a time', () async {
       repository.available = 40;
       await store.bindUser(user(radiusHomes: 20, rangeKm: 5));
       final controller = Get.put(
@@ -498,7 +515,9 @@ void main() {
       // Only the nearest are read up front; the rest as the list scrolls.
       expect(controller.areaHouseholds.length, lessThan(40));
       expect(controller.areaComplete.value, isFalse);
-      expect(controller.pagedHouseholds.length, 10);
+      controller.setShowAllInRange(true);
+      // Starts with the neighborhood plus the next page.
+      expect(controller.visibleCount.value, 30);
       expect(controller.hasMore, isTrue);
 
       // Scroll to the end until nothing more comes, letting reads finish.
@@ -525,6 +544,8 @@ void main() {
         final controller = Get.put(
           NeighborhoodController(NeighborhoodService(store)),
         );
+        // All in range, before any further read has started.
+        controller.showAllInRange.value = true;
         // Show everything already read, then ask for one more page.
         while (controller.visibleCount.value <
             controller.areaHouseholds.length) {
@@ -548,6 +569,7 @@ void main() {
         final controller = Get.put(
           NeighborhoodController(NeighborhoodService(store)),
         );
+        controller.setShowAllInRange(true);
         for (var i = 0; i < 10 && controller.hasMore; i++) {
           controller.loadMore();
           await pumpEventQueue();
@@ -559,16 +581,17 @@ void main() {
       },
     );
 
-    test('a new search area starts again at page one', () async {
+    test('a new search area goes back to the nearest homes', () async {
       repository.available = 40;
       await store.bindUser(user());
       final controller = Get.put(
         NeighborhoodController(NeighborhoodService(store)),
       );
-      controller.loadMore();
+      controller.setShowAllInRange(true);
       expect(controller.pagedHouseholds.length, 20);
 
       await store.searchAround(uttara);
+      expect(controller.showAllInRange.value, isFalse);
       expect(controller.pagedHouseholds.length, 10);
     });
   });
@@ -602,5 +625,121 @@ void main() {
         expect(store.visitedCount.value, 100);
       },
     );
+  });
+
+  // The day-by-day story of how new neighbors arrive, through the real store
+  // (distance order, saving prayers, rounds). Prayers are saved "today";
+  // later days are looked at by passing a later `now` to the plan.
+  group('new neighbors, day by day', () {
+    final today = DateTime.now();
+    DateTime day(int n) => today.add(Duration(days: n - 1));
+
+    PrayerPlan planOn(int dayNumber, {int goal = 3}) =>
+        PrayerListService.buildPlan(
+          store.homeHouseholds,
+          goal,
+          now: day(dayNumber),
+        );
+
+    List<String> ids(PrayerPlan plan) => [for (final h in plan.today) h.id];
+
+    Future<void> prayFor(Iterable<String> householdIds) async {
+      for (final id in householdIds) {
+        await store.togglePray(id);
+      }
+    }
+
+    test('nearest first, the next ones each day, then a new round', () async {
+      repository.available = 40;
+      await store.bindUser(user(radiusHomes: 10));
+      // My neighborhood: the 10 nearest homes, nearest first.
+      expect(store.homeHouseholds.map((h) => h.id), [
+        for (var i = 0; i < 10; i++) 'demo_$i',
+      ]);
+
+      // Day 1: the 3 nearest.
+      final day1 = planOn(1);
+      expect(ids(day1), ['demo_0', 'demo_1', 'demo_2']);
+      expect('${day1.countedToday}/${day1.todayGoal}', '0/3');
+      await prayFor(ids(day1));
+      expect('${planOn(1).countedToday}/${planOn(1).todayGoal}', '3/3');
+      expect(planOn(1).isTodayDone, isTrue);
+      // Done for today: no new neighbors appear until midnight.
+      expect(ids(planOn(1)), ['demo_0', 'demo_1', 'demo_2']);
+
+      // Two extras the same day (from Home or Neighborhood): counted apart
+      // from the goal, and skipped on the next days.
+      await prayFor(['demo_3', 'demo_4']);
+      final day1Extra = planOn(1);
+      expect(
+        (day1Extra.countedToday, day1Extra.todayGoal, day1Extra.extraToday),
+        (3, 3, 2),
+      );
+      expect(day1Extra.tomorrowCount, 3);
+
+      // Day 2: the next 3; earlier ones do not come back.
+      final day2 = planOn(2);
+      expect(ids(day2), ['demo_5', 'demo_6', 'demo_7']);
+      expect('${day2.countedToday}/${day2.todayGoal}', '0/3');
+      await prayFor(ids(day2));
+
+      // Day 3 (or any later day, if days were skipped): the last 2.
+      final day3 = planOn(3);
+      expect(ids(day3), ['demo_8', 'demo_9']);
+      expect('${day3.countedToday}/${day3.todayGoal}', '0/2');
+      expect(ids(planOn(9)), ['demo_8', 'demo_9']);
+      await prayFor(ids(day3));
+
+      // The round is complete. On the day it was finished nothing restarts
+      // (prayers were saved "today" in this test, so that is day 1).
+      expect(planOn(1).isCycleComplete, isTrue);
+      expect(planOn(1).needsNewRound, isFalse);
+      // From the next day on, a new round is due.
+      expect(planOn(4).needsNewRound, isTrue);
+      // The new round starts (what the Prayer List does on its own).
+      await store.bindUser(
+        user(radiusHomes: 10).copyWith(prayerCycleStartedAt: DateTime.now()),
+      );
+      final round2 = planOn(4);
+      expect(round2.cyclePrayed, 0);
+      expect(ids(round2), ['demo_0', 'demo_1', 'demo_2']);
+      // Lifetime totals keep the first round.
+      expect(store.prayedCount.value, 10);
+    });
+
+    test('a bigger neighborhood adds the next homes to the round', () async {
+      repository.available = 40;
+      await store.bindUser(user(radiusHomes: 5));
+      await prayFor([for (var i = 0; i < 5; i++) 'demo_$i']);
+      expect(planOn(2).isCycleComplete, isTrue);
+
+      await store.bindUser(user(radiusHomes: 10));
+      final plan = planOn(2);
+      expect(plan.isCycleComplete, isFalse);
+      expect((plan.cyclePrayed, plan.cycleTotal), (5, 10));
+      expect(ids(plan), ['demo_5', 'demo_6', 'demo_7']);
+    });
+
+    test('a smaller neighborhood drops the farthest homes', () async {
+      repository.available = 40;
+      await store.bindUser(user(radiusHomes: 10));
+      await store.bindUser(user(radiusHomes: 5));
+      expect(store.homeHouseholds.map((h) => h.id), [
+        for (var i = 0; i < 5; i++) 'demo_$i',
+      ]);
+    });
+  });
+
+  test('a failing notification never undoes a saved prayer', () async {
+    // The fake notification repository throws on every call; the 10th
+    // prayer reaches a milestone and tries to notify.
+    repository.available = 20;
+    await store.bindUser(user(radiusHomes: 10));
+    for (var i = 0; i < 10; i++) {
+      await store.togglePray('demo_$i');
+    }
+    expect(store.homeHouseholds.every((h) => h.isPrayed), isTrue);
+    expect(store.prayedCount.value, 10);
+    expect(repository.savedStatuses.length, 10);
   });
 }

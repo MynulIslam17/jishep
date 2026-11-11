@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -27,6 +29,13 @@ class PrayerListController extends GetxController {
 
   final List<Worker> _workers = [];
 
+  /// Rebuilds the plan at midnight, when a new prayer day begins.
+  Timer? _midnightTimer;
+
+  /// The day an automatic new round was last tried, so a failed write
+  /// (e.g. no permission) is not retried on every rebuild.
+  DateTime? _autoRoundTriedOn;
+
   List<HouseholdModel> get todayHouseholds => plan.value.today;
 
   @override
@@ -39,8 +48,38 @@ class PrayerListController extends GetxController {
       ever(_service.neighborhood, (_) => _rebuild()),
       ever(_authController.currentUser, (_) => _rebuild()),
       ever(_service.rangeMeters, (_) => _rebuild()),
-      ever(_service.isLoading, (bool loading) => isLoading.value = loading),
+      ever(_service.isLoading, (bool loading) {
+        isLoading.value = loading;
+        if (!loading) _maybeStartNewRound();
+      }),
     ]);
+    _scheduleMidnight();
+  }
+
+  void _scheduleMidnight() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day + 1);
+    // A second late, so "today" is surely the new day.
+    _midnightTimer = Timer(
+      midnight.difference(now) + const Duration(seconds: 1),
+      () {
+        _rebuild();
+        _scheduleMidnight();
+      },
+    );
+  }
+
+  /// Starts the next round on its own the first day after a round was
+  /// finished. The day the round is finished stays a day of celebration.
+  void _maybeStartNewRound() {
+    if (!plan.value.needsNewRound) return;
+    if (_service.isLoading.value || isStartingCycle.value) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (_autoRoundTriedOn == today) return;
+    _autoRoundTriedOn = today;
+    _startRound(automatic: true);
   }
 
   void _rebuild() {
@@ -53,6 +92,7 @@ class PrayerListController extends GetxController {
       _service.neighborhood,
       user?.dailyPrayerTarget ?? 5,
     );
+    _maybeStartNewRound();
   }
 
   Future<void> loadTodayPrayers() => _service.refreshHouseholds();
@@ -65,22 +105,27 @@ class PrayerListController extends GetxController {
     _service.updateHousehold(updated);
   }
 
-  /// Begins praying through the whole neighborhood again.
-  Future<void> startNewCycle() async {
+  /// Starts the next round now instead of at midnight.
+  Future<void> startNewCycle() => _startRound(automatic: false);
+
+  Future<void> _startRound({required bool automatic}) async {
     final user = _authController.currentUser.value;
     if (user == null || isStartingCycle.value) return;
     isStartingCycle.value = true;
     try {
       await _service.startNewCycle(user.id);
       SnackbarService.showSuccess(
-        'New Prayer Cycle',
-        'Your neighborhood is ready to be prayed for again.',
+        'A new round has begun',
+        'Every neighbor is on your prayer list again.',
       );
     } catch (error) {
-      SnackbarService.showError(
-        'Could not start a new cycle',
-        FirebaseErrorMapper.message(error),
-      );
+      // An automatic round is tried again tomorrow or on the next app start.
+      if (!automatic) {
+        SnackbarService.showError(
+          'Could not start a new round',
+          FirebaseErrorMapper.message(error),
+        );
+      }
     } finally {
       isStartingCycle.value = false;
     }
@@ -88,6 +133,7 @@ class PrayerListController extends GetxController {
 
   @override
   void onClose() {
+    _midnightTimer?.cancel();
     for (final worker in _workers) {
       worker.dispose();
     }

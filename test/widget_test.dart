@@ -145,6 +145,54 @@ void main() {
       expect(plan.isTodayDone, isFalse);
     });
 
+    test('extra prayers are counted apart from today\'s goal', () {
+      final homes = [
+        for (var i = 1; i <= 10; i++)
+          HouseholdModel(
+            id: 'h$i',
+            number: i,
+            residentName: 'R',
+            address: 'A',
+            isPrayed: i <= 8,
+            prayedAt: i <= 8 ? now : null,
+          ),
+      ];
+      final plan = PrayerListService.buildPlan(homes, 5, now: now);
+      expect((plan.countedToday, plan.todayGoal, plan.extraToday), (5, 5, 3));
+      expect(plan.isTodayDone, isTrue);
+      // Tomorrow holds only the 2 neighbors left in the round.
+      expect((plan.tomorrowCount, plan.tomorrowIsLast), (2, true));
+      expect(plan.needsNewRound, isFalse);
+    });
+
+    test('a round finished on an earlier day needs a new round', () {
+      final yesterday = now.subtract(const Duration(days: 1));
+      HouseholdModel prayed(int i, DateTime at) => HouseholdModel(
+        id: 'h$i',
+        number: i,
+        residentName: 'R',
+        address: 'A',
+        isPrayed: true,
+        prayedAt: at,
+      );
+      final finishedYesterday = PrayerListService.buildPlan(
+        [for (var i = 1; i <= 4; i++) prayed(i, yesterday)],
+        5,
+        now: now,
+      );
+      expect(finishedYesterday.isCycleComplete, isTrue);
+      expect(finishedYesterday.needsNewRound, isTrue);
+
+      // The day the round is finished is not cut short.
+      final finishedToday = PrayerListService.buildPlan(
+        [for (var i = 1; i <= 3; i++) prayed(i, yesterday), prayed(4, now)],
+        5,
+        now: now,
+      );
+      expect(finishedToday.isCycleComplete, isTrue);
+      expect(finishedToday.needsNewRound, isFalse);
+    });
+
     test('no households means an empty plan, not a complete cycle', () {
       final plan = PrayerListService.buildPlan(const [], 5, now: now);
       expect(plan.cycleTotal, 0);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
@@ -18,8 +19,17 @@ class HomeController extends GetxController {
   final HomeService _homeService;
   final AuthController _authController;
   final HomeAddressService _homeAddress;
+  final UserRepository _users;
 
-  HomeController(this._homeService, this._authController, this._homeAddress);
+  HomeController(
+    this._homeService,
+    this._authController,
+    this._homeAddress,
+    this._users,
+  );
+
+  /// True while a new neighborhood size saves.
+  final isSavingHomes = false.obs;
 
   /// True while "Set as my home" saves.
   final isSavingHome = false.obs;
@@ -149,6 +159,56 @@ class HomeController extends GetxController {
 
   /// Back to the default range from Settings.
   Future<void> resetRadius() => _homeService.filterRadius(null);
+
+  /// What saving [homes] as the neighborhood size changes, for the
+  /// confirmation dialog; null when nothing would change.
+  NeighborhoodSizeChange? neighborhoodSizeChange(int homes) {
+    final user = _authController.currentUser.value;
+    if (user == null || homes == user.radiusHomes) return null;
+    return NeighborhoodSizeChange(
+      homes: homes,
+      previousHomes: user.radiusHomes,
+      dailyGoal: SearchRange.clampGoal(user.dailyPrayerTarget, homes),
+      previousDailyGoal: user.dailyPrayerTarget,
+    );
+  }
+
+  /// Saves [change] (after the user confirmed): Home, Neighborhood and the
+  /// Prayer List then all use the same number of homes. The daily goal is
+  /// lowered when it would no longer fit.
+  Future<void> saveNeighborhoodSize(NeighborhoodSizeChange change) async {
+    final user = _authController.currentUser.value;
+    if (user == null || isSavingHomes.value) return;
+    isSavingHomes.value = true;
+    try {
+      _authController.updateUser(
+        user.copyWith(
+          radiusHomes: change.homes,
+          dailyPrayerTarget: change.dailyGoal,
+        ),
+      );
+      await _users.updateFields(user.id, {
+        'radiusHomes': change.homes,
+        if (change.lowersGoal) 'dailyPrayerTarget': change.dailyGoal,
+      });
+      SnackbarService.showSuccess(
+        'Neighborhood Updated',
+        change.lowersGoal
+            ? 'Your neighborhood is now ${change.homes} homes and your '
+                  'daily goal ${change.dailyGoal} a day.'
+            : 'Your neighborhood is now ${change.homes} homes.',
+      );
+    } catch (error) {
+      _authController.updateUser(user);
+      await resetRadius();
+      SnackbarService.showError(
+        'Not Saved',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isSavingHomes.value = false;
+    }
+  }
 
   bool _isSavedAddress(String text) {
     final saved = _authController.currentUser.value?.address.trim() ?? '';
@@ -286,5 +346,31 @@ class HomeController extends GetxController {
     _unreadSubscription?.cancel();
     searchAddressController.dispose();
     super.onClose();
+  }
+}
+
+/// A new neighborhood size picked on Home, and what it changes.
+class NeighborhoodSizeChange {
+  final int homes;
+  final int previousHomes;
+  final int dailyGoal;
+  final int previousDailyGoal;
+
+  const NeighborhoodSizeChange({
+    required this.homes,
+    required this.previousHomes,
+    required this.dailyGoal,
+    required this.previousDailyGoal,
+  });
+
+  bool get lowersGoal => dailyGoal != previousDailyGoal;
+
+  String get dialogMessage {
+    final goal = lowersGoal
+        ? ' Your daily goal will go from $previousDailyGoal to $dailyGoal a '
+              'day, so it fits in your neighborhood.'
+        : '';
+    return 'Home, Neighborhood and your prayer rounds will all use the '
+        '$homes homes nearest your home (now $previousHomes).$goal';
   }
 }

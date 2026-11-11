@@ -54,7 +54,12 @@ void main() {
     expect(saved, (10, 20, 2.0));
   });
 
-  Future<void> openSheet(WidgetTester tester) async {
+  Future<void> openSheet(
+    WidgetTester tester, {
+    int initialTarget = 5,
+    int initialRadius = 10,
+    void Function(int, int, double)? onSave,
+  }) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.7;
     addTearDown(tester.view.reset);
@@ -68,8 +73,9 @@ void main() {
                 child: TextButton(
                   onPressed: () => ProfilePrayerPreferencesBottomSheet.show(
                     context,
-                    initialTarget: 5,
-                    onSavePreferences: (_, _, _) {},
+                    initialTarget: initialTarget,
+                    initialRadius: initialRadius,
+                    onSavePreferences: onSave ?? (_, _, _) {},
                   ),
                   child: const Text('open'),
                 ),
@@ -127,5 +133,44 @@ void main() {
       find.byType(ProfilePrayerPreferencesBottomSheet),
     );
     expect(top.dy, greaterThanOrEqualTo(300 / 2.7));
+  });
+
+  testWidgets('a goal larger than the neighborhood cannot be picked', (
+    tester,
+  ) async {
+    int? saved;
+    await openSheet(tester, onSave: (target, _, _) => saved = target);
+    expect(find.text('Nearest 10 homes'), findsOneWidget);
+    expect(find.textContaining('more than your homes'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('goal-15')));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Save Preferences'));
+    await tester.tap(find.text('Save Preferences'));
+    await tester.pump();
+    expect(saved, 5);
+  });
+
+  testWidgets('a goal saved above the neighborhood opens lowered, with why', (
+    tester,
+  ) async {
+    int? saved;
+    await openSheet(
+      tester,
+      initialTarget: 15,
+      onSave: (target, _, _) => saved = target,
+    );
+    expect(find.byKey(const ValueKey('goal-above-homes')), findsOneWidget);
+    expect(
+      find.text(
+        'Your daily goal is now 10 a day, so it fits the 10 homes in your '
+        'neighborhood.',
+      ),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Save Preferences'));
+    await tester.tap(find.text('Save Preferences'));
+    await tester.pump();
+    expect(saved, 10);
   });
 }
