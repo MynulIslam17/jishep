@@ -5,7 +5,8 @@
 # Apple integration name: Jose Rafael Nunez
 # Signing assets stored in Codemagic:
 #   Apple Distribution certificate: gps_cielo_distribution
-#   App Store provisioning profile: gps_cielo_appstore (expires 2027-10-12)
+#   App Store provisioning profile: gps_cielo_appstore_push ("GPS Cielo AppStore
+#   AppleSignIn" regenerated 2026-11-11 with Push Notifications; expires 2027-10-12)
 # Apple Developer Team ID: T83PP9TMXS
 # Firebase project: gps-cielo (ios/Runner/GoogleService-Info.plist is committed)
 # Push notifications: Release signs with ios/Runner/RunnerRelease.entitlements
@@ -115,7 +116,7 @@ workflows:
       cocoapods: default
       ios_signing:
         provisioning_profiles:
-          - gps_cielo_appstore
+          - gps_cielo_appstore_push
         certificates:
           - gps_cielo_distribution
       vars:
@@ -162,7 +163,7 @@ workflows:
           done
           xcode-project use-profiles
           if ! grep -q "<string>app-store" /Users/builder/export_options.plist; then
-            echo "Export options are not App Store. Check certificate gps_cielo_distribution and profile gps_cielo_appstore."
+            echo "Export options are not App Store. Check certificate gps_cielo_distribution and profile gps_cielo_appstore_push."
             cat /Users/builder/export_options.plist
             exit 1
           fi
