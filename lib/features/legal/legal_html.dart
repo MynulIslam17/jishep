@@ -411,6 +411,7 @@ footer p { margin: 8px 0 0; }
 $body</main>
 <footer><div class="bar">
 <nav aria-label="Footer">$nav</nav>
+<p><strong>GPS Para El Cielo</strong> · ${_e(LegalInfo.developerCredit)}</p>
 <p>&copy; $year ${_e(_org)} · <a href="mailto:$_email">$_email</a></p>
 </div></footer>
 </body>

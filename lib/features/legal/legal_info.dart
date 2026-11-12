@@ -17,6 +17,9 @@ abstract final class LegalInfo {
   /// Support, privacy and legal contact (given by the client).
   static const String contactEmail = 'office@gaccchurch.org';
 
+  /// Shown in the app's About sheet and the website footer.
+  static const String developerCredit = 'Developed by Mynul Islam';
+
   static const String effectiveDate = 'November 11, 2026';
 
   static const int minimumAge = 13;
