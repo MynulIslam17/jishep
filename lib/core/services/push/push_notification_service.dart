@@ -131,18 +131,17 @@ class PushNotificationService extends GetxService {
     final token = _token;
     _token = null;
     _uid = null;
-    if (token != null) {
-      try {
-        await _tokens
-            .delete(uid: uid, token: token)
-            .timeout(const Duration(seconds: 5));
-      } catch (_) {}
-    }
-    try {
+    // Both run at once so signing out waits at most a few seconds.
+    await Future.wait([
+      if (token != null) _quietly(() => _tokens.delete(uid: uid, token: token)),
       // A new token is made for the next account on this device.
-      await _client.deleteToken().timeout(const Duration(seconds: 5));
-    } catch (_) {}
+      _quietly(_client.deleteToken),
+    ]);
   }
+
+  static Future<void> _quietly(Future<void> Function() step) => Future.sync(
+    step,
+  ).timeout(const Duration(seconds: 4)).catchError((Object _) {});
 
   void _onUser(UserModel? user) {
     if (user == null) {

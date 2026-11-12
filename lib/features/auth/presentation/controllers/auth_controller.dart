@@ -6,10 +6,12 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
+import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/features/auth/data/repositories/auth_repository.dart';
 import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
+import 'package:gps_cielo/shared/widgets/dialogs/app_loading_dialog.dart';
 
 /// Global [AuthController] tracks the Firebase session and keeps the signed-in
 /// user's Firestore profile in [currentUser].
@@ -59,6 +61,8 @@ class AuthController extends GetxController {
     _profileSubscription = null;
 
     if (user == null) {
+      // signOut clears local data once the signed-in screens are gone.
+      if (isSigningOut.value) return;
       currentUser.value = null;
       _householdStore.clear();
       return;
@@ -214,19 +218,55 @@ class AuthController extends GetxController {
     currentUser.value = user;
   }
 
-  /// Signs out and returns to the Sign In screen.
+  /// True while [signOut] runs; further sign-out requests are ignored.
+  final isSigningOut = false.obs;
+
+  /// Signs out behind a "Signing out…" indicator, then replaces the whole
+  /// stack with Sign In. The signed-in screens keep their data until they
+  /// are gone (no blank screen). On failure the user stays signed in where
+  /// they were and sees why.
   Future<void> signOut() async {
-    await clearSession();
+    if (isSigningOut.value) return;
+    isSigningOut.value = true;
+    AppLoadingDialog.show('Signing out…');
+    try {
+      await _endSession();
+    } catch (error) {
+      if (_authService.firebaseUser != null) {
+        isSigningOut.value = false;
+        _onAuthChanged(_authService.firebaseUser);
+        AppLoadingDialog.hide();
+        SnackbarService.showError(
+          'Log Out Failed',
+          FirebaseErrorMapper.message(error),
+        );
+        return;
+      }
+      // The session ended anyway (only a clean-up step failed).
+    }
+    // Removes the indicator together with the signed-in screens.
     Get.offAllNamed(AppRoutes.signIn);
+    AppLoadingDialog.markClosed();
+    _clearLocalData();
+    isSigningOut.value = false;
   }
 
+  /// Signs out without navigating (e.g. before switching accounts).
   Future<void> clearSession() async {
+    await _endSession();
+    _clearLocalData();
+  }
+
+  Future<void> _endSession() async {
     await _runBeforeSignOut();
     await _profileSubscription?.cancel();
     _profileSubscription = null;
+    await _authService.signOut();
+  }
+
+  void _clearLocalData() {
     _householdStore.clear();
     currentUser.value = null;
-    await _authService.signOut();
   }
 
   @override
