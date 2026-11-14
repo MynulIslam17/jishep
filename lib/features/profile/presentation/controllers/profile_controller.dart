@@ -130,8 +130,8 @@ class ProfileController extends GetxController {
       );
       SnackbarService.showSuccess(
         'Preferences Saved',
-        '$target households/day · $radiusHomes homes within '
-            '${SearchRange.formatKm(rangeKm)}.',
+        '$target households/day · '
+            '${SearchRange.neighborhoodSummary(radiusHomes, rangeKm)}.',
       );
     } catch (error) {
       _authController.updateUser(current);

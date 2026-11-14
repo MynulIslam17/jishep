@@ -50,8 +50,12 @@ class LocationSetupScreen extends GetView<LocationSetupController> {
                     SizedBox(height: 14.h),
                     const _MapSection(),
                     SizedBox(height: 14.h),
-                    const _RangeSection(),
-                    SizedBox(height: 14.h),
+                    // No km step when the neighborhood is just "the
+                    // nearest N homes" (cell households).
+                    if (SearchRange.userChoosesRange) ...[
+                      const _RangeSection(),
+                      SizedBox(height: 14.h),
+                    ],
                     const _GoalSection(),
                     SizedBox(height: 10.h),
                     _signOutLink(),
@@ -475,7 +479,10 @@ class _MapSectionState extends State<_MapSection> {
                 centerLatitude: location.latitude,
                 centerLongitude: location.longitude,
                 households: households,
-                areaMeters: controller.rangeKm.value * 1000,
+                // Without a chosen range the circle fits the homes.
+                areaMeters: SearchRange.userChoosesRange
+                    ? controller.rangeKm.value * 1000
+                    : null,
                 handle: _handle,
                 // The page scrolls; use the buttons to zoom.
                 interactive: false,
@@ -636,8 +643,8 @@ class _RangeSection extends GetView<LocationSetupController> {
       step: 2,
       title: 'Neighborhood range',
       subtitle:
-          'Households within this distance of your home make up your '
-          'Prayer List.',
+          'Neighbors are searched within this distance of your home. Your '
+          'Prayer List uses the ${controller.neighborhoodHomes} nearest.',
       child: Obx(() {
         final selected = controller.rangeKm.value;
         return Wrap(
@@ -664,7 +671,7 @@ class _GoalSection extends GetView<LocationSetupController> {
   @override
   Widget build(BuildContext context) {
     return _Section(
-      step: 3,
+      step: SearchRange.userChoosesRange ? 3 : 2,
       title: 'Daily prayer goal',
       subtitle: 'How many neighbors to pray for each day.',
       child: Obx(() {
@@ -713,7 +720,11 @@ class _GoalSection extends GetView<LocationSetupController> {
             ],
             SizedBox(height: 8.h),
             Text(
-              'You can change the range and goal later in Profile.',
+              SearchRange.userChoosesRange
+                  ? 'You can change the range, the number of homes and '
+                        'your goal later in Profile.'
+                  : 'You can change the number of homes and your goal '
+                        'later in Profile.',
               style: AppTypography.body(
                 color: AppColors.textSecondary,
                 fontSize: 11.5.sp,

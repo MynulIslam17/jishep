@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_prayer_preferences_bottom_sheet.dart';
 
 void main() {
@@ -41,17 +42,82 @@ void main() {
     await tester.pump();
     expect(find.text('Within 2 km'), findsOneWidget);
 
-    // Households: 10 -> 20.
+    // Households: 10 -> 25 (5, 10, 15, 20, 25, 50: one stop each).
     final homes = find.byKey(const ValueKey('default-radius-slider'));
     await tester.drag(homes, Offset(tester.getSize(homes).width * 0.3, 0));
     await tester.pump();
-    expect(find.text('Nearest 20 homes'), findsOneWidget);
+    expect(find.text('Nearest 25 homes'), findsOneWidget);
 
     await tester.tap(find.text('10 households / day'));
     await tester.pump();
     await tester.tap(find.text('Save Preferences'));
     await tester.pump();
-    expect(saved, (10, 20, 2.0));
+    expect(saved, (10, 25, 2.0));
+  });
+
+  testWidgets('the households slider reaches 50', (tester) async {
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    (int, int, double)? saved;
+    await tester.pumpWidget(
+      ScreenUtilInit(
+        designSize: const Size(400, 1400),
+        builder: (_, _) => MaterialApp(
+          home: Scaffold(
+            body: ProfilePrayerPreferencesBottomSheet(
+              initialTarget: 5,
+              initialRadius: 25,
+              initialRangeKm: 5,
+              onSavePreferences: (target, homes, km) =>
+                  saved = (target, homes, km),
+            ),
+          ),
+        ),
+      ),
+    );
+    final homes = find.byKey(const ValueKey('default-radius-slider'));
+    await tester.drag(homes, Offset(tester.getSize(homes).width, 0));
+    await tester.pump();
+    expect(find.text('Nearest 50 homes'), findsOneWidget);
+    await tester.tap(find.text('Save Preferences'));
+    await tester.pump();
+    expect(saved, (5, 50, 5.0));
+  });
+
+  testWidgets('with cell households there is no km range to pick', (
+    tester,
+  ) async {
+    FeatureFlags.useCellHouseholds = true;
+    addTearDown(() => FeatureFlags.useCellHouseholds = false);
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    (int, int, double)? saved;
+    await tester.pumpWidget(
+      ScreenUtilInit(
+        designSize: const Size(400, 1400),
+        builder: (_, _) => MaterialApp(
+          home: Scaffold(
+            body: ProfilePrayerPreferencesBottomSheet(
+              initialTarget: 5,
+              initialRadius: 50,
+              initialRangeKm: 2,
+              onSavePreferences: (target, homes, km) =>
+                  saved = (target, homes, km),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('range-km-slider')), findsNothing);
+    expect(find.text('Search range'), findsNothing);
+    expect(find.textContaining('km'), findsNothing);
+    expect(find.text('Nearest 50 homes'), findsOneWidget);
+    await tester.tap(find.text('Save Preferences'));
+    await tester.pump();
+    // The stored range is kept as it was.
+    expect(saved, (5, 50, 2.0));
   });
 
   Future<void> openSheet(

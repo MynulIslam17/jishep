@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -168,7 +169,7 @@ void main() {
       expect(c.cycleDays, 1);
     });
 
-    test('a dense range reads only the nearest 200 and shows "200+"', () async {
+    test('a dense range reads only the neighborhood (nearest 50)', () async {
       final c = await make();
       // 1000 households ~10 m apart: all within 5 km.
       final dense = _Households(1000, spacing: 0.0000899);
@@ -181,13 +182,30 @@ void main() {
       )..onInit();
       d.selectSuggestion(demra);
       await settle();
-      expect(d.previewHouseholds.length, 200);
+      expect(d.previewHouseholds.length, 50); // new accounts: 50 homes
       expect(d.previewHouseholds.first.id, 'demo_0'); // nearest first
-      expect(d.previewHouseholds.last.id, 'demo_199');
-      expect(d.previewComplete.value, isFalse);
-      expect(d.previewSummary, '200+ neighbors within 5 km');
+      expect(d.previewHouseholds.last.id, 'demo_49');
+      expect(d.previewSummary, 'Nearest 50 neighbors within 5 km');
+      expect(d.cycleDays, 10); // one round: 50 homes at 5 a day
       c.onClose();
       d.onClose();
+    });
+
+    test('a saved neighborhood size is what the preview counts', () async {
+      final c = await make(
+        user: UserModel(
+          id: 'u1',
+          fullName: 'N',
+          email: 'n@example.com',
+          radiusHomes: 10,
+        ),
+      );
+      c.selectSuggestion(demra);
+      await settle();
+      expect(c.previewHouseholds.length, 10);
+      expect(c.previewSummary, 'Nearest 10 neighbors within 5 km');
+      expect(c.cycleDays, 2);
+      c.onClose();
     });
 
     test('editing the address clears the pick and the map', () async {
@@ -327,6 +345,28 @@ void main() {
       expect(find.byKey(const ValueKey('goal-5')), findsOneWidget);
       // The header collapsed; the summary strip stays pinned.
       expect(find.byKey(const ValueKey('setup-summary')), findsOneWidget);
+    });
+
+    testWidgets('with cell households there is no km step', (tester) async {
+      FeatureFlags.useCellHouseholds = true;
+      addTearDown(() => FeatureFlags.useCellHouseholds = false);
+      final c = await tester.runAsync(make);
+      await pump(tester, c!);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('goal-5')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const ValueKey('range-5.0')), findsNothing);
+      expect(find.text('Neighborhood range'), findsNothing);
+      expect(find.byKey(const ValueKey('goal-5')), findsOneWidget);
+      expect(
+        find.text(
+          'You can change the number of homes and your goal later in '
+          'Profile.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('with a home: real map, count and save button', (tester) async {

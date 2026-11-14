@@ -576,6 +576,10 @@ class HomeScreen extends GetView<HomeController> {
                   ? 'Finding nearby households...'
                   : controller.areaUnavailable.value
                   ? '${AppStrings.areaUnavailable}. Try another place.'
+                  : controller.hasSearchCenter.value &&
+                        !SearchRange.userChoosesRange
+                  ? 'No households near this location yet. '
+                        'Try another place.'
                   : controller.hasSearchCenter.value
                   ? 'No households within '
                         '${SearchRange.formatDistance(controller.rangeMeters.value ?? 0)} '

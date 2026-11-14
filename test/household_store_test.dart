@@ -227,9 +227,9 @@ void main() {
         await store.bindUser(user(radiusHomes: 15, rangeKm: 5));
         expect(repository.fetches.last.radiusKm, 5);
         expect(store.rangeMeters.value, 5000);
-        // The nearest are read first (25 = the largest Home count); the
-        // rest of the range only when asked for.
-        expect(store.foundInRange.value, greaterThanOrEqualTo(25));
+        // The nearest are read first (up to 50 = the largest Home count);
+        // the rest of the range only when asked for.
+        expect(store.foundInRange.value, greaterThanOrEqualTo(40));
         expect(store.areaComplete.value, store.foundInRange.value == 40);
         expect(store.households.length, 15);
         expect(store.households.first.id, 'demo_0');
@@ -505,15 +505,17 @@ void main() {
     });
 
     test('browsing all in range lists them 10 at a time', () async {
-      repository.available = 40;
-      await store.bindUser(user(radiusHomes: 20, rangeKm: 5));
+      // More than the nearest 50 read up front (the largest count); homes
+      // are ~100 m apart, so all 80 are within 10 km.
+      repository.available = 80;
+      await store.bindUser(user(radiusHomes: 20, rangeKm: 10));
       final controller = Get.put(
         NeighborhoodController(NeighborhoodService(store)),
       );
 
       expect(controller.households.length, 20); // map pins (Settings count)
       // Only the nearest are read up front; the rest as the list scrolls.
-      expect(controller.areaHouseholds.length, lessThan(40));
+      expect(controller.areaHouseholds.length, lessThan(80));
       expect(controller.areaComplete.value, isFalse);
       controller.setShowAllInRange(true);
       // Starts with the neighborhood plus the next page.
@@ -526,21 +528,21 @@ void main() {
         await pumpEventQueue();
       }
       expect(controller.areaComplete.value, isTrue);
-      expect(controller.pagedHouseholds.length, 40);
+      expect(controller.pagedHouseholds.length, 80);
       expect(controller.hasMore, isFalse);
       expect(controller.loadMore(), isFalse);
       final ids = controller.pagedHouseholds.map((h) => h.id).toList();
       // Every household, once, nearest first.
-      expect(ids, [for (var i = 0; i < 40; i++) 'demo_$i']);
+      expect(ids, [for (var i = 0; i < 80; i++) 'demo_$i']);
       // No household document was read twice.
-      expect(repository.lastIndex!.documentsRead, 40);
+      expect(repository.lastIndex!.documentsRead, 80);
     });
 
     test(
       'a page asked for before it is read appears when it arrives',
       () async {
-        repository.available = 40;
-        await store.bindUser(user(radiusHomes: 10, rangeKm: 5));
+        repository.available = 80;
+        await store.bindUser(user(radiusHomes: 10, rangeKm: 10));
         final controller = Get.put(
           NeighborhoodController(NeighborhoodService(store)),
         );
@@ -562,8 +564,8 @@ void main() {
     test(
       'reaching the end when nothing more is in range stops the spinner',
       () async {
-        // 26 households (the last 2.6 km out); the first read takes the
-        // nearest 25+, so the last read only confirms the range is empty.
+        // 26 households (the last 2.6 km out); the first read asks for the
+        // nearest 50, so the last read only confirms the range is empty.
         repository.available = 26;
         await store.bindUser(user(radiusHomes: 10, rangeKm: 5));
         final controller = Get.put(

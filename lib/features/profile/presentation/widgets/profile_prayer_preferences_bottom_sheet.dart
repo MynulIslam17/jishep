@@ -228,38 +228,44 @@ class _ProfilePrayerPreferencesBottomSheetState
                   const Divider(color: AppColors.border, height: 1),
                   SizedBox(height: 16.h),
 
-                  // Search range (distance)
-                  _OptionSlider(
-                    sliderKey: const ValueKey('range-km-slider'),
-                    title: 'Search range',
-                    description:
-                        'Households are searched within this distance of your '
-                        'home or a searched place.',
-                    valueText: () =>
-                        'Within ${SearchRange.formatKm(selectedKmRx.value)}',
-                    labels: [
-                      for (final km in SearchRange.distanceOptionsKm)
-                        SearchRange.formatKm(km),
-                    ],
-                    index: () => SearchRange.distanceOptionsKm.indexOf(
-                      selectedKmRx.value,
+                  // Search range (distance). Not offered with cell
+                  // households: the neighborhood is the nearest N homes.
+                  if (SearchRange.userChoosesRange) ...[
+                    _OptionSlider(
+                      sliderKey: const ValueKey('range-km-slider'),
+                      title: 'Search range',
+                      description:
+                          'Households are searched within this distance of your '
+                          'home or a searched place.',
+                      valueText: () =>
+                          'Within ${SearchRange.formatKm(selectedKmRx.value)}',
+                      labels: [
+                        for (final km in SearchRange.distanceOptionsKm)
+                          SearchRange.formatKm(km),
+                      ],
+                      index: () => SearchRange.distanceOptionsKm.indexOf(
+                        selectedKmRx.value,
+                      ),
+                      onIndex: (i) =>
+                          selectedKmRx.value = SearchRange.distanceOptionsKm[i],
                     ),
-                    onIndex: (i) =>
-                        selectedKmRx.value = SearchRange.distanceOptionsKm[i],
-                  ),
 
-                  SizedBox(height: 10.h),
-                  const Divider(color: AppColors.border, height: 1),
-                  SizedBox(height: 16.h),
+                    SizedBox(height: 10.h),
+                    const Divider(color: AppColors.border, height: 1),
+                    SizedBox(height: 16.h),
+                  ],
 
                   // Number of households (default for the Home filter)
                   _OptionSlider(
                     sliderKey: const ValueKey('default-radius-slider'),
                     title: 'Homes in my neighborhood',
-                    description:
-                        'Your neighborhood is this many homes nearest your '
-                        'home, within the search range. Home, Neighborhood '
-                        'and your prayer rounds all use it.',
+                    description: SearchRange.userChoosesRange
+                        ? 'Your neighborhood is this many homes nearest your '
+                              'home, within the search range. Home, '
+                              'Neighborhood and your prayer rounds all use it.'
+                        : 'Your neighborhood is this many homes nearest your '
+                              'home. Home, Neighborhood and your prayer '
+                              'rounds all use it.',
                     valueText: () => 'Nearest ${selectedRadiusRx.value} homes',
                     labels: [for (final option in options) '$option'],
                     index: () => options.indexOf(selectedRadiusRx.value),

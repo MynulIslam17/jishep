@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/features/home/presentation/widgets/radius_map_card.dart';
 
@@ -106,19 +107,35 @@ void main() {
     expect(find.text('3 homes within 5 km'), findsOneWidget);
   });
 
-  testWidgets('the count slider covers 5-25 and reports live', (tester) async {
+  testWidgets('the count slider has one stop per option, 5 to 50', (
+    tester,
+  ) async {
     final picked = <int>[];
     await pumpCard(tester, items: homes(10), onRadiusChanged: picked.add);
     final sliderFinder = find.byKey(const ValueKey('radius-slider'));
     final slider = tester.widget<Slider>(sliderFinder);
-    expect(slider.min, 5);
-    expect(slider.max, 25);
+    // 5, 10, 15, 20, 25, 50 are not evenly spaced: the slider moves by index.
+    expect(slider.divisions, 5);
+    expect(slider.value, 1); // 10 homes
 
     final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
-    await gesture.moveBy(Offset(tester.getSize(sliderFinder).width * 0.3, 0));
+    await gesture.moveBy(Offset(tester.getSize(sliderFinder).width, 0));
     await tester.pump();
-    expect(picked, [20]);
+    expect(picked, isNotEmpty);
+    expect(picked.every(const [5, 10, 15, 20, 25, 50].contains), isTrue);
+    expect(picked.last, 50);
     await gesture.up();
+  });
+
+  testWidgets('with cell households the card never mentions km', (
+    tester,
+  ) async {
+    FeatureFlags.useCellHouseholds = true;
+    addTearDown(() => FeatureFlags.useCellHouseholds = false);
+    await pumpCard(tester, radius: 50, defaultHomes: 50, items: homes(50));
+    expect(find.text('Homes in my neighborhood'), findsOneWidget);
+    expect(find.text('Nearest 50 homes'), findsOneWidget);
+    expect(find.textContaining(' km'), findsNothing);
   });
 
   testWidgets('moving the count never changes the circle', (tester) async {

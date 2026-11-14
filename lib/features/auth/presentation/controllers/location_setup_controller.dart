@@ -17,8 +17,10 @@ import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller
 import 'package:gps_cielo/routes/app_routes.dart';
 
 /// First-run setup: the home address (the center of the user's
-/// neighborhood), the search range and the daily prayer goal. The map and
-/// count preview the real households the Prayer List will be built from.
+/// neighborhood), the search range (only when [SearchRange.userChoosesRange])
+/// and the daily prayer goal. The map and count preview "my neighborhood":
+/// the nearest [neighborhoodHomes] households, which the Prayer List is
+/// built from.
 class LocationSetupController extends GetxController {
   LocationSetupController(
     this._authService,
@@ -50,13 +52,16 @@ class LocationSetupController extends GetxController {
   /// The picked location while it still matches the field.
   final selectedLocation = Rxn<ResolvedLocation>();
 
-  /// Households within [rangeKm] of [selectedLocation] (nearest first).
+  /// "My neighborhood" around [selectedLocation]: the nearest
+  /// [neighborhoodHomes] households (within [rangeKm] when the user picks a
+  /// range), nearest first.
   final previewHouseholds = <HouseholdModel>[].obs;
   final isLoadingPreview = false.obs;
-
-  /// False when the range holds more than the preview read ("200+").
-  final previewComplete = true.obs;
   final previewError = false.obs;
+
+  /// Homes in the neighborhood: the saved `radiusHomes` (new accounts are
+  /// created with [SearchRange.defaultHomes]).
+  int neighborhoodHomes = SearchRange.defaultHomes;
 
   /// The signed-in account (email, or phone for phone-only accounts).
   final accountLabel = ''.obs;
@@ -68,19 +73,26 @@ class LocationSetupController extends GetxController {
 
   bool get hasLocation => selectedLocation.value != null;
 
-  /// e.g. "40 neighbors within 2 km".
+  /// e.g. "Your nearest 50 neighbors", "12 neighbors nearby"; with a range
+  /// "Nearest 50 neighbors within 2 km", "40 neighbors within 2 km".
   String get previewSummary {
-    final range = SearchRange.formatKm(rangeKm.value);
-    if (isLoadingPreview.value) return 'Finding neighbors within $range…';
     if (previewError.value) return 'Could not load neighbors';
     final n = previewHouseholds.length;
-    final count = previewComplete.value ? '$n' : '$n+';
-    return n == 0
-        ? 'No households within $range yet'
-        : '$count ${n == 1 ? 'neighbor' : 'neighbors'} within $range';
+    final noun = n == 1 ? 'neighbor' : 'neighbors';
+    final full = n >= neighborhoodHomes;
+    if (!SearchRange.userChoosesRange) {
+      if (isLoadingPreview.value) return 'Finding your nearest neighbors…';
+      if (n == 0) return 'No households near this address yet';
+      return full ? 'Your nearest $n $noun' : '$n $noun nearby';
+    }
+    final range = SearchRange.formatKm(rangeKm.value);
+    if (isLoadingPreview.value) return 'Finding neighbors within $range…';
+    if (n == 0) return 'No households within $range yet';
+    return full ? 'Nearest $n $noun within $range' : '$n $noun within $range';
   }
 
-  /// Days to pray once for every household in range at the daily goal.
+  /// Days to pray once for every household in the neighborhood at the
+  /// daily goal (one round).
   int? get cycleDays {
     final n = previewHouseholds.length;
     if (n == 0 || dailyGoal.value <= 0) return null;
@@ -96,6 +108,7 @@ class LocationSetupController extends GetxController {
           ? user.email
           : (user.phone ?? '');
       rangeKm.value = SearchRange.normalizeKm(user.searchRadiusKm);
+      neighborhoodHomes = user.radiusHomes;
       dailyGoal.value = dailyGoals.contains(user.dailyPrayerTarget)
           ? user.dailyPrayerTarget
           : 5;
@@ -197,7 +210,7 @@ class LocationSetupController extends GetxController {
     int generation,
   ) async {
     try {
-      // Nearest first, reading only as far as the preview needs.
+      // Nearest first, reading only as far as the neighborhood needs.
       final AreaSearch search = FeatureFlags.useCellHouseholds
           ? _households.cellArea(
               latitude: location.latitude,
@@ -210,10 +223,9 @@ class LocationSetupController extends GetxController {
                 radiusKm: km,
               ),
             );
-      await search.ensure(SearchRange.maxInRange);
+      await search.ensure(neighborhoodHomes);
       if (generation != _previewGeneration) return;
-      final records = search.records.take(SearchRange.maxInRange).toList();
-      previewComplete.value = search.isComplete;
+      final records = search.records.take(neighborhoodHomes).toList();
       previewHouseholds.assignAll([
         for (var i = 0; i < records.length; i++)
           HouseholdModel.fromRecord(record: records[i], number: i + 1),

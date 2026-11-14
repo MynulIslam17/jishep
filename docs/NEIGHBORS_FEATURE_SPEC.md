@@ -115,8 +115,8 @@ match /cells/{id} { allow read: if request.auth != null; allow write: if false; 
 4. Unzip, compute distances, sort, take the nearest 50.
    **Range rule:** start with the 3×3 block of p5 cells around the user
    (about ±5 km). If it holds fewer than 50 households, expand **once** to
-   the 5×5 block (the ring around it), and no further. The Neighbors list
-   ignores the Settings range (up to 20 km) and the 200-household paging.
+   the 5×5 block (the ring around it), and no further. The cell source
+   ignores the Settings range (`searchRadiusKm`); see 3.4.
 5. Merge with `users/{uid}/household_status` (name, prayed, follow-up, …)
    by household id.
 6. No cell document at all → show "This area isn't available yet" instead
@@ -127,6 +127,31 @@ match /cells/{id} { allow read: if request.auth != null; allow write: if false; 
    `--dart-define=USE_CELL_HOUSEHOLDS=true`); keep the `households` source
    until verified. Existing `household_status` docs use old seeded IDs: check in
    step 5 and ask before any migration.
+
+### 3.4 Neighborhood size (decision: follow BLESS)
+"My neighborhood" is **the nearest N homes**; with cell households the user
+does not choose a distance. Rounds, the daily goal and "Round complete!" are
+unchanged; a round is the N homes.
+- **N** = `users/{uid}.radiusHomes`, Settings › Prayer preferences › "Homes
+  in my neighborhood": 5, 10, 15, 20, 25 or **50**
+  (`SearchRange.options`; `SearchRange.maxHomes` = 50 = `CellArea`'s
+  nearest 50). New accounts get **50** (`SearchRange.defaultHomes`);
+  existing accounts keep their saved value. A missing value also reads
+  as 50.
+- **km range** (`searchRadiusKm`): with `USE_CELL_HOUSEHOLDS` on
+  (`SearchRange.userChoosesRange` false) it is hidden in Prayer
+  preferences and first-run setup, and no label says "within X km"
+  (Profile summary "Nearest 50 homes", Home map "Nearest 50 homes", empty
+  states). The field and the `households` code path are kept: with the flag
+  off everything works as before (range + count).
+- **First-run setup** previews the real neighborhood: the nearest N homes
+  (not "up to 200 in range"); the days-per-round line uses N. With the flag
+  on the range step is skipped and the default 50 is used.
+- The Home count slider moves one stop per option (the options are not
+  evenly spaced).
+- Reading up to 50 households up front (Home / Prayer List) instead of 25
+  costs at most 25 more document reads per search on the `households` path;
+  the cell path reads the same cells as before.
 
 ## 4. Part B — Add a resident name to a household
 Households start without names. The user adds the name of the people living
@@ -161,7 +186,7 @@ Rules: keep the existing `household_status` rules; only change
 ## 5. Acceptance
 1. Spring Valley, CA: nearest households with correct address labels,
    ordered by distance.
-2. Count 5→25 needs no network; revisiting an area costs 0 reads (cache).
+2. Count 5→50 needs no network; revisiting an area costs 0 reads (cache).
 3. Unnamed household shows "Neighbor" + address. Adding a name shows it in
    every list; it syncs to my second device; a second user at the same area
    still sees "Neighbor".
@@ -183,6 +208,22 @@ Rules: keep the existing `household_status` rules; only change
    + unit tests.
 7. Part B (resident name) + rules change.
 8. Go through section 5: what passed, what to test by hand.
+
+## Known issues
+- **Old app builds and a 50-home neighborhood** (accepted for now).
+  Builds from before 3.4 offer 5–25 homes and read a saved
+  `radiusHomes = 50` as 25 (`SearchRange.normalize`). No crash: sliders and
+  labels show 25, and the rules allow 1–200. It only matters when one user
+  runs an old and a new build at the same time (e.g. two devices):
+  - saving Prayer preferences on the old build writes `radiusHomes: 25`
+    back, so the new build also drops to 25;
+  - the old build's round is the nearest 25; once those are prayed for it
+    shows "Round complete!" and the next day starts a new round
+    (`users/{uid}.prayerCycleStartedAt`) for every device, before the new
+    build's other 25 homes were prayed for.
+  The app has no minimum-version / force-update check, so this cannot be
+  blocked from the server today. Fix later with a minimum supported version
+  if it shows up in practice.
 
 ## Open questions
 - The whole USA does not fit in 1 GiB; choose which states to load.

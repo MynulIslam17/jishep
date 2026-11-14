@@ -115,7 +115,7 @@ class NeighborhoodController extends GetxController {
   }
 
   final selectedHousehold = Rxn<HouseholdModel>();
-  final radiusHomes = 10.obs;
+  final radiusHomes = SearchRange.defaultHomes.obs;
   final rangeMeters = RxnDouble();
   final isLoading = false.obs;
   final centerLatitude = RxnDouble();

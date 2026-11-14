@@ -29,6 +29,10 @@ void main() {
       find.text('© 2026 Global Alliance of Christian Churches, Inc.'),
       findsOneWidget,
     );
+    expect(
+      find.text('Address data © Overture Maps Foundation'),
+      findsOneWidget,
+    );
     expect(find.text('GPS PARA EL CIELO'), findsWidgets);
     expect(tester.takeException(), isNull);
   });

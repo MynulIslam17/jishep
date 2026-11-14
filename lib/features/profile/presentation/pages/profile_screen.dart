@@ -208,8 +208,7 @@ class ProfileScreen extends GetView<ProfileController> {
                             title: 'Prayer preferences',
                             subtitle:
                                 '${controller.user.value?.dailyPrayerTarget ?? 5} households per day · '
-                                '${controller.user.value?.radiusHomes ?? SearchRange.defaultHomes} homes within '
-                                '${SearchRange.formatKm(controller.user.value?.searchRadiusKm ?? SearchRange.defaultKm)}',
+                                '${SearchRange.neighborhoodSummary(controller.user.value?.radiusHomes ?? SearchRange.defaultHomes, controller.user.value?.searchRadiusKm ?? SearchRange.defaultKm)}',
                             onTap: () =>
                                 ProfilePrayerPreferencesBottomSheet.show(
                                   context,

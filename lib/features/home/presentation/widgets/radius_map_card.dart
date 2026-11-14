@@ -84,6 +84,15 @@ class RadiusMapCard extends StatefulWidget {
 }
 
 class _RadiusMapCardState extends State<RadiusMapCard> {
+  /// Index of the option nearest [homes] (a stored count may not be one).
+  static int _indexOf(List<int> options, int homes) {
+    var best = 0;
+    for (var i = 1; i < options.length; i++) {
+      if ((options[i] - homes).abs() < (options[best] - homes).abs()) best = i;
+    }
+    return best;
+  }
+
   final HouseholdMapHandle _mapHandle = HouseholdMapHandle();
   bool _isMapReady = false;
 
@@ -217,7 +226,8 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
     );
     final onChanged = widget.onRadiusChanged;
     final rangeMeters = widget.rangeMeters;
-    final rangeText = rangeMeters == null
+    // No km caption when the neighborhood is just "the nearest N homes".
+    final rangeText = rangeMeters == null || !SearchRange.userChoosesRange
         ? null
         : SearchRange.formatDistance(rangeMeters);
 
@@ -300,20 +310,22 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
                 valueIndicatorColor: AppColors.primaryNavy,
                 showValueIndicator: ShowValueIndicator.onDrag,
               ),
+              // One stop per option (5 … 25, 50): the options are not
+              // evenly spaced, so the slider moves by index.
               child: Slider(
                 key: const ValueKey('radius-slider'),
-                value: value.toDouble(),
-                min: options.first.toDouble(),
-                max: options.last.toDouble(),
+                value: _indexOf(options, value).toDouble(),
+                min: 0,
+                max: (options.length - 1).toDouble(),
                 divisions: options.length - 1,
-                label: '${value.round()} homes',
+                label: '$value homes',
                 semanticFormatterCallback: (v) =>
-                    'Show the nearest ${v.round()} homes',
+                    'Show the nearest ${options[v.round()]} homes',
                 // Filtering is local (no new search), so apply it live.
                 onChanged: onChanged == null
                     ? null
                     : (v) {
-                        final homes = v.round();
+                        final homes = options[v.round()];
                         if (homes == (_draggingRadius ?? widget.radiusHomes)) {
                           return;
                         }
@@ -322,7 +334,7 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
                       },
                 onChangeEnd: widget.onRadiusChangeEnd == null
                     ? null
-                    : (v) => widget.onRadiusChangeEnd!(v.round()),
+                    : (v) => widget.onRadiusChangeEnd!(options[v.round()]),
               ),
             ),
             Padding(

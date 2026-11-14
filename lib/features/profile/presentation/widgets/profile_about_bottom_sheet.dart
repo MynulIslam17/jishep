@@ -137,6 +137,12 @@ class ProfileAboutBottomSheet extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
           ),
+          SizedBox(height: 2.h),
+          Text(
+            dataCredit,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
+          ),
         ],
       ),
     );
@@ -144,6 +150,11 @@ class ProfileAboutBottomSheet extends StatelessWidget {
 
   static const String developerCredit = LegalInfo.developerCredit;
   static const String copyrightNotice = '\u00A9 2026 ${LegalInfo.operatorName}';
+
+  /// Household addresses come from Overture Maps (open data, attribution
+  /// required).
+  static const String dataCredit =
+      'Address data \u00A9 Overture Maps Foundation';
 
   Widget _buildModalHandle() {
     return Center(

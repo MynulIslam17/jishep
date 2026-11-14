@@ -108,11 +108,15 @@ class PrayerListScreen extends GetView<PrayerListController> {
         child: AppNoticeCard(
           icon: Icons.travel_explore_rounded,
           title: 'No households near your home yet',
-          message:
-              'None within $range of ${controller.homeLabel.value}. '
-              'Choose a larger search range or change your home address.',
+          message: SearchRange.userChoosesRange
+              ? 'None within $range of ${controller.homeLabel.value}. '
+                    'Choose a larger search range or change your home '
+                    'address.'
+              : 'None found near ${controller.homeLabel.value}. '
+                    'Try changing your home address.',
           actions: [
-            _settingsButton('Search range', Icons.tune_rounded),
+            if (SearchRange.userChoosesRange)
+              _settingsButton('Search range', Icons.tune_rounded),
             _settingsButton('Home address', Icons.home_outlined),
           ],
         ),
