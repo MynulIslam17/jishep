@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:get/get.dart';
-import 'package:gps_cielo/core/data/geo_search.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
+import 'package:gps_cielo/core/data/geo_record.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -48,7 +50,9 @@ class SearchCenter {
 ///    session). Follow-up uses it to keep its pages current.
 ///
 /// Nothing here grows with the size of the data:
-///  * households are read with a progressive nearest-first [GeoSearch] —
+///  * households are read with a progressive nearest-first [GeoSearch]
+///    (or, with `FeatureFlags.useCellHouseholds`, the nearest 50 from the
+///    Overture cells around the center: see `CellArea`) —
 ///    only as far out as the screens need (Home/Prayer List: the nearest
 ///    [SearchRange.maxHomes]; Neighborhood: more as the user scrolls);
 ///  * statuses are read for exactly the households loaded, plus a live
@@ -127,13 +131,20 @@ class HouseholdStore extends GetxService {
 
   /// Household ids whose status was already read (or found missing).
   final Set<String> _statusFetched = {};
-  List<HouseholdSnapshot> _docs = const [];
+  List<GeoRecord> _records = const [];
+
+  /// True when no household data exists around the current center (cells
+  /// only): screens show "This area isn't available yet".
+  final areaUnavailable = false.obs;
+
+  /// The same, around the saved home (Prayer List).
+  final homeUnavailable = false.obs;
   StreamSubscription<Map<String, Map<String, dynamic>>>? _statusSubscription;
 
   /// The search on screen and the one around the saved home (the same
   /// object while the view is home).
-  GeoSearch? _viewSearch;
-  GeoSearch? _homeSearch;
+  AreaSearch? _viewSearch;
+  AreaSearch? _homeSearch;
 
   String? _uid;
 
@@ -162,7 +173,7 @@ class HouseholdStore extends GetxService {
   double _loadedRangeKm = 0;
 
   /// Households around the saved home, and what they were loaded for.
-  List<HouseholdSnapshot> _homeDocs = const [];
+  List<GeoRecord> _homeRecords = const [];
   Set<String> _homeIds = const {};
   ({double latitude, double longitude, double rangeKm})? _homeKey;
 
@@ -207,7 +218,7 @@ class HouseholdStore extends GetxService {
     if (countChanged) _radiusFilter = null;
     _savedRadius = user.radiusHomes;
     _rangeKm = user.searchRadiusKm;
-    rangeMeters.value = _rangeKm * 1000;
+    rangeMeters.value = _viewSearch?.extentMeters ?? _rangeKm * 1000;
     final cycleChanged = cycleStartedAt.value != user.prayerCycleStartedAt;
     cycleStartedAt.value = user.prayerCycleStartedAt;
     _publishRadius();
@@ -312,7 +323,8 @@ class HouseholdStore extends GetxService {
     if (_uid == null || key == _homeKey) return;
     if (key == null) {
       _homeKey = null;
-      _homeDocs = const [];
+      _homeRecords = const [];
+      homeUnavailable.value = false;
       _rebuild();
       return;
     }
@@ -327,15 +339,11 @@ class HouseholdStore extends GetxService {
 
     final generation = ++_homeGeneration;
     try {
-      final search = _repository.geoSearch(
-        latitude: key.latitude,
-        longitude: key.longitude,
-        radiusKm: key.rangeKm,
-      );
+      final search = _search(key.latitude, key.longitude, key.rangeKm);
       await search.ensure(SearchRange.maxHomes);
       if (generation != _homeGeneration) return;
       _setHome(search, key);
-      await _loadStatusesFor(_homeDocs.map((d) => d.id));
+      await _loadStatusesFor(_homeRecords.map((r) => r.id));
       if (generation != _homeGeneration) return;
       _rebuild();
     } catch (_) {
@@ -344,13 +352,30 @@ class HouseholdStore extends GetxService {
   }
 
   void _setHome(
-    GeoSearch search,
+    AreaSearch search,
     ({double latitude, double longitude, double rangeKm})? key,
   ) {
     _homeSearch = search;
-    _homeDocs = [for (final hit in search.confirmed) hit.doc];
-    _homeIds = {for (final d in _homeDocs) d.id};
+    _homeRecords = search.records;
+    _homeIds = {for (final r in _homeRecords) r.id};
+    homeUnavailable.value = search.isUnavailable;
     _homeKey = key;
+  }
+
+  /// A nearest-first search around a point: the Overture cells when
+  /// `FeatureFlags.useCellHouseholds` is on (Settings range not used),
+  /// otherwise the `households` collection within [radiusKm].
+  AreaSearch _search(double latitude, double longitude, double radiusKm) {
+    if (FeatureFlags.useCellHouseholds) {
+      return _repository.cellArea(latitude: latitude, longitude: longitude);
+    }
+    return GeoSearchArea(
+      _repository.geoSearch(
+        latitude: latitude,
+        longitude: longitude,
+        radiusKm: radiusKm,
+      ),
+    );
   }
 
   void clear() {
@@ -375,8 +400,10 @@ class HouseholdStore extends GetxService {
     _latitude = null;
     _longitude = null;
     _loadedRangeKm = 0;
-    _homeDocs = const [];
+    _homeRecords = const [];
     _homeIds = const {};
+    areaUnavailable.value = false;
+    homeUnavailable.value = false;
     _homeKey = null;
     _viewSearch = null;
     _homeSearch = null;
@@ -388,7 +415,7 @@ class HouseholdStore extends GetxService {
     _statuses.clear();
     _statusFetched.clear();
     statusCounts.clear();
-    _docs = const [];
+    _records = const [];
     households.clear();
     areaHouseholds.clear();
     homeHouseholds.clear();
@@ -401,7 +428,8 @@ class HouseholdStore extends GetxService {
     final latitude = _latitude;
     final longitude = _longitude;
     if (_uid == null || latitude == null || longitude == null) {
-      _docs = const [];
+      _records = const [];
+      areaUnavailable.value = false;
       _rebuild();
       return;
     }
@@ -411,11 +439,7 @@ class HouseholdStore extends GetxService {
     isLoadingArea.value = false;
     isLoading.value = true;
     try {
-      final search = _repository.geoSearch(
-        latitude: latitude,
-        longitude: longitude,
-        radiusKm: _loadedRangeKm,
-      );
+      final search = _search(latitude, longitude, _loadedRangeKm);
       // Enough for the largest Home count; Neighborhood reads more on scroll.
       await search.ensure(SearchRange.maxHomes);
       if (generation != _loadGeneration) return;
@@ -425,7 +449,7 @@ class HouseholdStore extends GetxService {
         _setHome(search, _currentHomeKey);
         _homeGeneration++;
       }
-      await _loadStatusesFor(_docs.map((d) => d.id));
+      await _loadStatusesFor(_records.map((r) => r.id));
       if (generation != _loadGeneration) return;
       _rebuild();
     } catch (error) {
@@ -439,9 +463,12 @@ class HouseholdStore extends GetxService {
     }
   }
 
-  void _publishArea(GeoSearch search) {
-    _docs = [for (final hit in search.confirmed) hit.doc];
+  void _publishArea(AreaSearch search) {
+    _records = search.records;
     areaComplete.value = search.isComplete;
+    areaUnavailable.value = search.isUnavailable;
+    // Cells have no fixed range: show how far the households found reach.
+    rangeMeters.value = search.extentMeters ?? _rangeKm * 1000;
   }
 
   /// Reads further out until at least [count] households around the current
@@ -452,15 +479,15 @@ class HouseholdStore extends GetxService {
     if (count > _areaTarget) _areaTarget = count;
     final search = _viewSearch;
     if (search == null || search.isComplete || isLoadingArea.value) return;
-    if (search.confirmed.length >= _areaTarget) return;
+    if (search.records.length >= _areaTarget) return;
     final generation = _loadGeneration;
     isLoadingArea.value = true;
     try {
-      while (!search.isComplete && search.confirmed.length < _areaTarget) {
+      while (!search.isComplete && search.records.length < _areaTarget) {
         await search.ensure(_areaTarget);
         if (generation != _loadGeneration || search != _viewSearch) return;
         _publishArea(search);
-        await _loadStatusesFor(_docs.map((d) => d.id));
+        await _loadStatusesFor(_records.map((r) => r.id));
         if (generation != _loadGeneration) return;
         _rebuild();
       }
@@ -483,9 +510,7 @@ class HouseholdStore extends GetxService {
     if (_homeIds.contains(id)) return true;
     final search = _homeSearch;
     if (search == null) return null;
-    final meters = search.distanceOf(id);
-    if (meters != null) return meters <= search.maxMeters;
-    return search.isComplete ? false : null;
+    return search.contains(id);
   }
 
   /// The status of [id] if known on this device (null: unknown, not
@@ -614,6 +639,10 @@ class HouseholdStore extends GetxService {
     final firstPrayer = becamePrayed && previous?['isPrayed'] != true;
     final becameFollowUp =
         updated.hasFollowUp && !(current?.hasFollowUp ?? false);
+    final nameChanged =
+        updated.residentName !=
+        (current?.residentName ??
+            HouseholdModel.cleanName(previous?['residentName']));
 
     // A prayer outside "my neighborhood" (a searched place, or beyond the
     // Settings count) is saved but is not part of the prayer round. Say so
@@ -640,6 +669,14 @@ class HouseholdStore extends GetxService {
     } else if (!updated.isPrayed) {
       next.remove('prayedAt');
     }
+    if (nameChanged) {
+      final name = updated.residentName;
+      if (name == null) {
+        next.remove('residentName');
+      } else {
+        next['residentName'] = name;
+      }
+    }
     next['updatedAt'] = DateTime.now();
     _statuses[updated.id] = next;
     _countChange(previous, next);
@@ -650,6 +687,7 @@ class HouseholdStore extends GetxService {
         uid: uid,
         household: updated,
         wasPrayed: wasPrayedInCycle,
+        nameChanged: nameChanged,
       );
       // A notification failing (even synchronously) must never undo a
       // prayer that is already being written.
@@ -697,16 +735,18 @@ class HouseholdStore extends GetxService {
     ]) {
       if ((a[f] == true) != (b[f] == true)) return false;
     }
-    return a['notes'] == b['notes'] && a['followUpDate'] == b['followUpDate'];
+    return a['notes'] == b['notes'] &&
+        a['followUpDate'] == b['followUpDate'] &&
+        a['residentName'] == b['residentName'];
   }
 
-  List<HouseholdModel> _fromDocs(List<HouseholdSnapshot> docs) {
+  List<HouseholdModel> _fromRecords(List<GeoRecord> records) {
     final cycleStart = cycleStartedAt.value;
     return [
-      for (var i = 0; i < docs.length; i++)
-        HouseholdModel.fromFirestore(
-          doc: docs[i],
-          status: _statuses[docs[i].id],
+      for (var i = 0; i < records.length; i++)
+        HouseholdModel.fromRecord(
+          record: records[i],
+          status: _statuses[records[i].id],
           number: i + 1,
           cycleStart: cycleStart,
         ),
@@ -714,13 +754,13 @@ class HouseholdStore extends GetxService {
   }
 
   void _rebuild() {
-    final area = _fromDocs(_docs);
+    final area = _fromRecords(_records);
     foundInRange.value = area.length;
     // Nearest first, so the count keeps the closest homes.
     households.assignAll(area.take(_radiusHomes));
     areaHouseholds.assignAll(area);
 
-    final home = _fromDocs(_homeDocs);
+    final home = _fromRecords(_homeRecords);
     homeHouseholds.assignAll(home.take(_savedRadius));
 
     // Tracked: prefer the full household (with location) when it is loaded.
@@ -769,7 +809,7 @@ class HouseholdStore extends GetxService {
         .addNotification(
           title: 'Follow-up Scheduled',
           message:
-              'Follow-up with ${household.residentName} (${household.address}) on ${household.followUpDate ?? defaultFollowUpDate()}.',
+              'Follow-up with ${household.displayName} (${household.address}) on ${household.followUpDate ?? defaultFollowUpDate()}.',
           type: NotificationType.followUpDue,
           actionRoute: AppRoutes.followUp,
         )

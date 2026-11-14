@@ -85,7 +85,7 @@ class PrayerListItemCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        household.residentName,
+                        household.displayName,
                         style: AppTypography.heading(
                           color: AppColors.textPrimary,
                           fontSize: 14.sp,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:gps_cielo/core/data/cell_source.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
@@ -12,6 +13,9 @@ class FakeHouseholdRepository implements HouseholdRepository {
   final List<({double latitude, double longitude, double radiusKm})> fetches =
       [];
   final List<({String uid, String householdId})> savedStatuses = [];
+
+  /// Resident names written (null = removed), in order.
+  final List<({String id, String? name})> savedNames = [];
   final statusStreams =
       <String, StreamController<Map<String, Map<String, dynamic>>>>{};
 
@@ -47,6 +51,18 @@ class FakeHouseholdRepository implements HouseholdRepository {
 
   /// How many households exist near any point (0 = none).
   int available = 0;
+
+  /// Overture cells, for tests with `FeatureFlags.useCellHouseholds` on.
+  FirestoreCellSource? cells;
+
+  /// Cell areas started (center).
+  final List<({double latitude, double longitude})> cellFetches = [];
+
+  @override
+  CellArea cellArea({required double latitude, required double longitude}) {
+    cellFetches.add((latitude: latitude, longitude: longitude));
+    return cells!.area(latitude: latitude, longitude: longitude);
+  }
 
   @override
   Future<Map<String, Map<String, dynamic>>> fetchStatuses(
@@ -92,8 +108,10 @@ class FakeHouseholdRepository implements HouseholdRepository {
     required String uid,
     required HouseholdModel household,
     required bool wasPrayed,
+    bool nameChanged = false,
   }) async {
     savedStatuses.add((uid: uid, householdId: household.id));
+    if (nameChanged) savedNames.add((id: household.id, name: household.residentName));
     final error = failWith;
     if (error != null) throw error;
   }

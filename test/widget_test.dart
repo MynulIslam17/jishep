@@ -230,8 +230,10 @@ void main() {
   group('HouseholdModel', () {
     test('status comparison ignores non-status fields', () {
       final a = household(1);
-      expect(a.hasSameStatusAs(a.copyWith(residentName: 'Other')), isTrue);
+      expect(a.hasSameStatusAs(a.copyWith(address: 'Other St')), isTrue);
       expect(a.hasSameStatusAs(a.copyWith(isVisited: true)), isFalse);
+      // The resident name is the user's own status (saved per user).
+      expect(a.hasSameStatusAs(a.withName('Suzanne')), isFalse);
     });
 
     test('clears follow-up date in Firestore data when follow-up is off', () {

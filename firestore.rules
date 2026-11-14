@@ -122,7 +122,7 @@ service cloud.firestore {
           && data().hasFollowUp is bool
           && optString('followUpDate', 64)
           && optString('notes', 2000)
-          && optString('residentName', 200)
+          && optString('residentName', 120)
           && optString('address', 300)
           && optTimestamp('prayedAt')
           && data().updatedAt == request.time;
@@ -167,6 +167,10 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if false;
     }
+
+    // Household cells from Overture (tool/overture_cells): one gzipped
+    // file per geohash cell. Written only with admin access (seed script).
+    match /cells/{id} { allow read: if request.auth != null; allow write: if false; }
 
     // Contact Support messages: users can send them, and read or delete
     // only their own (account deletion removes them). Admins use the

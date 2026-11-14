@@ -1,5 +1,8 @@
 abstract final class AppStrings {
   static const String appName = 'GPS PARA EL CIELO';
+
+  /// No household data exists for an area (Overture cells not loaded).
+  static const String areaUnavailable = "This area isn't available yet";
   static const String appTagline = 'Conectando hogares, alcanzando vidas.';
 
   // Auth Strings

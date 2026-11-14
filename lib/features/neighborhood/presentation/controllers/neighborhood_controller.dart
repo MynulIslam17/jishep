@@ -24,6 +24,9 @@ class NeighborhoodController extends GetxController {
   /// counts show as "N+").
   final areaComplete = false.obs;
 
+  /// No household data exists around the current center (cells).
+  final areaUnavailable = false.obs;
+
   /// True while households further out are being read.
   final isLoadingMore = false.obs;
 
@@ -129,6 +132,7 @@ class NeighborhoodController extends GetxController {
     households.assignAll(_service.households);
     areaHouseholds.assignAll(_service.areaHouseholds);
     areaComplete.value = _service.areaComplete.value;
+    areaUnavailable.value = _service.areaUnavailable.value;
     isLoadingMore.value = _service.isLoadingArea.value;
     rangeMeters.value = _service.rangeMeters.value;
     isLoading.value = _service.isLoading.value;
@@ -143,6 +147,7 @@ class NeighborhoodController extends GetxController {
       ever(_service.rangeMeters, (_) => _resetPaging()),
       ever(_service.areaHouseholds, _onArea),
       ever(_service.areaComplete, (bool c) => areaComplete.value = c),
+      ever(_service.areaUnavailable, (bool u) => areaUnavailable.value = u),
       ever(_service.isLoadingArea, (bool l) => isLoadingMore.value = l),
       ever(_service.rangeMeters, (double? m) => rangeMeters.value = m),
       ever(_service.households, households.assignAll),

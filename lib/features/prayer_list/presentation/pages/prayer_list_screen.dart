@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
@@ -83,6 +84,18 @@ class PrayerListScreen extends GetView<PrayerListController> {
               'Your daily prayer list is built from the households '
               'nearest your home.',
           actions: [_settingsButton('Add my address', Icons.home_outlined)],
+        ),
+      );
+    }
+    if (plan.cycleTotal == 0 && controller.homeUnavailable.value) {
+      return SliverToBoxAdapter(
+        child: AppNoticeCard(
+          icon: Icons.travel_explore_rounded,
+          title: AppStrings.areaUnavailable,
+          message:
+              'Household data for the area around '
+              '${controller.homeLabel.value} has not been added yet.',
+          actions: [_settingsButton('Home address', Icons.home_outlined)],
         ),
       );
     }

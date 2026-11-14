@@ -43,6 +43,9 @@ class HomeService {
   /// False while only part of the range has been read ("N+ in range").
   RxBool get areaComplete => _store.areaComplete;
 
+  /// No household data exists around the current center.
+  RxBool get areaUnavailable => _store.areaUnavailable;
+
   /// Shows the [homes] nearest households within the range. Not saved; the
   /// default number and the range are set in Settings > My preferences.
   Future<void> filterRadius(int? homes) => _store.filterRadius(homes);

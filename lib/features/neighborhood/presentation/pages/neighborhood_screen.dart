@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
@@ -155,9 +156,12 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 24.h),
           child: Text(
-            'No households in range yet. Search another place on Home, or '
-            'choose a larger search range in Profile \u203a Prayer '
-            'preferences.',
+            controller.areaUnavailable.value
+                ? '${AppStrings.areaUnavailable}. Search another place on '
+                      'Home.'
+                : 'No households in range yet. Search another place on '
+                      'Home, or choose a larger search range in Profile '
+                      '\u203a Prayer preferences.',
             textAlign: TextAlign.center,
             style: AppTypography.body(
               color: AppColors.textSecondary,

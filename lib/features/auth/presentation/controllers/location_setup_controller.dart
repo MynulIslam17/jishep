@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:gps_cielo/core/services/location_selection.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
@@ -196,21 +198,25 @@ class LocationSetupController extends GetxController {
   ) async {
     try {
       // Nearest first, reading only as far as the preview needs.
-      final search = _households.geoSearch(
-        latitude: location.latitude,
-        longitude: location.longitude,
-        radiusKm: km,
-      );
+      final AreaSearch search = FeatureFlags.useCellHouseholds
+          ? _households.cellArea(
+              latitude: location.latitude,
+              longitude: location.longitude,
+            )
+          : GeoSearchArea(
+              _households.geoSearch(
+                latitude: location.latitude,
+                longitude: location.longitude,
+                radiusKm: km,
+              ),
+            );
       await search.ensure(SearchRange.maxInRange);
       if (generation != _previewGeneration) return;
-      final docs = [
-        for (final hit in search.confirmed.take(SearchRange.maxInRange))
-          hit.doc,
-      ];
+      final records = search.records.take(SearchRange.maxInRange).toList();
       previewComplete.value = search.isComplete;
       previewHouseholds.assignAll([
-        for (var i = 0; i < docs.length; i++)
-          HouseholdModel.fromFirestore(doc: docs[i], number: i + 1),
+        for (var i = 0; i < records.length; i++)
+          HouseholdModel.fromRecord(record: records[i], number: i + 1),
       ]);
     } catch (_) {
       if (generation != _previewGeneration) return;

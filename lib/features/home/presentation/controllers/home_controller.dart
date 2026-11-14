@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -65,6 +66,9 @@ class HomeController extends GetxController {
   /// Every household within the range (the slider shows the nearest few).
   final foundInRange = 0.obs;
   final areaComplete = false.obs;
+
+  /// No household data exists around the current center (cells).
+  final areaUnavailable = false.obs;
   final isLoading = false.obs;
   final notificationCount = 0.obs;
 
@@ -92,6 +96,7 @@ class HomeController extends GetxController {
     nearbyHouseholds.assignAll(_homeService.households);
     foundInRange.value = _homeService.foundInRange.value;
     areaComplete.value = _homeService.areaComplete.value;
+    areaUnavailable.value = _homeService.areaUnavailable.value;
     rangeMeters.value = _homeService.rangeMeters.value;
     _applyRadius();
     isLoading.value = _homeService.isLoading.value;
@@ -113,6 +118,7 @@ class HomeController extends GetxController {
       ever(_homeService.households, nearbyHouseholds.assignAll),
       ever(_homeService.foundInRange, (int n) => foundInRange.value = n),
       ever(_homeService.areaComplete, (bool c) => areaComplete.value = c),
+      ever(_homeService.areaUnavailable, (bool u) => areaUnavailable.value = u),
       ever(_homeService.isLoading, (bool loading) => isLoading.value = loading),
       ever(_authController.currentUser, _applyUser),
     ]);
@@ -268,7 +274,9 @@ class HomeController extends GetxController {
       SnackbarService.showSuccess(
         'Search Updated',
         found == 0
-            ? 'No households found near this location yet'
+            ? (_homeService.areaUnavailable.value
+                  ? AppStrings.areaUnavailable
+                  : 'No households found near this location yet')
             : 'Found $found nearby households',
       );
     } catch (error) {

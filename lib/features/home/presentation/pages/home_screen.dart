@@ -215,6 +215,7 @@ class HomeScreen extends GetView<HomeController> {
                       isLoading: controller.isLoading.value,
                       foundInRange: controller.foundInRange.value,
                       rangeComplete: controller.areaComplete.value,
+                      areaUnavailable: controller.areaUnavailable.value,
                       onHouseholdTap: (household) =>
                           HouseholdDetailBottomSheet.show(
                             context,
@@ -573,6 +574,8 @@ class HomeScreen extends GetView<HomeController> {
             child: Text(
               loading
                   ? 'Finding nearby households...'
+                  : controller.areaUnavailable.value
+                  ? '${AppStrings.areaUnavailable}. Try another place.'
                   : controller.hasSearchCenter.value
                   ? 'No households within '
                         '${SearchRange.formatDistance(controller.rangeMeters.value ?? 0)} '

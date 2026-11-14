@@ -23,6 +23,9 @@ class NeighborhoodService {
   /// True once every household within the range has been read.
   RxBool get areaComplete => _store.areaComplete;
 
+  /// No household data exists around the current center.
+  RxBool get areaUnavailable => _store.areaUnavailable;
+
   RxBool get isLoadingArea => _store.isLoadingArea;
 
   /// Reads further out until [count] households are known.

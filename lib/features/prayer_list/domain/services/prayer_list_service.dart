@@ -101,6 +101,9 @@ class PrayerListService {
 
   RxnDouble get rangeMeters => _store.rangeMeters;
 
+  /// No household data exists around the saved home.
+  RxBool get homeUnavailable => _store.homeUnavailable;
+
   /// Reloads "my neighborhood" (around the saved home).
   Future<void> refreshHouseholds() => _store.refreshHome();
 

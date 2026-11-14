@@ -1,9 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gps_cielo/core/data/geo_record.dart';
 
 class HouseholdModel {
   final String id;
   final int number;
-  final String residentName;
+
+  /// The name the user gave this household (private to them, stored in
+  /// their `household_status/{id}`), or null when none was set.
+  final String? residentName;
   final String address;
   final String cityStateZip;
   final bool isPrayed;
@@ -21,7 +25,7 @@ class HouseholdModel {
   HouseholdModel({
     required this.id,
     required this.number,
-    required this.residentName,
+    String? residentName,
     required this.address,
     this.cityStateZip = '',
     this.isPrayed = false,
@@ -35,7 +39,54 @@ class HouseholdModel {
     this.longitude = 0,
     this.prayedAt,
     this.updatedAt,
-  });
+  }) : residentName = cleanName(residentName);
+
+  /// Longest resident name stored (Firestore rules allow 120).
+  static const int maxNameLength = 120;
+
+  /// Shown when the user has not named the household.
+  static const String unnamed = 'Neighbor';
+
+  static final RegExp _placeholder = RegExp(
+    r'^(resident|neighbor|demo household \d{3})$',
+    caseSensitive: false,
+  );
+
+  /// A name as stored: trimmed and at most [maxNameLength] characters, or
+  /// null when empty or a placeholder ("Resident", "Neighbor", "Demo
+  /// Household NNN" — written by older versions, not by the user).
+  static String? cleanName(Object? raw) {
+    final name = raw?.toString().trim() ?? '';
+    if (name.isEmpty || _placeholder.hasMatch(name)) return null;
+    return name.length > maxNameLength
+        ? name.substring(0, maxNameLength).trim()
+        : name;
+  }
+
+  /// The title shown for the household: its name, or "Neighbor".
+  String get displayName => residentName ?? unnamed;
+
+  /// A copy with [name] as the resident name (null or empty removes it).
+  HouseholdModel withName(String? name) {
+    return HouseholdModel(
+      id: id,
+      number: number,
+      residentName: name,
+      address: address,
+      cityStateZip: cityStateZip,
+      isPrayed: isPrayed,
+      isVisited: isVisited,
+      isInvited: isInvited,
+      hasFollowUp: hasFollowUp,
+      followUpDate: followUpDate,
+      lastUpdated: lastUpdated,
+      notes: notes,
+      latitude: latitude,
+      longitude: longitude,
+      prayedAt: prayedAt,
+      updatedAt: updatedAt,
+    );
+  }
 
   String get fullAddress =>
       cityStateZip.isEmpty ? address : '$address, $cityStateZip';
@@ -82,7 +133,7 @@ class HouseholdModel {
     return HouseholdModel(
       id: id,
       number: number,
-      residentName: status['residentName']?.toString() ?? 'Resident',
+      residentName: status['residentName']?.toString(),
       address: status['address']?.toString() ?? '',
       isPrayed: prayedInCycle(status, cycleStart),
       isVisited: status['isVisited'] == true,
@@ -112,11 +163,40 @@ class HouseholdModel {
     return HouseholdModel(
       id: doc.id,
       number: number,
-      residentName: data['residentName']?.toString() ?? 'Resident',
+      residentName: status?['residentName']?.toString(),
       address: data['address']?.toString() ?? '',
       cityStateZip: data['cityStateZip']?.toString() ?? '',
       latitude: geopoint is GeoPoint ? geopoint.latitude : 0,
       longitude: geopoint is GeoPoint ? geopoint.longitude : 0,
+      isPrayed: prayedInCycle(status, cycleStart),
+      isVisited: status?['isVisited'] == true,
+      isInvited: status?['isInvited'] == true,
+      hasFollowUp: status?['hasFollowUp'] == true,
+      followUpDate: status?['followUpDate']?.toString(),
+      notes: status?['notes']?.toString(),
+      prayedAt: _toDate(status?['prayedAt']),
+      updatedAt: updatedAt,
+      lastUpdated: _describeUpdatedAt(updatedAt),
+    );
+  }
+
+  /// Builds a household from a [GeoRecord] (a `households` document or an
+  /// Overture cell entry) merged with the signed-in user's status document.
+  factory HouseholdModel.fromRecord({
+    required GeoRecord record,
+    Map<String, dynamic>? status,
+    required int number,
+    DateTime? cycleStart,
+  }) {
+    final updatedAt = _toDate(status?['updatedAt']);
+    return HouseholdModel(
+      id: record.id,
+      number: number,
+      residentName: status?['residentName']?.toString(),
+      address: record.address,
+      cityStateZip: record.cityStateZip,
+      latitude: record.latitude,
+      longitude: record.longitude,
       isPrayed: prayedInCycle(status, cycleStart),
       isVisited: status?['isVisited'] == true,
       isInvited: status?['isInvited'] == true,
@@ -135,7 +215,7 @@ class HouseholdModel {
       number: json['number'] is int
           ? json['number']
           : int.tryParse(json['number']?.toString() ?? '1') ?? 1,
-      residentName: json['residentName']?.toString() ?? 'Resident',
+      residentName: json['residentName']?.toString(),
       address: json['address']?.toString() ?? '',
       cityStateZip: json['cityStateZip']?.toString() ?? '',
       isPrayed: json['isPrayed'] == true,
@@ -170,6 +250,8 @@ class HouseholdModel {
   }
 
   /// The per-user fields written to `users/{uid}/household_status/{id}`.
+  /// `residentName` is not included: it is written only when the user
+  /// changes it (see `HouseholdRepository.saveStatus`).
   Map<String, dynamic> toStatusFirestore() {
     return {
       'isPrayed': isPrayed,
@@ -178,7 +260,6 @@ class HouseholdModel {
       'hasFollowUp': hasFollowUp,
       'followUpDate': hasFollowUp ? followUpDate : null,
       'notes': notes,
-      'residentName': residentName,
       'address': fullAddress,
     };
   }
@@ -189,7 +270,8 @@ class HouseholdModel {
         isInvited == other.isInvited &&
         hasFollowUp == other.hasFollowUp &&
         followUpDate == other.followUpDate &&
-        notes == other.notes;
+        notes == other.notes &&
+        residentName == other.residentName;
   }
 
   HouseholdModel copyWith({

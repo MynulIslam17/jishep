@@ -4,6 +4,7 @@ import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
+import 'package:gps_cielo/shared/widgets/dialogs/resident_name_dialog.dart';
 
 class HouseholdDetailBottomSheet extends StatefulWidget {
   final HouseholdModel household;
@@ -167,6 +168,18 @@ class _HouseholdDetailBottomSheetState
     }
   }
 
+  Future<void> _editName() async {
+    final result = await ResidentNameDialog.show(
+      context,
+      initialName: _currentHousehold.residentName,
+    );
+    if (result == null || !mounted) return; // cancelled
+    if (result.name == _currentHousehold.residentName) return;
+    final updated = _currentHousehold.withName(result.name);
+    setState(() => _currentHousehold = updated);
+    widget.onUpdated?.call(updated);
+  }
+
   void _saveNotes() {
     _notesFocusNode.unfocus();
     final text = _notesController.text.trim();
@@ -230,7 +243,7 @@ class _HouseholdDetailBottomSheetState
                 children: [
                   Expanded(
                     child: Text(
-                      item.residentName,
+                      item.displayName,
                       style: AppTypography.heading(
                         color: AppColors.primaryNavy,
                         fontSize: 18.sp,
@@ -286,7 +299,7 @@ class _HouseholdDetailBottomSheetState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          item.residentName,
+                          item.displayName,
                           style: AppTypography.heading(
                             color: AppColors.textPrimary,
                             fontSize: 16.sp,
@@ -310,6 +323,34 @@ class _HouseholdDetailBottomSheetState
                             fontSize: 12.sp,
                           ),
                         ),
+                        if (widget.onUpdated != null)
+                          TextButton.icon(
+                            key: const ValueKey('household-edit-name'),
+                            onPressed: _editName,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primaryNavy,
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size(0, 32.h),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: Icon(
+                              item.residentName == null
+                                  ? Icons.person_add_alt_1_rounded
+                                  : Icons.edit_rounded,
+                              size: 16.r,
+                            ),
+                            label: Text(
+                              item.residentName == null
+                                  ? 'Add name'
+                                  : 'Edit name',
+                              style: AppTypography.body(
+                                color: AppColors.primaryNavy,
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
 
                         // Status Badges (Follow up / Visited / Invited)
                         if (item.hasFollowUp ||

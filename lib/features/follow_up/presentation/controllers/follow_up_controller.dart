@@ -110,7 +110,7 @@ class FollowUpController extends GetxController {
     final shown = query.isEmpty
         ? result
         : result.where((h) {
-            return h.residentName.toLowerCase().contains(query) ||
+            return (h.residentName ?? '').toLowerCase().contains(query) ||
                 h.address.toLowerCase().contains(query) ||
                 (h.notes ?? '').toLowerCase().contains(query);
           }).toList();

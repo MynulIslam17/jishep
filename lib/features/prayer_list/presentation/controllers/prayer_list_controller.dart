@@ -24,6 +24,9 @@ class PrayerListController extends GetxController {
   /// Search range from Settings, in meters.
   final rangeMeters = RxnDouble();
 
+  /// No household data exists around the saved home (cells).
+  final homeUnavailable = false.obs;
+
   /// The saved home address, for messages ("within 5 km of Demra").
   final homeLabel = 'your home'.obs;
 
@@ -48,6 +51,7 @@ class PrayerListController extends GetxController {
       ever(_service.neighborhood, (_) => _rebuild()),
       ever(_authController.currentUser, (_) => _rebuild()),
       ever(_service.rangeMeters, (_) => _rebuild()),
+      ever(_service.homeUnavailable, (_) => _rebuild()),
       ever(_service.isLoading, (bool loading) {
         isLoading.value = loading;
         if (!loading) _maybeStartNewRound();
@@ -88,6 +92,7 @@ class PrayerListController extends GetxController {
     final address = user?.address.trim() ?? '';
     homeLabel.value = address.isEmpty ? 'your home' : address;
     rangeMeters.value = _service.rangeMeters.value;
+    homeUnavailable.value = _service.homeUnavailable.value;
     plan.value = PrayerListService.buildPlan(
       _service.neighborhood,
       user?.dailyPrayerTarget ?? 5,

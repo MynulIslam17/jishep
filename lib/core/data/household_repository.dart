@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gps_cielo/core/data/cell_source.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/constants/firestore_paths.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
@@ -23,8 +24,23 @@ class StatusPage {
 class HouseholdRepository {
   final FirebaseFirestore _db;
 
-  HouseholdRepository({FirebaseFirestore? firestore})
-    : _db = firestore ?? FirebaseFirestore.instance;
+  HouseholdRepository({
+    FirebaseFirestore? firestore,
+    FirestoreCellSource? cellSource,
+  }) : _db = firestore ?? FirebaseFirestore.instance,
+       _cellSource = cellSource;
+
+  FirestoreCellSource? _cellSource;
+
+  /// Overture cells (`cells/{prefix}`), created on first use.
+  FirestoreCellSource get cellSource => _cellSource ??= FirestoreCellSource(
+    reader: FirestoreCellReader(firestore: _db),
+  );
+
+  /// The nearest households around a point from the Overture cells
+  /// (used when `FeatureFlags.useCellHouseholds` is on).
+  CellArea cellArea({required double latitude, required double longitude}) =>
+      cellSource.area(latitude: latitude, longitude: longitude);
 
   CollectionReference<Map<String, dynamic>> get _households =>
       _db.collection(FirestorePaths.households);
@@ -198,15 +214,22 @@ class HouseholdRepository {
     }
   }
 
+  /// Writes the user's status for [household] (merge: fields not written
+  /// are kept). The resident name is written only when [nameChanged]: the
+  /// new name, or deleted when removed.
   Future<void> saveStatus({
     required String uid,
     required HouseholdModel household,
     required bool wasPrayed,
+    bool nameChanged = false,
   }) {
     final data = <String, dynamic>{
       ...household.toStatusFirestore(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
+    if (nameChanged) {
+      data['residentName'] = household.residentName ?? FieldValue.delete();
+    }
     if (household.isPrayed && !wasPrayed) {
       // Client time so "prayed today" is correct before the write syncs.
       data['prayedAt'] = Timestamp.now();

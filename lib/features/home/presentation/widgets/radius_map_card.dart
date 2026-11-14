@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
@@ -29,6 +30,7 @@ class RadiusMapCard extends StatefulWidget {
     this.isLoading = false,
     this.foundInRange,
     this.rangeComplete = true,
+    this.areaUnavailable = false,
     this.onHouseholdTap,
     this.onExpand,
     super.key,
@@ -68,6 +70,10 @@ class RadiusMapCard extends StatefulWidget {
   /// False when only the nearest part of the range was read: the count is
   /// then shown as a lower bound ("200+ in range").
   final bool rangeComplete;
+
+  /// No household data exists for this area: the label says so instead of
+  /// "No homes within …".
+  final bool areaUnavailable;
   final ValueChanged<HouseholdModel>? onHouseholdTap;
 
   /// Opens the full neighborhood map.
@@ -261,13 +267,15 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
           ),
           SizedBox(height: 2.h),
           Text(
-            SearchRange.label(
-              shown: widget.isLoading ? value : widget.households.length,
-              requested: value,
-              rangeKm: rangeMeters == null || widget.isLoading
-                  ? null
-                  : rangeMeters / 1000,
-            ),
+            widget.areaUnavailable && !widget.isLoading
+                ? AppStrings.areaUnavailable
+                : SearchRange.label(
+                    shown: widget.isLoading ? value : widget.households.length,
+                    requested: value,
+                    rangeKm: rangeMeters == null || widget.isLoading
+                        ? null
+                        : rangeMeters / 1000,
+                  ),
             key: const ValueKey('radius-value'),
             style: AppTypography.heading(
               color: AppColors.primaryNavy,
