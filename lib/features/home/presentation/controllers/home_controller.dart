@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
@@ -69,6 +70,11 @@ class HomeController extends GetxController {
 
   /// No household data exists around the current center (cells).
   final areaUnavailable = false.obs;
+
+  /// Today's prayers (as on the Prayer List): prayed so far / daily goal.
+  /// The goal is 0 while there is no neighborhood.
+  final todayPrayed = 0.obs;
+  final todayGoal = 0.obs;
   final isLoading = false.obs;
   final notificationCount = 0.obs;
 
@@ -90,6 +96,15 @@ class HomeController extends GetxController {
   StreamSubscription<int>? _unreadSubscription;
   String? _lastAppliedAddress;
 
+  void _updateToday() {
+    final plan = PrayerListService.buildPlan(
+      _homeService.neighborhood,
+      _authController.currentUser.value?.dailyPrayerTarget ?? 5,
+    );
+    todayPrayed.value = plan.countedToday;
+    todayGoal.value = plan.todayGoal;
+  }
+
   @override
   void onInit() {
     super.onInit();
@@ -104,6 +119,7 @@ class HomeController extends GetxController {
     // controller is (re)created, and the field must show that place.
     _applyCenter(_homeService.center.value);
     _applyUser(_authController.currentUser.value);
+    _updateToday();
     final center = _homeService.center.value;
     if (center != null && center.isTemporary) {
       searchAddressController.text = center.label;
@@ -121,6 +137,8 @@ class HomeController extends GetxController {
       ever(_homeService.areaUnavailable, (bool u) => areaUnavailable.value = u),
       ever(_homeService.isLoading, (bool loading) => isLoading.value = loading),
       ever(_authController.currentUser, _applyUser),
+      ever(_homeService.neighborhood, (_) => _updateToday()),
+      ever(_authController.currentUser, (_) => _updateToday()),
     ]);
 
     _unreadSubscription = _homeService.watchUnreadNotificationCount().listen(

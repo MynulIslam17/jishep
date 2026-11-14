@@ -160,7 +160,9 @@ void main() {
       store = HouseholdStore(repository, FakeNotificationRepository());
     });
 
-    tearDown(() => FeatureFlags.useCellHouseholds = false);
+    tearDown(
+      () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+    );
 
     HouseholdModel byId(List<HouseholdModel> list, String id) =>
         list.firstWhere((h) => h.id == id);
@@ -234,18 +236,43 @@ void main() {
   });
 
   group('Household sheet: Add / Edit name', () {
-    Widget app(HouseholdModel h, ValueChanged<HouseholdModel> onUpdated) =>
-        ScreenUtilInit(
-          designSize: const Size(393, 852),
-          builder: (context, _) => MaterialApp(
-            home: Scaffold(
-              body: HouseholdDetailBottomSheet(
-                household: h,
-                onUpdated: onUpdated,
-              ),
-            ),
+    Widget app(
+      HouseholdModel h,
+      ValueChanged<HouseholdModel> onUpdated, {
+      ({double latitude, double longitude})? from,
+    }) => ScreenUtilInit(
+      designSize: const Size(393, 852),
+      builder: (context, _) => MaterialApp(
+        home: Scaffold(
+          body: HouseholdDetailBottomSheet(
+            household: h,
+            onUpdated: onUpdated,
+            from: from,
           ),
-        );
+        ),
+      ),
+    );
+
+    testWidgets('name or "Neighbor", address, city line, distance', (
+      tester,
+    ) async {
+      final h = _home().copyWith(latitude: 32.7457, longitude: -116.9989);
+      await tester.pumpWidget(
+        app(h, (_) {}, from: (latitude: 32.7448, longitude: -116.9989)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Neighbor'), findsWidgets);
+      expect(find.text('3510 HELIX ST'), findsOneWidget);
+      expect(find.text('SPRING VALLEY, CA 91977'), findsOneWidget);
+      expect(find.text('100 m from home'), findsOneWidget);
+      expect(find.text('Add name'), findsOneWidget);
+    });
+
+    testWidgets('no home location: no distance', (tester) async {
+      await tester.pumpWidget(app(_home(), (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('household-distance')), findsNothing);
+    });
 
     testWidgets('unnamed: "Neighbor", Add name → Save', (tester) async {
       HouseholdModel? saved;

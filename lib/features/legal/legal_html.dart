@@ -179,14 +179,15 @@ $features
     (
       'No households appear near me.',
       'Check that your home address is correct (Profile > My address). '
-          'Then increase the search range in Profile > Prayer preferences. '
-          'Households are only shown where listings exist, so some areas may '
-          'have none yet.',
+          'Households come from open address data and are available in some '
+          'US states so far; elsewhere the app shows "This area isn\'t '
+          'available yet". We are adding more states soon.',
     ),
     (
       'How do I change my neighborhood or how many homes I pray for?',
-      'Go to Profile > Prayer preferences to set your daily prayer goal, '
-          'the number of homes in your neighborhood and the search range. '
+      'Go to Profile > Prayer preferences to set your daily prayer goal '
+          'and the number of homes in your neighborhood (your nearest 5 to '
+          '50). '
           'You can also search another place on the Home screen without '
           'changing your home address.',
     ),

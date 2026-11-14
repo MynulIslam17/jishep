@@ -4,6 +4,13 @@ import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   test('household counts: 5 to 25, then 50 (the largest)', () {
     expect(SearchRange.options, [5, 10, 15, 20, 25, 50]);
     expect(SearchRange.maxHomes, 50);
@@ -113,7 +120,9 @@ void main() {
 
   group('with cell households (no km range)', () {
     setUp(() => FeatureFlags.useCellHouseholds = true);
-    tearDown(() => FeatureFlags.useCellHouseholds = false);
+    tearDown(
+      () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+    );
 
     test('labels never mention a distance', () {
       expect(SearchRange.userChoosesRange, isFalse);

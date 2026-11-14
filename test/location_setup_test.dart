@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/data/cell_source.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -13,6 +14,7 @@ import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller
 import 'package:gps_cielo/features/auth/presentation/controllers/location_setup_controller.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/location_setup_screen.dart';
 
+import 'support/fake_cell_reader.dart';
 import 'support/synthetic_households.dart';
 
 class _Households implements HouseholdRepository {
@@ -46,6 +48,16 @@ class _Households implements HouseholdRepository {
       maxMeters: radiusKm * 1000,
     );
   }
+
+  /// Overture cells (an empty server = no data anywhere).
+  final cells = FakeCellReader();
+
+  @override
+  CellArea cellArea({required double latitude, required double longitude}) =>
+      FirestoreCellSource(
+        reader: cells,
+        misses: MemoryCellMissCache(),
+      ).area(latitude: latitude, longitude: longitude);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -116,6 +128,13 @@ const demra = AddressSuggestion(
 );
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => Get.testMode = true);
   tearDown(Get.reset);
@@ -349,7 +368,10 @@ void main() {
 
     testWidgets('with cell households there is no km step', (tester) async {
       FeatureFlags.useCellHouseholds = true;
-      addTearDown(() => FeatureFlags.useCellHouseholds = false);
+      addTearDown(
+        () =>
+            FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+      );
       final c = await tester.runAsync(make);
       await pump(tester, c!);
       await tester.scrollUntilVisible(
@@ -393,6 +415,88 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('goal-10')));
       await tester.pump();
       expect(c.dailyGoal.value, 10);
+    });
+
+    group('nearest-N neighborhood (the default)', () {
+      setUp(() => FeatureFlags.useCellHouseholds = true);
+
+      const springValley = AddressSuggestion(
+        title: '3510 Helix St',
+        subtitle: 'Spring Valley, CA',
+        latitude: 32.7448,
+        longitude: -116.9989,
+      );
+
+      testWidgets('address, goal, then a preview of the nearest homes', (
+        tester,
+      ) async {
+        final c = await tester.runAsync(make);
+        households.cells.seed([
+          for (var i = 0; i < 12; i++)
+            (
+              id: 'h$i',
+              lat: springValley.latitude + 0.0003 * (i + 1),
+              lng: springValley.longitude,
+            ),
+        ]);
+        c!.selectSuggestion(springValley);
+        await tester.runAsync(settle);
+        await pump(tester, c);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('cycle-days')),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        // No km step anywhere; the goal is step 2, the preview step 3.
+        expect(find.text('Neighborhood range'), findsNothing);
+        expect(find.textContaining(' km'), findsNothing);
+        expect(find.text('Your neighborhood'), findsOneWidget);
+        expect(find.byKey(const ValueKey('preview-count')), findsOneWidget);
+        expect(find.text('12 homes nearby'), findsOneWidget);
+        // The first 5 homes: "Neighbor", address, distance.
+        expect(find.byKey(const ValueKey('preview-home-h0')), findsOneWidget);
+        expect(find.byKey(const ValueKey('preview-home-h5')), findsNothing);
+        expect(find.text('Neighbor'), findsNWidgets(5));
+        expect(find.text('30 m'), findsOneWidget);
+        expect(find.text('and 7 more'), findsOneWidget);
+        expect(
+          find.text('You\u2019ll pray for all 12 neighbors in about 3 days.'),
+          findsOneWidget,
+        );
+        expect(households.calls, isEmpty, reason: 'no `households` reads');
+      });
+
+      testWidgets('outside the loaded area: "not available yet", and setup '
+          'can still be finished', (tester) async {
+        final c = await tester.runAsync(make);
+        await tester.runAsync(() async {
+          c!.selectSuggestion(demra);
+          await settle(); // the preview starts after the change event
+          for (var i = 0; i < 100 && c.isLoadingPreview.value; i++) {
+            await settle();
+          }
+        });
+        await pump(tester, c!);
+        for (var i = 0; i < 3; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(c.isLoadingPreview.value, isFalse);
+        expect(c.previewUnavailable.value, isTrue);
+        expect(find.text("This area isn't available yet"), findsWidgets);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('preview-unavailable')),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          find.textContaining("We're adding more states soon."),
+          findsOneWidget,
+        );
+        expect(households.calls, isEmpty, reason: 'no Bangladesh demo data');
+
+        await tester.runAsync(c.confirmLocation);
+        expect(service.saved, isNotNull, reason: 'setup saved the home');
+      });
     });
   });
 }

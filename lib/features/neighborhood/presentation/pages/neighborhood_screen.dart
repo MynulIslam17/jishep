@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -71,12 +73,16 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
               final inRange = controller.areaComplete.value
                   ? '$total'
                   : '$total+';
+              // Nearest-N neighborhoods have no range: "50 nearby".
+              final where = SearchRange.userChoosesRange
+                  ? 'in range'
+                  : 'nearby';
               final String title;
               final String detail;
               if (controller.showAllInRange.value) {
                 title =
                     '$inRange ${total == 1 ? 'household' : 'households'} '
-                    'in range';
+                    '$where';
                 detail = 'Nearest first \u2022 showing $shown';
               } else {
                 final n = controller.households.length;
@@ -85,7 +91,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
                     : '$n ${n == 1 ? 'home' : 'homes'} in your neighborhood';
                 detail = total == 0
                     ? 'Nearest first'
-                    : 'Nearest first \u2022 $inRange in range';
+                    : 'Nearest first \u2022 $inRange $where';
               }
               return Column(
                 mainAxisSize: MainAxisSize.min,
@@ -155,18 +161,30 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
       return SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 24.h),
-          child: Text(
-            controller.areaUnavailable.value
-                ? '${AppStrings.areaUnavailable}. Search another place on '
-                      'Home.'
-                : 'No households in range yet. Search another place on '
-                      'Home, or choose a larger search range in Profile '
-                      '\u203a Prayer preferences.',
-            textAlign: TextAlign.center,
-            style: AppTypography.body(
-              color: AppColors.textSecondary,
-              fontSize: 13.sp,
-            ),
+          child: Column(
+            children: [
+              Text(
+                controller.areaUnavailable.value
+                    ? '${AppStrings.areaUnavailable}. '
+                          '${AppStrings.areaComingSoon} Search another place on '
+                          'Home, or change your home address.'
+                    : SearchRange.userChoosesRange
+                    ? 'No households in range yet. Search another place on '
+                          'Home, or choose a larger search range in Profile '
+                          '\u203a Prayer preferences.'
+                    : 'No households near this location yet. Search another '
+                          'place on Home.',
+                textAlign: TextAlign.center,
+                style: AppTypography.body(
+                  color: AppColors.textSecondary,
+                  fontSize: 13.sp,
+                ),
+              ),
+              if (controller.areaUnavailable.value) ...[
+                SizedBox(height: 12.h),
+                ChangeHomeAddress.button(),
+              ],
+            ],
           ),
         ),
       );
@@ -227,7 +245,9 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
               key: const ValueKey('browse-all'),
               onPressed: () => controller.setShowAllInRange(true),
               child: Text(
-                'Browse all $inRange in range',
+                SearchRange.userChoosesRange
+                    ? 'Browse all $inRange in range'
+                    : 'Browse all $inRange nearby',
                 style: AppTypography.label(
                   color: AppColors.primaryNavy,
                   fontSize: 13.sp,

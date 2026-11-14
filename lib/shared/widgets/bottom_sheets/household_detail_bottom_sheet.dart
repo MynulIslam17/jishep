@@ -3,7 +3,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:get/get.dart';
+import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/shared/widgets/dialogs/resident_name_dialog.dart';
 
 class HouseholdDetailBottomSheet extends StatefulWidget {
@@ -12,11 +15,15 @@ class HouseholdDetailBottomSheet extends StatefulWidget {
   final VoidCallback? onPrayToggle;
   final bool initialOpenNotes;
 
+  /// Where the distance is measured from; by default the saved home.
+  final ({double latitude, double longitude})? from;
+
   const HouseholdDetailBottomSheet({
     required this.household,
     this.onUpdated,
     this.onPrayToggle,
     this.initialOpenNotes = false,
+    this.from,
     super.key,
   });
 
@@ -195,9 +202,28 @@ class _HouseholdDetailBottomSheetState
     widget.onUpdated?.call(updated);
   }
 
+  /// "120 m from home", or null without a home or household location.
+  String? _distanceText(HouseholdModel item) {
+    final from =
+        widget.from ??
+        (Get.isRegistered<HouseholdStore>()
+            ? Get.find<HouseholdStore>().homePoint
+            : null);
+    if (from == null) return null;
+    final meters = SearchRange.distanceMeters(
+      from.latitude,
+      from.longitude,
+      item.latitude,
+      item.longitude,
+    );
+    if (meters == null) return null;
+    return '${SearchRange.formatHomeDistance(meters)} from home';
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = _currentHousehold;
+    final distance = _distanceText(item);
     final showNotesSection = _isFollowUpOpen;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
@@ -323,6 +349,15 @@ class _HouseholdDetailBottomSheetState
                             fontSize: 12.sp,
                           ),
                         ),
+                        if (distance != null)
+                          Text(
+                            distance,
+                            key: const ValueKey('household-distance'),
+                            style: AppTypography.body(
+                              color: const Color(0xFF94A3B8),
+                              fontSize: 12.sp,
+                            ),
+                          ),
                         if (widget.onUpdated != null)
                           TextButton.icon(
                             key: const ValueKey('household-edit-name'),

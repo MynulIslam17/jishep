@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
@@ -11,6 +12,13 @@ import 'package:gps_cielo/features/neighborhood/presentation/pages/neighborhood_
 import 'support/fake_household_repository.dart';
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   setUp(() => Get.testMode = true);
   tearDown(Get.reset);
 

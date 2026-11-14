@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/core/utils/system_ui_config.dart';
@@ -57,6 +59,11 @@ class LocationSetupScreen extends GetView<LocationSetupController> {
                       SizedBox(height: 14.h),
                     ],
                     const _GoalSection(),
+                    // Nearest-N neighborhood: preview it after the goal.
+                    if (!SearchRange.userChoosesRange) ...[
+                      SizedBox(height: 14.h),
+                      const _PreviewSection(),
+                    ],
                     SizedBox(height: 10.h),
                     _signOutLink(),
                   ],
@@ -694,7 +701,7 @@ class _GoalSection extends GetView<LocationSetupController> {
                   ),
               ],
             ),
-            if (days != null) ...[
+            if (days != null && SearchRange.userChoosesRange) ...[
               SizedBox(height: 12.h),
               Row(
                 children: [
@@ -733,6 +740,175 @@ class _GoalSection extends GetView<LocationSetupController> {
           ],
         );
       }),
+    );
+  }
+}
+
+/// Step 3 (nearest-N neighborhood): the homes the user will pray for, the
+/// first few with their distance, and how long one round takes.
+class _PreviewSection extends GetView<LocationSetupController> {
+  const _PreviewSection();
+
+  static const int _shown = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Section(
+      step: 3,
+      title: 'Your neighborhood',
+      subtitle:
+          'The nearest ${controller.neighborhoodHomes} homes to your '
+          'address. You\u2019ll pray for each of them, a few a day.',
+      child: Obx(() {
+        final secondary = AppTypography.body(
+          color: AppColors.textSecondary,
+          fontSize: 12.5.sp,
+        );
+        if (!controller.hasLocation) {
+          return Text(
+            'Pick your address to see your neighbors.',
+            key: const ValueKey('preview-empty'),
+            style: secondary,
+          );
+        }
+        if (controller.isLoadingPreview.value) {
+          return Row(
+            children: [
+              SizedBox(
+                width: 16.r,
+                height: 16.r,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 10.w),
+              Text('Finding your nearest neighbors\u2026', style: secondary),
+            ],
+          );
+        }
+        if (controller.previewUnavailable.value) {
+          return Row(
+            key: const ValueKey('preview-unavailable'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.travel_explore_rounded,
+                size: 18.r,
+                color: AppColors.primaryGold,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  '${AppStrings.areaUnavailable}. ${AppStrings.areaComingSoon} '
+                  'You can still finish setup now.',
+                  style: secondary,
+                ),
+              ),
+            ],
+          );
+        }
+        if (controller.previewError.value) {
+          return Text(
+            'Could not load your neighbors. Use Retry on the map.',
+            style: secondary,
+          );
+        }
+        final homes = controller.previewHouseholds;
+        if (homes.isEmpty) {
+          return Text('No households near this address yet.', style: secondary);
+        }
+        final days = controller.cycleDays;
+        final more = homes.length - _shown;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              homes.length >= controller.neighborhoodHomes
+                  ? 'The nearest ${homes.length} homes'
+                  : '${homes.length} ${homes.length == 1 ? 'home' : 'homes'} '
+                        'nearby',
+              key: const ValueKey('preview-count'),
+              style: AppTypography.heading(
+                color: AppColors.primaryNavy,
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            for (final h in homes.take(_shown)) _homeRow(h),
+            if (more > 0)
+              Padding(
+                padding: EdgeInsets.only(top: 4.h),
+                child: Text('and $more more', style: secondary),
+              ),
+            if (days != null) ...[
+              SizedBox(height: 10.h),
+              Row(
+                children: [
+                  Icon(
+                    Icons.event_repeat_rounded,
+                    size: 16.r,
+                    color: AppColors.primaryGold,
+                  ),
+                  SizedBox(width: 6.w),
+                  Expanded(
+                    child: Text(
+                      'You\u2019ll pray for all ${homes.length} neighbors in '
+                      'about $days ${days == 1 ? 'day' : 'days'}.',
+                      key: const ValueKey('cycle-days'),
+                      style: secondary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _homeRow(HouseholdModel h) {
+    final meters = controller.distanceTo(h);
+    return Padding(
+      key: ValueKey('preview-home-${h.id}'),
+      padding: EdgeInsets.symmetric(vertical: 4.h),
+      child: Row(
+        children: [
+          Icon(Icons.home_outlined, size: 16.r, color: AppColors.textSecondary),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  h.displayName,
+                  style: AppTypography.label(
+                    color: AppColors.textPrimary,
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  h.address,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.body(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (meters != null)
+            Text(
+              SearchRange.formatHomeDistance(meters),
+              style: AppTypography.body(
+                color: AppColors.textSecondary,
+                fontSize: 12.sp,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

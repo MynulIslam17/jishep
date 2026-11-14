@@ -107,6 +107,32 @@ abstract final class SearchRange {
 
   static String formatKm(double km) => formatDistance(km * 1000);
 
+  /// Meters between two points, or null when either has no location (0, 0).
+  static double? distanceMeters(
+    double fromLatitude,
+    double fromLongitude,
+    double toLatitude,
+    double toLongitude,
+  ) {
+    if ((fromLatitude == 0 && fromLongitude == 0) ||
+        (toLatitude == 0 && toLongitude == 0)) {
+      return null;
+    }
+    return const Distance().as(
+      LengthUnit.Meter,
+      LatLng(fromLatitude, fromLongitude),
+      LatLng(toLatitude, toLongitude),
+    );
+  }
+
+  /// How far a home is: "30 m", "450 m", "1.2 km", "14 km".
+  static String formatHomeDistance(double meters) {
+    final rounded = math.max(10, (meters / 10).round() * 10);
+    if (rounded < 1000) return '$rounded m';
+    final km = meters / 1000;
+    return km < 10 ? '${km.toStringAsFixed(1)} km' : '${km.round()} km';
+  }
+
   /// "Nearest 10 homes within 5 km", "3 homes within 5 km" when fewer
   /// exist, "No homes within 5 km". Without a range (unknown yet, or not
   /// chosen by the user — see [userChoosesRange]): "Nearest 10 homes", or

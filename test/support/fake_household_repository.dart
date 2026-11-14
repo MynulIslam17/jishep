@@ -111,7 +111,9 @@ class FakeHouseholdRepository implements HouseholdRepository {
     bool nameChanged = false,
   }) async {
     savedStatuses.add((uid: uid, householdId: household.id));
-    if (nameChanged) savedNames.add((id: household.id, name: household.residentName));
+    if (nameChanged) {
+      savedNames.add((id: household.id, name: household.residentName));
+    }
     final error = failWith;
     if (error != null) throw error;
   }

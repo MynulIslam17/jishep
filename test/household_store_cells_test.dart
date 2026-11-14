@@ -49,7 +49,9 @@ void main() {
     store = HouseholdStore(repository, FakeNotificationRepository());
   });
 
-  tearDown(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
 
   test('households come from the cells, nearest first, up to 50', () async {
     reader.seed(_homes(120));
@@ -106,6 +108,9 @@ void main() {
     expect(store.areaComplete.value, isTrue);
     expect(store.areaUnavailable.value, isTrue);
     expect(store.homeUnavailable.value, isTrue);
+    // Never the old `households` collection (Bangladesh demo data).
+    expect(repository.fetches, isEmpty);
+    expect(store.homeHouseholds, isEmpty);
   });
 
   test('a cell elsewhere is not "unavailable", just few homes', () async {

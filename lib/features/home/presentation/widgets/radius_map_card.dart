@@ -193,26 +193,37 @@ class _RadiusMapCardState extends State<RadiusMapCard> {
               ],
             ),
           ),
-          SizedBox(width: 8.w),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
-            decoration: BoxDecoration(
-              color: AppColors.primaryNavy,
-              borderRadius: BorderRadius.circular(20.r),
-            ),
-            child: Text(
-              '${widget.foundInRange ?? widget.households.length}${widget.rangeComplete ? '' : '+'} in range',
-              key: const ValueKey('radius-card-count'),
-              style: AppTypography.label(
-                color: Colors.white,
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w700,
+          // No count at all where there is no data ("0" would mislead).
+          if (!(widget.areaUnavailable && !widget.isLoading)) ...[
+            SizedBox(width: 8.w),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+              decoration: BoxDecoration(
+                color: AppColors.primaryNavy,
+                borderRadius: BorderRadius.circular(20.r),
+              ),
+              child: Text(
+                _countBadge,
+                key: const ValueKey('radius-card-count'),
+                style: AppTypography.label(
+                  color: Colors.white,
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
+  }
+
+  /// "200+ in range" with a chosen search range; otherwise the number of
+  /// homes found around the search center, e.g. "50 homes".
+  String get _countBadge {
+    final n = widget.foundInRange ?? widget.households.length;
+    if (!SearchRange.userChoosesRange) return '$n ${n == 1 ? 'home' : 'homes'}';
+    return '$n${widget.rangeComplete ? '' : '+'} in range';
   }
 
   /// The search range (km) comes from Settings and never changes here. This

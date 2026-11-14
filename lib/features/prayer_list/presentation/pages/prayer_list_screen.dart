@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -94,8 +95,9 @@ class PrayerListScreen extends GetView<PrayerListController> {
           title: AppStrings.areaUnavailable,
           message:
               'Household data for the area around '
-              '${controller.homeLabel.value} has not been added yet.',
-          actions: [_settingsButton('Home address', Icons.home_outlined)],
+              '${controller.homeLabel.value} has not been added yet. '
+              '${AppStrings.areaComingSoon}',
+          actions: [ChangeHomeAddress.button()],
         ),
       );
     }
@@ -153,6 +155,52 @@ class PrayerListScreen extends GetView<PrayerListController> {
               onUpdated: controller.updateHousehold,
             );
           },
+        ),
+        // Below today's homes: the whole neighborhood, nearest first.
+        SliverPadding(
+          padding: EdgeInsets.only(top: 24.h, bottom: 10.h),
+          sliver: SliverToBoxAdapter(
+            child: _buildNeighborhoodHeader(controller.neighborhood.length),
+          ),
+        ),
+        SliverList.separated(
+          itemCount: controller.neighborhood.length,
+          separatorBuilder: (context, _) => SizedBox(height: 12.h),
+          itemBuilder: (context, index) {
+            final household = controller.neighborhood[index];
+            return PrayerListItemCard(
+              key: ValueKey('neighborhood-item-${household.id}'),
+              household: household,
+              onPrayToggle: () => controller.togglePray(household),
+              onUpdated: controller.updateHousehold,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNeighborhoodHeader(int count) {
+    return Column(
+      key: const ValueKey('neighborhood-header'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'My neighborhood',
+          style: AppTypography.heading(
+            color: AppColors.textPrimary,
+            fontSize: 16.sp,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        SizedBox(height: 2.h),
+        Text(
+          'All $count ${count == 1 ? 'home' : 'homes'} in this round, '
+          'nearest first',
+          style: AppTypography.body(
+            color: AppColors.textSecondary,
+            fontSize: 12.sp,
+          ),
         ),
       ],
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
@@ -316,8 +317,12 @@ class PrayerProgressCard extends StatelessWidget {
           ),
           SizedBox(height: 10.h),
           Text(
-            'Your daily goal resets at midnight. Goal, search range and '
-            'number of neighbors are set in Profile \u203a Prayer preferences.',
+            SearchRange.userChoosesRange
+                ? 'Your daily goal resets at midnight. Goal, search range and '
+                      'number of neighbors are set in Profile \u203a Prayer '
+                      'preferences.'
+                : 'Your daily goal resets at midnight. Goal and number of '
+                      'neighbors are set in Profile \u203a Prayer preferences.',
             key: const ValueKey('goal-hint'),
             style: AppTypography.body(
               color: AppColors.textSecondary,

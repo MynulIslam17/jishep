@@ -3,6 +3,7 @@ abstract final class AppStrings {
 
   /// No household data exists for an area (Overture cells not loaded).
   static const String areaUnavailable = "This area isn't available yet";
+  static const String areaComingSoon = "We're adding more states soon.";
   static const String appTagline = 'Conectando hogares, alcanzando vidas.';
 
   // Auth Strings

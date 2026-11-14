@@ -83,8 +83,13 @@ class HouseholdOsmMap extends StatefulWidget {
   final ValueChanged<bool>? onReadyChanged;
 
   /// The search range in meters. When set, the circle is exactly this range
-  /// (whatever number of homes is pinned inside it).
+  /// (whatever number of homes is pinned inside it). Ignored when the user
+  /// does not choose a range ([SearchRange.userChoosesRange] false): then no
+  /// circle is drawn and the map fits the home and its households.
   final double? areaMeters;
+
+  /// [areaMeters], only when the user chooses a search range.
+  double? get _area => SearchRange.userChoosesRange ? areaMeters : null;
 
   @override
   State<HouseholdOsmMap> createState() => _HouseholdOsmMapState();
@@ -128,13 +133,13 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
     final householdsAppeared =
         oldWidget.households.isEmpty && widget.households.isNotEmpty;
     final householdsChanged = !_sameIds(oldWidget.households);
-    final areaChanged = oldWidget.areaMeters != widget.areaMeters;
+    final areaChanged = oldWidget._area != widget._area;
     // A Home filter only hides pins inside the same area: keep the view.
     final filteredOnly =
         householdsChanged &&
         !centerMoved &&
         !areaChanged &&
-        widget.areaMeters != null &&
+        widget._area != null &&
         oldWidget.households.isNotEmpty &&
         widget.households.isNotEmpty;
     if (centerMoved ||
@@ -180,7 +185,8 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
   }
 
   /// Zooms so the whole search circle (and so every household pin inside
-  /// it) is visible. This is the default view; the user's own zoom is not
+  /// it) is visible; without a chosen range, the circle just around the
+  /// farthest household (not drawn), i.e. the map fits the homes. This is the default view; the user's own zoom is not
   /// remembered and is replaced whenever the center or the homes change.
   void _frameAll() {
     if (!_isReady || !mounted) return;
@@ -197,7 +203,7 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
       widget.households.where((h) => h.latitude != 0 || h.longitude != 0);
 
   double _circleRadiusMeters() {
-    final area = widget.areaMeters;
+    final area = widget._area;
     if (area != null && area > 0) return area;
     return searchCircleRadiusMeters(
       widget.centerLatitude,
@@ -273,18 +279,19 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
           userAgentPackageName: _userAgentPackage,
           maxNativeZoom: 19,
         ),
-        CircleLayer(
-          circles: [
-            CircleMarker(
-              point: _center,
-              radius: _circleRadiusMeters(),
-              useRadiusInMeter: true,
-              color: AppColors.primaryNavy.withValues(alpha: 0.08),
-              borderColor: AppColors.primaryNavy.withValues(alpha: 0.4),
-              borderStrokeWidth: 2,
-            ),
-          ],
-        ),
+        if (SearchRange.userChoosesRange)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: _center,
+                radius: _circleRadiusMeters(),
+                useRadiusInMeter: true,
+                color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                borderColor: AppColors.primaryNavy.withValues(alpha: 0.4),
+                borderStrokeWidth: 2,
+              ),
+            ],
+          ),
         MarkerLayer(
           markers: [
             for (final household in _locatedHouseholds)

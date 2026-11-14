@@ -41,6 +41,9 @@ class PrayerListController extends GetxController {
 
   List<HouseholdModel> get todayHouseholds => plan.value.today;
 
+  /// Every home in "my neighborhood", nearest first.
+  List<HouseholdModel> get neighborhood => _service.neighborhood;
+
   @override
   void onInit() {
     super.onInit();

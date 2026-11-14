@@ -6,6 +6,7 @@ import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
 import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:gps_cielo/core/services/location_selection.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
@@ -59,6 +60,10 @@ class LocationSetupController extends GetxController {
   final isLoadingPreview = false.obs;
   final previewError = false.obs;
 
+  /// No household data exists around [selectedLocation] yet (cells). Setup
+  /// can still be finished.
+  final previewUnavailable = false.obs;
+
   /// Homes in the neighborhood: the saved `radiusHomes` (new accounts are
   /// created with [SearchRange.defaultHomes]).
   int neighborhoodHomes = SearchRange.defaultHomes;
@@ -77,6 +82,9 @@ class LocationSetupController extends GetxController {
   /// "Nearest 50 neighbors within 2 km", "40 neighbors within 2 km".
   String get previewSummary {
     if (previewError.value) return 'Could not load neighbors';
+    if (previewUnavailable.value && !isLoadingPreview.value) {
+      return AppStrings.areaUnavailable;
+    }
     final n = previewHouseholds.length;
     final noun = n == 1 ? 'neighbor' : 'neighbors';
     final full = n >= neighborhoodHomes;
@@ -89,6 +97,18 @@ class LocationSetupController extends GetxController {
     if (isLoadingPreview.value) return 'Finding neighbors within $range…';
     if (n == 0) return 'No households within $range yet';
     return full ? 'Nearest $n $noun within $range' : '$n $noun within $range';
+  }
+
+  /// Meters from the picked home to [household], or null.
+  double? distanceTo(HouseholdModel household) {
+    final home = selectedLocation.value;
+    if (home == null) return null;
+    return SearchRange.distanceMeters(
+      home.latitude,
+      home.longitude,
+      household.latitude,
+      household.longitude,
+    );
   }
 
   /// Days to pray once for every household in the neighborhood at the
@@ -190,6 +210,7 @@ class LocationSetupController extends GetxController {
     _previewTimer?.cancel();
     final location = selectedLocation.value;
     final generation = ++_previewGeneration;
+    previewUnavailable.value = false;
     if (location == null) {
       previewHouseholds.clear();
       isLoadingPreview.value = false;
@@ -225,6 +246,7 @@ class LocationSetupController extends GetxController {
             );
       await search.ensure(neighborhoodHomes);
       if (generation != _previewGeneration) return;
+      previewUnavailable.value = search.isUnavailable;
       final records = search.records.take(neighborhoodHomes).toList();
       previewHouseholds.assignAll([
         for (var i = 0; i < records.length; i++)

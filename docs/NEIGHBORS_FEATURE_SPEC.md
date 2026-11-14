@@ -123,10 +123,12 @@ match /cells/{id} { allow read: if request.auth != null; allow write: if false; 
    of "0 households".
 7. The app's Dart geohash encoder uses the same boundary rule as
    `geofire-common` (`>`), with a test.
-8. Feature flag `FeatureFlags.useCellHouseholds` (off by default; run with
-   `--dart-define=USE_CELL_HOUSEHOLDS=true`); keep the `households` source
-   until verified. Existing `household_status` docs use old seeded IDs: check in
-   step 5 and ask before any migration.
+8. Feature flag `FeatureFlags.useCellHouseholds`: **on by default in every
+   build** (debug, profile, release; `FeatureFlags.cellHouseholdsDefault`).
+   The old `households` source (Bangladesh demo data, km range) is only a
+   fallback: `--dart-define=USE_CELL_HOUSEHOLDS=false`. Its code is kept for
+   now. Existing `household_status` docs use old seeded IDs: ask before any
+   migration.
 
 ### 3.4 Neighborhood size (decision: follow BLESS)
 "My neighborhood" is **the nearest N homes**; with cell households the user
@@ -152,6 +154,59 @@ unchanged; a round is the N homes.
 - Reading up to 50 households up front (Home / Prayer List) instead of 25
   costs at most 25 more document reads per search on the `households` path;
   the cell path reads the same cells as before.
+
+### 3.5 The flow: Overture only, "your nearest 50 homes" (BLESS-style)
+The app uses only the Overture USA cells; with the flag on nothing reads
+the `households` collection (checked: Home, Neighborhood, Prayer List,
+Follow-up, setup preview and Home search all go through `CellArea`;
+Follow-up reads only `household_status`). There is no distance (km) choice
+anywhere; `users/{uid}.searchRadiusKm` stays in Firestore but is neither
+shown nor used.
+
+a) **Setup (new user)**
+   1. Home address (Photon search) → the pin on the map.
+   2. Daily prayer goal (3, 5, 10, 15; default 5).
+   3. "Your neighborhood": the nearest N homes (default 50) — map above, the
+      first 5 with name or "Neighbor", address and distance, "and N more",
+      and "You'll pray for all N neighbors in about X days".
+   4. Outside the loaded area: "This area isn't available yet. We're adding
+      more states soon." Setup can still be finished.
+b) **Home**: map with the nearest homes (no circle; the map fits the homes),
+   "Nearest 50 homes" or "12 homes nearby", a "50 homes" badge, and today's
+   progress ("Today: 2 of 5 prayed", opens the Prayer List).
+c) **Prayer List**: today's homes (the daily goal, filled with the nearest
+   homes not yet prayed for this round), then "My neighborhood": every home
+   in the round, nearest first.
+d) **Household sheet**: name or "Neighbor", address, "CITY, ST ZIP",
+   "120 m from home", Add/Edit name, Pray, Visit, Follow-up.
+e) **Round end**: "Round complete!", a new round the next day (existing).
+f) **Prayer preferences**: daily goal and "Homes in my neighborhood"
+   (5, 10, 15, 20, 25, 50) only.
+g) **Saved home outside the loaded area** (e.g. an old Bangladesh test
+   address): "This area isn't available yet" + "Change home address" (opens
+   Profile's address sheet) on Home, Neighborhood and the Prayer List.
+   Never "0 households" or old data: the Home count badge is hidden.
+
+Removed when the flag is on (all still there with the flag off):
+| Screen | Removed |
+|---|---|
+| First-run setup | "Neighborhood range" km step and its slider; "within X km" in the summary strip and map badge; km circle |
+| Prayer preferences | "Search range" km slider and its description |
+| Home map card | "Search range X km · change it in Settings" caption, "within X km" label, "N in range" badge (now "N homes"), km circle |
+| Home empty state | "No households within X km … larger search range in Settings" |
+| Neighborhood | km circle; "in range" (now "nearby"); "choose a larger search range" empty text |
+| Prayer List | "None within X km", "Search range" button; "search range" in the goal hint |
+| Profile summary / "Preferences Saved" | "within X km" (now "Nearest 50 homes") |
+| Support page (website) | "increase the search range" FAQ answers |
+
+Kept unchanged: rounds (`prayerCycleStartedAt`), "Round complete!", the
+new-round snackbar, daily goal and "Today's goal reached", Pray / Visit /
+Follow-up / names, Friends & Family, map and Photon address search.
+
+The Bangladesh demo data is **not** deleted from Firestore: `households`
+has 140 docs (all `demo_bd_*`); a backup exists in
+`tool/seed_households/backups/households-2026-11-12T03-47-47-079Z.json`
+(140 households + 10 demo status docs).
 
 ## 4. Part B — Add a resident name to a household
 Households start without names. The user adds the name of the people living
@@ -196,6 +251,10 @@ Rules: keep the existing `household_status` rules; only change
 7. No secrets in the repo; daily reads/writes stay within Spark limits.
 8. Credits text in the About sheet: "Address data © Overture Maps
    Foundation".
+9. A normal run (no `--dart-define`) uses the cells; no screen shows a km
+   choice or "within X km"; nothing reads `households`.
+10. A saved home outside the loaded area shows "This area isn't available
+    yet" + "Change home address", never 0 households or old data.
 
 ## 6. Order of work
 1. Read the code; summarize; list mismatches. ✅

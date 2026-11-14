@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
 import 'package:gps_cielo/core/constants/app_assets.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
@@ -195,6 +196,9 @@ class HomeScreen extends GetView<HomeController> {
                   ),
 
                   SizedBox(height: 16.h),
+
+                  // Today's prayers (opens the Prayer List)
+                  Obx(() => _buildTodayProgress()),
 
                   // Radius Map Card
                   Obx(
@@ -555,46 +559,139 @@ class HomeScreen extends GetView<HomeController> {
     );
   }
 
-  Widget _buildEmptyList() {
-    final loading = controller.isLoading.value;
+  /// "Today: 2 of 5 prayed" with a bar; hidden without a neighborhood.
+  Widget _buildTodayProgress() {
+    final goal = controller.todayGoal.value;
+    if (goal <= 0) return const SizedBox.shrink();
+    final done = controller.todayPrayed.value;
+    final finished = done >= goal;
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 24.h),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (loading) ...[
-            SizedBox(
-              width: 16.r,
-              height: 16.r,
-              child: const CircularProgressIndicator(strokeWidth: 2),
+      padding: EdgeInsets.only(bottom: 16.h),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14.r),
+        child: InkWell(
+          key: const ValueKey('home-today-progress'),
+          borderRadius: BorderRadius.circular(14.r),
+          onTap: () {
+            if (Get.isRegistered<MainNavController>()) {
+              Get.find<MainNavController>().changeDestination(
+                MainNavDestination.prayerList,
+              );
+            }
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14.r),
+              border: Border.all(color: AppColors.border),
             ),
-            SizedBox(width: 10.w),
-          ],
-          Flexible(
-            child: Text(
-              loading
-                  ? 'Finding nearby households...'
-                  : controller.areaUnavailable.value
-                  ? '${AppStrings.areaUnavailable}. Try another place.'
-                  : controller.hasSearchCenter.value &&
-                        !SearchRange.userChoosesRange
-                  ? 'No households near this location yet. '
-                        'Try another place.'
-                  : controller.hasSearchCenter.value
-                  ? 'No households within '
-                        '${SearchRange.formatDistance(controller.rangeMeters.value ?? 0)} '
-                        'of this location yet. Try another place or a '
-                        'larger search range in Settings.'
-                  : 'No location selected yet.',
-              textAlign: TextAlign.center,
-              style: AppTypography.body(
-                color: AppColors.textSecondary,
-                fontSize: 13.sp,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      finished
+                          ? Icons.check_circle_rounded
+                          : Icons.favorite_border_rounded,
+                      size: 18.r,
+                      color: AppColors.primaryGold,
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        finished
+                            ? "Today's goal reached: $done of $goal prayed"
+                            : 'Today: $done of $goal prayed',
+                        key: const ValueKey('home-today-text'),
+                        style: AppTypography.label(
+                          color: AppColors.textPrimary,
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20.r,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8.h),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4.r),
+                  child: LinearProgressIndicator(
+                    value: done / goal,
+                    minHeight: 6.h,
+                    backgroundColor: AppColors.inputSurface,
+                    color: AppColors.primaryGold,
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyList() {
+    final loading = controller.isLoading.value;
+    final unavailable = !loading && controller.areaUnavailable.value;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 24.h),
+      child: Column(
+        children: [
+          _buildEmptyMessage(loading),
+          if (unavailable) ...[
+            SizedBox(height: 12.h),
+            ChangeHomeAddress.button(),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildEmptyMessage(bool loading) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (loading) ...[
+          SizedBox(
+            width: 16.r,
+            height: 16.r,
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10.w),
+        ],
+        Flexible(
+          child: Text(
+            loading
+                ? 'Finding nearby households...'
+                : controller.areaUnavailable.value
+                ? '${AppStrings.areaUnavailable}. '
+                      '${AppStrings.areaComingSoon} Try another place or '
+                      'change your home address.'
+                : controller.hasSearchCenter.value &&
+                      !SearchRange.userChoosesRange
+                ? 'No households near this location yet. '
+                      'Try another place.'
+                : controller.hasSearchCenter.value
+                ? 'No households within '
+                      '${SearchRange.formatDistance(controller.rangeMeters.value ?? 0)} '
+                      'of this location yet. Try another place or a '
+                      'larger search range in Settings.'
+                : 'No location selected yet.',
+            textAlign: TextAlign.center,
+            style: AppTypography.body(
+              color: AppColors.textSecondary,
+              fontSize: 13.sp,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

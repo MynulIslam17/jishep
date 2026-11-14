@@ -13,6 +13,9 @@ class HomeService {
 
   RxList<HouseholdModel> get households => _store.households;
 
+  /// "My neighborhood" around the saved home (the Prayer List's homes).
+  RxList<HouseholdModel> get neighborhood => _store.homeHouseholds;
+
   RxBool get isLoading => _store.isLoading;
 
   Rxn<SearchCenter> get center => _store.center;

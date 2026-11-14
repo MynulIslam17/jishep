@@ -7,6 +7,13 @@ import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/features/home/presentation/widgets/radius_map_card.dart';
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   final households = [
     HouseholdModel(
       id: 'demo_bd_008',
@@ -27,6 +34,7 @@ void main() {
     List<HouseholdModel>? items,
     int? foundInRange,
     ValueChanged<int>? onRadiusChanged,
+    bool unavailable = false,
   }) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
@@ -49,6 +57,7 @@ void main() {
                   onRadiusChanged: onRadiusChanged,
                   households: items ?? households,
                   foundInRange: foundInRange,
+                  areaUnavailable: unavailable,
                   centerLatitude: 23.7465,
                   centerLongitude: 90.376,
                   centerLabel: 'Dhanmondi, Dhaka',
@@ -131,7 +140,9 @@ void main() {
     tester,
   ) async {
     FeatureFlags.useCellHouseholds = true;
-    addTearDown(() => FeatureFlags.useCellHouseholds = false);
+    addTearDown(
+      () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+    );
     await pumpCard(tester, radius: 50, defaultHomes: 50, items: homes(50));
     expect(find.text('Homes in my neighborhood'), findsOneWidget);
     expect(find.text('Nearest 50 homes'), findsOneWidget);
@@ -199,5 +210,34 @@ void main() {
   ) async {
     await pumpCard(tester, items: homes(20), foundInRange: 40);
     expect(find.text('40 in range'), findsOneWidget);
+  });
+
+  group('nearest-N neighborhood (the default)', () {
+    setUp(() => FeatureFlags.useCellHouseholds = true);
+
+    testWidgets('no km circle; the map fits the homes; "50 homes"', (
+      tester,
+    ) async {
+      await pumpCard(tester, radius: 50, defaultHomes: 50, items: homes(50));
+      expect(find.byType(CircleLayer), findsNothing);
+      expect(find.text('50 homes'), findsOneWidget);
+      expect(find.textContaining('in range'), findsNothing);
+      expect(find.textContaining('Search range'), findsNothing);
+    });
+
+    testWidgets('area not available: the message and no count at all', (
+      tester,
+    ) async {
+      await pumpCard(
+        tester,
+        radius: 50,
+        defaultHomes: 50,
+        items: const [],
+        unavailable: true,
+      );
+      expect(find.text("This area isn't available yet"), findsOneWidget);
+      expect(find.byKey(const ValueKey('radius-card-count')), findsNothing);
+      expect(find.textContaining('0 '), findsNothing);
+    });
   });
 }

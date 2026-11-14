@@ -186,6 +186,14 @@ class HouseholdStore extends GetxService {
 
   bool get isTemporarySearch => _temporaryLocation != null;
 
+  /// The saved home location, or null when none is set.
+  ({double latitude, double longitude})? get homePoint {
+    final latitude = _savedLatitude;
+    final longitude = _savedLongitude;
+    if (latitude == null || longitude == null) return null;
+    return (latitude: latitude, longitude: longitude);
+  }
+
   /// The signed-in user's id, or null when signed out.
   String? get uid => _uid;
 

@@ -5,6 +5,13 @@ import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_prayer_preferences_bottom_sheet.dart';
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   testWidgets('saves the daily target, number of households and the range', (
     tester,
   ) async {
@@ -89,7 +96,9 @@ void main() {
     tester,
   ) async {
     FeatureFlags.useCellHouseholds = true;
-    addTearDown(() => FeatureFlags.useCellHouseholds = false);
+    addTearDown(
+      () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+    );
     tester.view.physicalSize = const Size(400, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
