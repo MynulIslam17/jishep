@@ -17,11 +17,14 @@ import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
 
-/// First-run setup: the home address (the center of the user's
-/// neighborhood), the search range (only when [SearchRange.userChoosesRange])
-/// and the daily prayer goal. The map and count preview "my neighborhood":
-/// the nearest [neighborhoodHomes] households, which the Prayer List is
-/// built from.
+/// First-run setup, a 4-step wizard (Figma 1.1–1.5):
+///  0. Where is your home? (address search or GPS)
+///  1. Is this your home? (drag the map under a fixed pin to adjust)
+///  2. How many neighbors a day? (and the km range, only when
+///     [SearchRange.userChoosesRange])
+///  3. Meet your N neighbors: a preview of "my neighborhood", the nearest
+///     [neighborhoodHomes] households the Prayer List is built from — or
+///     "This area isn't available yet", where setup can still be finished.
 class LocationSetupController extends GetxController {
   LocationSetupController(
     this._authService,
@@ -67,6 +70,13 @@ class LocationSetupController extends GetxController {
   /// Homes in the neighborhood: the saved `radiusHomes` (new accounts are
   /// created with [SearchRange.defaultHomes]).
   int neighborhoodHomes = SearchRange.defaultHomes;
+
+  /// The wizard step on screen (0–3).
+  final step = 0.obs;
+  static const int stepCount = 4;
+
+  /// True while a typed address (no suggestion picked) is looked up.
+  final isResolving = false.obs;
 
   /// The signed-in account (email, or phone for phone-only accounts).
   final accountLabel = ''.obs;
@@ -164,6 +174,66 @@ class LocationSetupController extends GetxController {
   }
 
   void setRange(double km) => rangeKm.value = km;
+
+  /// Step 0 → 1. A typed address without a pick is looked up first.
+  Future<void> continueFromAddress() async {
+    if (isResolving.value) return;
+    if (!hasLocation) {
+      final text = addressController.text.trim();
+      if (text.isEmpty) {
+        SnackbarService.showError(
+          'Home address',
+          'Search for your address or use your current location.',
+        );
+        return;
+      }
+      isResolving.value = true;
+      try {
+        final location = await _locationService.resolveAddress(text);
+        _selection.pick(location);
+        selectedLocation.value = location;
+      } catch (error) {
+        SnackbarService.showError(
+          'Address not found',
+          FirebaseErrorMapper.message(error),
+        );
+        return;
+      } finally {
+        isResolving.value = false;
+      }
+    }
+    step.value = 1;
+  }
+
+  void goToStep(int value) => step.value = value.clamp(0, stepCount - 1);
+
+  void back() {
+    if (step.value > 0) step.value--;
+  }
+
+  /// The map was dragged under the pin: home is now at [latitude],
+  /// [longitude]; the address label stays. Reloads the preview.
+  void adjustPin(double latitude, double longitude) {
+    final current = selectedLocation.value;
+    if (current == null) return;
+    if (SearchRange.distanceMeters(
+          current.latitude,
+          current.longitude,
+          latitude,
+          longitude,
+        )! <
+        1) {
+      return;
+    }
+    final moved = ResolvedLocation(
+      address: current.address,
+      latitude: latitude,
+      longitude: longitude,
+      source: current.source,
+    );
+    _selection.pick(moved);
+    selectedLocation.value = moved;
+  }
 
   void setDailyGoal(int goal) => dailyGoal.value = goal;
 

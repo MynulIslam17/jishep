@@ -3,11 +3,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
-import 'package:get/get.dart';
-import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
-import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/shared/widgets/dialogs/resident_name_dialog.dart';
+import 'package:gps_cielo/shared/widgets/household/household_row.dart';
 
 class HouseholdDetailBottomSheet extends StatefulWidget {
   final HouseholdModel household;
@@ -179,6 +177,11 @@ class _HouseholdDetailBottomSheetState
     final result = await ResidentNameDialog.show(
       context,
       initialName: _currentHousehold.residentName,
+      addressLine: [
+        _currentHousehold.address,
+        if (_currentHousehold.cityStateZip.isNotEmpty)
+          _currentHousehold.cityStateZip,
+      ].join(' · '),
     );
     if (result == null || !mounted) return; // cancelled
     if (result.name == _currentHousehold.residentName) return;
@@ -204,28 +207,17 @@ class _HouseholdDetailBottomSheetState
 
   /// "120 m from home", or null without a home or household location.
   String? _distanceText(HouseholdModel item) {
-    final from =
-        widget.from ??
-        (Get.isRegistered<HouseholdStore>()
-            ? Get.find<HouseholdStore>().homePoint
-            : null);
-    if (from == null) return null;
-    final meters = SearchRange.distanceMeters(
-      from.latitude,
-      from.longitude,
-      item.latitude,
-      item.longitude,
-    );
-    if (meters == null) return null;
-    return '${SearchRange.formatHomeDistance(meters)} from home';
+    final label = homeDistanceLabel(item, from: widget.from);
+    return label == null ? null : '$label from home';
   }
 
   @override
   Widget build(BuildContext context) {
     final item = _currentHousehold;
     final distance = _distanceText(item);
-    final showNotesSection = _isFollowUpOpen;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final canEdit = widget.onUpdated != null;
+    final notes = item.notes?.trim() ?? '';
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
@@ -241,7 +233,7 @@ class _HouseholdDetailBottomSheetState
             ),
           ],
         ),
-        padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 24.h),
+        padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 24.h),
         child: SingleChildScrollView(
           controller: _scrollController,
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -249,7 +241,6 @@ class _HouseholdDetailBottomSheetState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Drag Handle
               Center(
                 child: Container(
                   width: 40.w,
@@ -260,323 +251,213 @@ class _HouseholdDetailBottomSheetState
                   ),
                 ),
               ),
+              SizedBox(height: 12.h),
 
-              SizedBox(height: 14.h),
-
-              // Header with Resident Name and Close Button
+              // "Household" + close
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Text(
-                      item.displayName,
+                      'Household',
                       style: AppTypography.heading(
-                        color: AppColors.primaryNavy,
-                        fontSize: 18.sp,
+                        color: AppColors.textPrimary,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w800,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Container(
-                      width: 32.r,
-                      height: 32.r,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 18.r,
-                        color: const Color(0xFF64748B),
+                  Semantics(
+                    button: true,
+                    label: 'Close',
+                    child: GestureDetector(
+                      key: const ValueKey('household-close'),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 30.r,
+                        height: 30.r,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 17.r,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
+              SizedBox(height: 14.h),
 
-              SizedBox(height: 12.h),
-              const Divider(color: AppColors.border, height: 1),
-              SizedBox(height: 16.h),
-
-              // Household Info Block
+              // Who and where
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 56.r,
-                    height: 56.r,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8EFF7),
-                      borderRadius: BorderRadius.circular(16.r),
-                    ),
-                    child: Icon(
-                      Icons.home_rounded,
-                      size: 28.r,
-                      color: AppColors.primaryNavy.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  SizedBox(width: 14.w),
+                  const HouseTile(size: 46),
+                  SizedBox(width: 12.w),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           item.displayName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: AppTypography.heading(
                             color: AppColors.textPrimary,
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 17.sp,
+                            fontWeight: FontWeight.w800,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         SizedBox(height: 2.h),
                         Text(
                           item.address,
                           style: AppTypography.body(
                             color: AppColors.textSecondary,
-                            fontSize: 13.sp,
+                            fontSize: 12.5.sp,
                           ),
                         ),
-                        Text(
-                          item.cityStateZip,
-                          style: AppTypography.body(
-                            color: const Color(0xFF94A3B8),
-                            fontSize: 12.sp,
+                        if (item.cityStateZip.isNotEmpty)
+                          Text(
+                            item.cityStateZip,
+                            style: AppTypography.body(
+                              color: AppColors.textMuted,
+                              fontSize: 11.5.sp,
+                            ),
                           ),
-                        ),
                         if (distance != null)
                           Text(
                             distance,
                             key: const ValueKey('household-distance'),
                             style: AppTypography.body(
-                              color: const Color(0xFF94A3B8),
-                              fontSize: 12.sp,
+                              color: AppColors.textMuted,
+                              fontSize: 11.5.sp,
                             ),
                           ),
-                        if (widget.onUpdated != null)
-                          TextButton.icon(
-                            key: const ValueKey('household-edit-name'),
-                            onPressed: _editName,
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.primaryNavy,
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size(0, 32.h),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            icon: Icon(
-                              item.residentName == null
-                                  ? Icons.person_add_alt_1_rounded
-                                  : Icons.edit_rounded,
-                              size: 16.r,
-                            ),
-                            label: Text(
-                              item.residentName == null
-                                  ? 'Add name'
-                                  : 'Edit name',
-                              style: AppTypography.body(
-                                color: AppColors.primaryNavy,
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.w700,
-                              ),
+                        if (item.isPrayed || item.isVisited || item.isInvited)
+                          Padding(
+                            padding: EdgeInsets.only(top: 6.h),
+                            child: Wrap(
+                              spacing: 6.w,
+                              runSpacing: 4.h,
+                              children: [
+                                if (item.isPrayed)
+                                  _statusPill(
+                                    item.prayedOn(DateTime.now())
+                                        ? 'Prayed today'
+                                        : 'Prayed',
+                                    prayedGreen,
+                                    prayedGreenLight,
+                                  ),
+                                if (item.isVisited)
+                                  _statusPill(
+                                    'Visited',
+                                    prayedGreen,
+                                    prayedGreenLight,
+                                  ),
+                                if (item.isInvited)
+                                  _statusPill(
+                                    'Invited',
+                                    AppColors.primaryNavy,
+                                    const Color(0xFFE8EFF7),
+                                  ),
+                              ],
                             ),
                           ),
-
-                        // Status Badges (Follow up / Visited / Invited)
-                        if (item.hasFollowUp ||
-                            item.isVisited ||
-                            item.isInvited) ...[
-                          SizedBox(height: 6.h),
-                          Wrap(
-                            spacing: 6.w,
-                            runSpacing: 4.h,
-                            children: [
-                              if (item.hasFollowUp)
-                                _buildStatusBadge(
-                                  label: 'Follow up',
-                                  color: const Color(0xFFD97706),
-                                  bgColor: const Color(0xFFFEF3C7),
-                                ),
-                              if (item.isVisited)
-                                _buildStatusBadge(
-                                  label: 'Visited',
-                                  color: const Color(0xFF2E7D32),
-                                  bgColor: const Color(0xFFE8F5E9),
-                                ),
-                              if (item.isInvited)
-                                _buildStatusBadge(
-                                  label: 'Invited',
-                                  color: AppColors.primaryNavy,
-                                  bgColor: const Color(0xFFE8EFF7),
-                                ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
                   ),
                 ],
               ),
 
-              // Dynamic Notes Section (Revealed when Follow up button is tapped)
-              if (showNotesSection) ...[
-                SizedBox(height: 16.h),
+              // Add name (dashed) / Edit name
+              if (canEdit) ...[
+                SizedBox(height: 14.h),
+                if (item.residentName == null)
+                  _addNameButton()
+                else
+                  TextButton.icon(
+                    key: const ValueKey('household-edit-name'),
+                    onPressed: _editName,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primaryNavy,
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size(0, 32.h),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: Icon(Icons.edit_outlined, size: 16.r),
+                    label: Text(
+                      'Edit name',
+                      style: AppTypography.body(
+                        color: AppColors.primaryNavy,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+
+              // Saved notes (read-only) while the editor is closed
+              if (notes.isNotEmpty && !_isFollowUpOpen) ...[
+                SizedBox(height: 10.h),
                 Container(
-                  key: _notesSectionKey,
+                  key: const ValueKey('household-notes'),
                   width: double.infinity,
-                  padding: EdgeInsets.all(14.r),
+                  padding: EdgeInsets.all(12.r),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(14.r),
-                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: AppColors.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'NOTES',
-                            style: AppTypography.label(
-                              color: const Color(0xFF64748B),
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          Text(
-                            'Follow-up: ${item.followUpDate ?? 'Not scheduled'}',
-                            style: AppTypography.label(
-                              color: const Color(0xFFD97706),
-                              fontSize: 11.5.sp,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8.h),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 10.w,
-                          vertical: 8.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10.r),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: TextField(
-                          controller: _notesController,
-                          focusNode: _notesFocusNode,
-                          maxLines: 3,
-                          minLines: 2,
-                          scrollPadding: EdgeInsets.only(bottom: 70.h),
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13.5.sp,
-                            height: 1.35,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText:
-                                'Write follow-up notes about this household...',
-                            hintStyle: TextStyle(color: Color(0xFF94A3B8)),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
+                      Text(
+                        'NOTES',
+                        style: AppTypography.label(
+                          color: AppColors.textSecondary,
+                          fontSize: 10.5.sp,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
                         ),
                       ),
-                      SizedBox(height: 10.h),
-                      // Put Notes / Save Notes Action Button
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () {
-                              _notesFocusNode.unfocus();
-                              setState(() {
-                                _isFollowUpOpen = false;
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 12.w,
-                                vertical: 6.h,
-                              ),
-                              foregroundColor: const Color(0xFF64748B),
-                            ),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                fontSize: 12.sp,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
-                          ElevatedButton.icon(
-                            onPressed: _saveNotes,
-                            icon: Icon(
-                              Icons.check_rounded,
-                              size: 16.r,
-                              color: Colors.white,
-                            ),
-                            label: Text(
-                              'Put Notes',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5.sp,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryNavy,
-                              elevation: 0,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 14.w,
-                                vertical: 8.h,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.r),
-                              ),
-                            ),
-                          ),
-                        ],
+                      SizedBox(height: 4.h),
+                      Text(
+                        notes,
+                        style: AppTypography.body(
+                          color: AppColors.textPrimary,
+                          fontSize: 13.sp,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ],
 
-              SizedBox(height: 16.h),
-              const Divider(color: AppColors.border, height: 1),
-              SizedBox(height: 18.h),
+              if (_isFollowUpOpen) ...[
+                SizedBox(height: 14.h),
+                _notesEditor(item),
+              ],
 
-              // Primary CTA Button: "Mark as Prayed" / "✓ Prayed"
+              SizedBox(height: 16.h),
+
+              // Mark as Prayed / ✓ Prayed
               SizedBox(
                 width: double.infinity,
                 height: 48.h,
                 child: ElevatedButton(
+                  key: const ValueKey('household-pray'),
                   onPressed: _togglePray,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: item.isPrayed
-                        ? const Color(0xFFE8F5E9)
+                        ? prayedGreenLight
                         : AppColors.primaryNavy,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12.r),
-                      side: item.isPrayed
-                          ? const BorderSide(
-                              color: Color(0xFFC8E6C9),
-                              width: 1.2,
-                            )
-                          : BorderSide.none,
                     ),
                   ),
                   child: Row(
@@ -585,7 +466,7 @@ class _HouseholdDetailBottomSheetState
                       if (item.isPrayed) ...[
                         Icon(
                           Icons.check_rounded,
-                          color: const Color(0xFF2E7D32),
+                          color: prayedGreen,
                           size: 20.r,
                         ),
                         SizedBox(width: 6.w),
@@ -593,9 +474,7 @@ class _HouseholdDetailBottomSheetState
                       Text(
                         item.isPrayed ? 'Prayed' : 'Mark as Prayed',
                         style: AppTypography.label(
-                          color: item.isPrayed
-                              ? const Color(0xFF2E7D32)
-                              : Colors.white,
+                          color: item.isPrayed ? prayedGreen : Colors.white,
                           fontSize: 15.sp,
                           fontWeight: FontWeight.w700,
                         ),
@@ -604,38 +483,40 @@ class _HouseholdDetailBottomSheetState
                   ),
                 ),
               ),
+              SizedBox(height: 10.h),
 
-              SizedBox(height: 12.h),
-
-              // Quick Actions Row (Visited, Invited, Follow up)
+              // Visited · Invited · Follow up
               Row(
                 children: [
                   Expanded(
-                    child: _buildActionButton(
+                    child: _actionChip(
+                      key: 'household-visited',
                       label: 'Visited',
-                      isSelected: item.isVisited,
-                      selectedColor: const Color(0xFF2E7D32),
-                      unselectedTextColor: const Color(0xFF2E7D32),
+                      icon: Icons.directions_walk_rounded,
+                      color: prayedGreen,
+                      selected: item.isVisited,
                       onTap: _toggleVisited,
                     ),
                   ),
-                  SizedBox(width: 10.w),
+                  SizedBox(width: 8.w),
                   Expanded(
-                    child: _buildActionButton(
+                    child: _actionChip(
+                      key: 'household-invited',
                       label: 'Invited',
-                      isSelected: item.isInvited,
-                      selectedColor: AppColors.primaryNavy,
-                      unselectedTextColor: AppColors.primaryNavy,
+                      icon: Icons.mail_outline_rounded,
+                      color: AppColors.primaryNavy,
+                      selected: item.isInvited,
                       onTap: _toggleInvited,
                     ),
                   ),
-                  SizedBox(width: 10.w),
+                  SizedBox(width: 8.w),
                   Expanded(
-                    child: _buildActionButton(
+                    child: _actionChip(
+                      key: 'household-follow-up',
                       label: 'Follow up',
-                      isSelected: item.hasFollowUp || _isFollowUpOpen,
-                      selectedColor: const Color(0xFFD97706),
-                      unselectedTextColor: const Color(0xFFD97706),
+                      icon: Icons.schedule_rounded,
+                      color: const Color(0xFFD97706),
+                      selected: item.hasFollowUp || _isFollowUpOpen,
                       onTap: _toggleFollowUp,
                     ),
                   ),
@@ -648,61 +529,275 @@ class _HouseholdDetailBottomSheetState
     );
   }
 
-  Widget _buildStatusBadge({
-    required String label,
-    required Color color,
-    required Color bgColor,
-  }) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(6.r),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11.sp,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required String label,
-    required bool isSelected,
-    required Color selectedColor,
-    required Color unselectedTextColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.symmetric(vertical: 11.h),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? selectedColor.withValues(alpha: 0.12)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(10.r),
-          border: Border.all(
-            color: isSelected ? selectedColor : const Color(0xFFE2E8F0),
-            width: isSelected ? 1.4 : 1.0,
+  /// Figma 4.1: dashed "+ Add name — who lives here?".
+  Widget _addNameButton() {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        key: const ValueKey('household-edit-name'),
+        onTap: _editName,
+        borderRadius: BorderRadius.circular(12.r),
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: AppColors.primaryNavy.withValues(alpha: 0.45),
+            radius: 12.r,
           ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: AppTypography.label(
-              color: isSelected ? selectedColor : unselectedTextColor,
-              fontSize: 13.sp,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 12.w),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5FB),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.add_rounded,
+                  size: 18.r,
+                  color: AppColors.primaryNavy,
+                ),
+                SizedBox(width: 6.w),
+                Text(
+                  'Add name',
+                  style: AppTypography.body(
+                    color: AppColors.primaryNavy,
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    ' — who lives here?',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.body(
+                      color: AppColors.textSecondary,
+                      fontSize: 13.sp,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+
+  Widget _notesEditor(HouseholdModel item) {
+    return Container(
+      key: _notesSectionKey,
+      width: double.infinity,
+      padding: EdgeInsets.all(14.r),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'NOTES',
+                style: AppTypography.label(
+                  color: AppColors.textSecondary,
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              Text(
+                'Follow-up: ${item.followUpDate ?? 'Not scheduled'}',
+                style: AppTypography.label(
+                  color: const Color(0xFFD97706),
+                  fontSize: 11.5.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8.h),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10.r),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: TextField(
+              controller: _notesController,
+              focusNode: _notesFocusNode,
+              maxLines: 3,
+              minLines: 2,
+              scrollPadding: EdgeInsets.only(bottom: 70.h),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13.5.sp,
+                height: 1.35,
+              ),
+              decoration: const InputDecoration(
+                hintText: 'Write follow-up notes about this household...',
+                hintStyle: TextStyle(color: AppColors.textMuted),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          SizedBox(height: 10.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () {
+                  _notesFocusNode.unfocus();
+                  setState(() => _isFollowUpOpen = false);
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                ),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              ElevatedButton.icon(
+                onPressed: _saveNotes,
+                icon: Icon(
+                  Icons.check_rounded,
+                  size: 16.r,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  'Save notes',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, Color color, Color background) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 12.r, color: color),
+          SizedBox(width: 3.w),
+          Text(
+            label,
+            style: AppTypography.label(
+              color: color,
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionChip({
+    required String key,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        key: ValueKey(key),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: 40.h,
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.12) : Colors.white,
+            borderRadius: BorderRadius.circular(10.r),
+            border: Border.all(
+              color: selected ? color : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15.r, color: color),
+              SizedBox(width: 5.w),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.label(
+                    color: color,
+                    fontSize: 12.5.sp,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A rounded rectangle drawn with dashes.
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
+    for (final metric in path.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += 9) {
+        canvas.drawPath(metric.extractPath(d, d + 5), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color || old.radius != radius;
 }

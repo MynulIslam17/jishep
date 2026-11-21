@@ -163,29 +163,61 @@ Follow-up reads only `household_status`). There is no distance (km) choice
 anywhere; `users/{uid}.searchRadiusKm` stays in Firestore but is neither
 shown nor used.
 
-a) **Setup (new user)**
-   1. Home address (Photon search) → the pin on the map.
-   2. Daily prayer goal (3, 5, 10, 15; default 5).
-   3. "Your neighborhood": the nearest N homes (default 50) — map above, the
-      first 5 with name or "Neighbor", address and distance, "and N more",
-      and "You'll pray for all N neighbors in about X days".
-   4. Outside the loaded area: "This area isn't available yet. We're adding
-      more states soon." Setup can still be finished.
-b) **Home**: map with the nearest homes (no circle; the map fits the homes),
-   "Nearest 50 homes" or "12 homes nearby", a "50 homes" badge, and today's
-   progress ("Today: 2 of 5 prayed", opens the Prayer List).
-c) **Prayer List**: today's homes (the daily goal, filled with the nearest
-   homes not yet prayed for this round), then "My neighborhood": every home
-   in the round, nearest first.
-d) **Household sheet**: name or "Neighbor", address, "CITY, ST ZIP",
-   "120 m from home", Add/Edit name, Pray, Visit, Follow-up.
-e) **Round end**: "Round complete!", a new round the next day (existing).
-f) **Prayer preferences**: daily goal and "Homes in my neighborhood"
-   (5, 10, 15, 20, 25, 50) only.
-g) **Saved home outside the loaded area** (e.g. an old Bangladesh test
-   address): "This area isn't available yet" + "Change home address" (opens
-   Profile's address sheet) on Home, Neighborhood and the Prayer List.
-   Never "0 households" or old data: the Home count badge is hidden.
+Screens follow the Figma file "GPS Cielo – Neighbors Flow (BLESS-style)"
+(frames 1.1–4.6). Shared pieces: `shared/widgets/household/` (household row
+with Pray/Prayed chip, progress ring and goal dots, "Today's neighbors"
+card) and `shared/widgets/inputs/option_chips.dart` (number chips, yellow
+round-length note). Prayed is green everywhere (rows, pins, dots).
+
+a) **Setup (new user)** — a 4-step wizard, "Step N of 4", Back / Continue:
+   1. *Where is your home?* Photon address search or "Use my current
+      location"; a typed address without a pick is looked up on Continue.
+   2. *Is this your home?* A map with a fixed centre pin; dragging the map
+      moves home (the address text stays). "Yes, this is my home" /
+      "Change address".
+   3. *How many neighbors a day?* Chips 3, 5, 10, 15 (default 5) and "You'll
+      pray for all N neighbors in about X days. Then a new round starts."
+      (With the flag off the km range chips are on this step too.)
+   4. *Meet your N neighbors*: map of the nearest N (default 50), "Nearest
+      50 homes · 5 a day, full round in about 10 days", the first 5 rows,
+      "and N more", **Start praying** (saves home and goal).
+   5. Outside the loaded area (1.5): "This area isn't available yet",
+      "Available now: New Jersey, California", **Finish setup** (saves) or
+      **Change address**.
+b) **Home**: "Good morning/afternoon/evening, {first name}", the *Today's
+   neighbors* card (ring "12/50 this round", "2 of 5 prayed today", goal
+   dots; opens the Prayer List), *My neighborhood* (still map of the nearest
+   N, "Nearest 50 homes", "View all 50 ›" → Neighborhood), *Pray for today*
+   (today's rows with Pray/Prayed chips). Always the home neighborhood. No
+   search, no size slider (the size is set in Prayer preferences only).
+c) **Neighborhood**: navy header "Nearest 50 homes · {address}" with a
+   search icon, pinned "50 households · 12 prayed" and Map | List. Map:
+   navy pins to pray, green prayed, legend "38 to pray · 12 prayed this
+   round". List: numbered rows, nearest first. The search icon opens "Look
+   around another place" (address or GPS): a temporary view with a banner
+   "Viewing near X" → "Back to my home" / "Set as my home" (confirmed). The
+   old "Browse all in range" paging is gone.
+d) **Prayer List**: Galatians 6:10 card, *Today's neighbors* card, today's
+   rows. Goal reached (3.2): green "Today's goal reached!" with what
+   tomorrow brings and "Want to pray for more? Next neighbors ›" (the next
+   homes not yet prayed for, one day's worth; extras count as extra).
+   Round complete (3.3): navy "Round complete! 🎉", prayed / visited /
+   invited, gold "Start new round now"; otherwise a new round starts at
+   midnight the next day (existing).
+e) **Household sheet** (4.1/4.3): name or "Neighbor", address, "CITY, ST ZIP",
+   "18 m from home", status pills, dashed "+ Add name — who lives here?" or
+   "Edit name", notes, Mark as Prayed / ✓ Prayed, Visited / Invited /
+   Follow up. *Add a name* (4.2) is a bottom sheet: "Only you can see this
+   name", 0/120.
+f) **Prayer preferences** (4.4): chips for the daily goal (3, 5, 10, 15; a
+   goal above the neighborhood is disabled) and "Homes in my neighborhood"
+   (5, 10, 15, 20, 25, 50), plus "At 5 a day you'll pray for all 50
+   neighbors in about 10 days". **About** (4.6) shows the version and "Map
+   data © OpenStreetMap contributors" next to the Overture credit.
+g) **Saved home outside the loaded area** (4.5, e.g. an old Bangladesh test
+   address): "This area isn't available yet", the available states and
+   "Change home address" on Home; the same message on Neighborhood and the
+   Prayer List. Never "0 households" or old data.
 
 Removed when the flag is on (all still there with the flag off):
 | Screen | Removed |
@@ -199,9 +231,10 @@ Removed when the flag is on (all still there with the flag off):
 | Profile summary / "Preferences Saved" | "within X km" (now "Nearest 50 homes") |
 | Support page (website) | "increase the search range" FAQ answers |
 
-Kept unchanged: rounds (`prayerCycleStartedAt`), "Round complete!", the
-new-round snackbar, daily goal and "Today's goal reached", Pray / Visit /
-Follow-up / names, Friends & Family, map and Photon address search.
+Kept unchanged: rounds (`prayerCycleStartedAt`), the automatic new round,
+the new-round snackbar, daily goal, Pray / Visit / Follow-up / names, map
+and Photon address search. Friends & Family is not mentioned on the
+area-not-available screen (the feature doesn't exist).
 
 The Bangladesh demo data is **not** deleted from Firestore: `households`
 has 140 docs (all `demo_bd_*`); a backup exists in

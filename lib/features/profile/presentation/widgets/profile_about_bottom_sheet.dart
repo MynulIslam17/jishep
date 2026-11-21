@@ -71,7 +71,8 @@ class ProfileAboutBottomSheet extends StatelessWidget {
           ),
           SizedBox(height: 4.h),
           Text(
-            'Version 1.0.0 \u2022 Faith-based community outreach',
+            'Version $appVersion \u2022 Faith-based community outreach',
+            key: const ValueKey('about-version'),
             style: TextStyle(color: const Color(0xFF64748B), fontSize: 12.sp),
           ),
 
@@ -143,10 +144,22 @@ class ProfileAboutBottomSheet extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
           ),
+          SizedBox(height: 2.h),
+          Text(
+            mapCredit,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
+          ),
         ],
       ),
     );
   }
+
+  /// Keep in step with `version:` in pubspec.yaml (a test checks it).
+  static const String appVersion = '1.0.0';
+
+  /// Map tiles come from OpenStreetMap (attribution required).
+  static const String mapCredit = 'Map data \u00A9 OpenStreetMap contributors';
 
   static const String developerCredit = LegalInfo.developerCredit;
   static const String copyrightNotice = '\u00A9 2026 ${LegalInfo.operatorName}';

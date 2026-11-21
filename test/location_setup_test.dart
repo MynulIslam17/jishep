@@ -310,6 +310,37 @@ void main() {
       expect(service.saved, isNull);
     });
 
+    test('Continue looks up a typed address, then shows the pin', () async {
+      final c = await make();
+      expect(c.step.value, 0);
+      await c.continueFromAddress();
+      expect(c.step.value, 0, reason: 'nothing typed or picked');
+      c.addressController.text = 'Road 5, Demra';
+      await c.continueFromAddress();
+      expect(c.step.value, 1);
+      expect(c.selectedLocation.value?.latitude, 1);
+      c.back();
+      expect(c.step.value, 0);
+    });
+
+    test('dragging the pin moves home, keeps the address, reloads', () async {
+      final c = await make();
+      c.addressController.text = demra.fullAddress;
+      c.selectSuggestion(demra);
+      await settle();
+      final reads = households.calls.length;
+      c.adjustPin(23.7215, 90.4835);
+      await settle();
+      expect(c.selectedLocation.value?.latitude, 23.7215);
+      expect(c.addressController.text, demra.fullAddress);
+      expect(c.hasLocation, isTrue);
+      expect(households.calls.length, greaterThan(reads));
+      await c.confirmLocation();
+      expect(service.saved?['latitude'], 23.7215);
+      expect(service.saved?['longitude'], 90.4835);
+      expect(service.saved?['address'], 'Demra, Dhaka, Bangladesh');
+    });
+
     test('a saved home is shown again with its preferences', () async {
       final c = await make(
         user: UserModel(
@@ -346,75 +377,88 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('without a home: placeholder map and guidance', (tester) async {
+    Future<void> frames(WidgetTester tester) async {
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('step 1: where is your home, with GPS and Continue', (
+      tester,
+    ) async {
       final c = await tester.runAsync(make);
       await pump(tester, c!);
-      expect(find.byKey(const ValueKey('map-placeholder')), findsOneWidget);
+      expect(find.text('Step 1 of 4'), findsOneWidget);
+      expect(find.text('Where is your home?'), findsOneWidget);
       expect(
-        find.text('Choose your home to see your neighbors'),
+        find.byKey(const ValueKey('use-current-location')),
         findsOneWidget,
       );
-      expect(find.text('Continue'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('goal-5')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.byKey(const ValueKey('range-5.0')), findsOneWidget);
-      expect(find.byKey(const ValueKey('goal-5')), findsOneWidget);
-      // The header collapsed; the summary strip stays pinned.
-      expect(find.byKey(const ValueKey('setup-summary')), findsOneWidget);
+      expect(find.byKey(const ValueKey('setup-back')), findsNothing);
+      expect(find.byKey(const ValueKey('setup-sign-out')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('with cell households there is no km step', (tester) async {
-      FeatureFlags.useCellHouseholds = true;
-      addTearDown(
-        () =>
-            FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
-      );
-      final c = await tester.runAsync(make);
-      await pump(tester, c!);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('goal-5')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.byKey(const ValueKey('range-5.0')), findsNothing);
-      expect(find.text('Neighborhood range'), findsNothing);
-      expect(find.byKey(const ValueKey('goal-5')), findsOneWidget);
-      expect(
-        find.text(
-          'You can change the number of homes and your goal later in '
-          'Profile.',
-        ),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('with a home: real map, count and save button', (tester) async {
+    testWidgets('steps 2–4: pin, goal, then meet your neighbors', (
+      tester,
+    ) async {
       final c = await tester.runAsync(make);
       c!.selectSuggestion(demra);
       await tester.runAsync(settle);
       await pump(tester, c);
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-      expect(find.byKey(const ValueKey('setup-map')), findsOneWidget);
-      expect(find.byKey(const ValueKey('map-badge')), findsOneWidget);
-      expect(find.text('40 neighbors within 5 km'), findsWidgets);
-      expect(find.text('Save my home and continue'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('cycle-days')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.byKey(const ValueKey('cycle-days')), findsOneWidget);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('goal-10')));
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('setup-continue')));
+      await frames(tester);
+      expect(find.text('Step 2 of 4'), findsOneWidget);
+      expect(find.text('Is this your home?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pin-map')), findsOneWidget);
+      expect(find.byKey(const ValueKey('center-pin')), findsOneWidget);
+      expect(find.text('Demra, Dhaka, Bangladesh'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('confirm-pin')));
+      await frames(tester);
+      expect(find.text('How many neighbors a day?'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('goal-10')));
       await tester.pump();
       expect(c.dailyGoal.value, 10);
+      expect(
+        find.text(
+          "You'll pray for all 50 neighbors in about 5 days. Then a new "
+          'round starts.',
+        ),
+        findsOneWidget,
+      );
+      // The old households path still offers a km range here.
+      expect(find.byKey(const ValueKey('range-5.0')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('setup-continue')));
+      await frames(tester);
+      expect(find.text('Step 4 of 4'), findsOneWidget);
+      expect(find.text('Meet your 40 neighbors'), findsOneWidget);
+      expect(find.byKey(const ValueKey('setup-map')), findsOneWidget);
+      expect(
+        find.text('Only 40 homes · 10 a day, full round in about 4 days'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('preview-home-demo_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('preview-home-demo_5')), findsNothing);
+      await tester.scrollUntilVisible(find.text('and 35 more'), 200);
+      expect(find.byKey(const ValueKey('preview-home-demo_4')), findsOneWidget);
+      expect(find.text('Start praying'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('setup-back')));
+      await frames(tester);
+      expect(find.text('Step 3 of 4'), findsOneWidget);
+    });
+
+    testWidgets('Change address goes back to step 1', (tester) async {
+      final c = await tester.runAsync(make);
+      c!.selectSuggestion(demra);
+      c.goToStep(1);
+      await pump(tester, c);
+      await tester.tap(find.byKey(const ValueKey('change-address')));
+      await frames(tester);
+      expect(find.text('Where is your home?'), findsOneWidget);
     });
 
     group('nearest-N neighborhood (the default)', () {
@@ -427,7 +471,7 @@ void main() {
         longitude: -116.9989,
       );
 
-      testWidgets('address, goal, then a preview of the nearest homes', (
+      testWidgets('no km anywhere; the preview lists the nearest homes', (
         tester,
       ) async {
         final c = await tester.runAsync(make);
@@ -441,28 +485,30 @@ void main() {
         ]);
         c!.selectSuggestion(springValley);
         await tester.runAsync(settle);
+        c.goToStep(2);
         await pump(tester, c);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('cycle-days')),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
-        // No km step anywhere; the goal is step 2, the preview step 3.
+        expect(find.byKey(const ValueKey('range-5.0')), findsNothing);
         expect(find.text('Neighborhood range'), findsNothing);
-        expect(find.textContaining(' km'), findsNothing);
-        expect(find.text('Your neighborhood'), findsOneWidget);
-        expect(find.byKey(const ValueKey('preview-count')), findsOneWidget);
-        expect(find.text('12 homes nearby'), findsOneWidget);
-        // The first 5 homes: "Neighbor", address, distance.
-        expect(find.byKey(const ValueKey('preview-home-h0')), findsOneWidget);
-        expect(find.byKey(const ValueKey('preview-home-h5')), findsNothing);
-        expect(find.text('Neighbor'), findsNWidgets(5));
-        expect(find.text('30 m'), findsOneWidget);
-        expect(find.text('and 7 more'), findsOneWidget);
         expect(
-          find.text('You\u2019ll pray for all 12 neighbors in about 3 days.'),
+          find.text(
+            'You can change the number of homes and your goal later in '
+            'Profile.',
+          ),
           findsOneWidget,
         );
+
+        await tester.tap(find.byKey(const ValueKey('setup-continue')));
+        await frames(tester);
+        expect(find.textContaining(' km'), findsNothing);
+        expect(find.text('Meet your 12 neighbors'), findsOneWidget);
+        expect(
+          find.text('Only 12 homes · 5 a day, full round in about 3 days'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('preview-home-h0')), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('and 7 more'), 200);
+        expect(find.byKey(const ValueKey('preview-home-h4')), findsOneWidget);
+        expect(find.byKey(const ValueKey('preview-home-h5')), findsNothing);
         expect(households.calls, isEmpty, reason: 'no `households` reads');
       });
 
@@ -476,22 +522,21 @@ void main() {
             await settle();
           }
         });
-        await pump(tester, c!);
-        for (var i = 0; i < 3; i++) {
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        expect(c.isLoadingPreview.value, isFalse);
+        c!.goToStep(3);
+        await pump(tester, c);
+        await frames(tester);
         expect(c.previewUnavailable.value, isTrue);
-        expect(find.text("This area isn't available yet"), findsWidgets);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('preview-unavailable')),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
+        expect(find.text("This area isn't available yet"), findsOneWidget);
         expect(
-          find.textContaining("We're adding more states soon."),
+          find.byKey(const ValueKey('preview-unavailable')),
           findsOneWidget,
         );
+        expect(
+          find.text('Available now: New Jersey, California'),
+          findsOneWidget,
+        );
+        expect(find.text('Finish setup'), findsOneWidget);
+        expect(find.byKey(const ValueKey('change-address')), findsOneWidget);
         expect(households.calls, isEmpty, reason: 'no Bangladesh demo data');
 
         await tester.runAsync(c.confirmLocation);

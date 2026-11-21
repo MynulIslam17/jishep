@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:gps_cielo/shared/widgets/household/household_row.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
@@ -224,7 +225,7 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
     final pin = Icon(
       Icons.location_on,
       size: size,
-      color: household.isPrayed ? AppColors.primaryGold : AppColors.primaryNavy,
+      color: household.isPrayed ? prayedGreen : AppColors.primaryNavy,
     );
     final onTap = widget.onHouseholdTap;
     return Marker(

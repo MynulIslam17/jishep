@@ -139,6 +139,20 @@ class PrayerListService {
     );
   }
 
+  /// After today's list: the next homes not yet prayed for in this round,
+  /// nearest first, at most one more day's worth ("Next neighbors").
+  static List<HouseholdModel> nextNeighbors(
+    List<HouseholdModel> neighborhood,
+    PrayerPlan plan,
+  ) {
+    final todayIds = {for (final h in plan.today) h.id};
+    final size = plan.dailyTarget <= 0 ? 5 : plan.dailyTarget;
+    return [
+      for (final h in neighborhood)
+        if (!h.isPrayed && !todayIds.contains(h.id)) h,
+    ].take(size).toList();
+  }
+
   /// Starts a new round: every neighbor can be prayed for again. Earlier
   /// prayers stay in the lifetime totals; visits, invitations, follow-ups and
   /// notes are not touched.

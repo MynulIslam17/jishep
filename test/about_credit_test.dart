@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,8 +35,19 @@ void main() {
       find.text('Address data © Overture Maps Foundation'),
       findsOneWidget,
     );
+    expect(find.text('Map data © OpenStreetMap contributors'), findsOneWidget);
+    expect(find.byKey(const ValueKey('about-version')), findsOneWidget);
     expect(find.text('GPS PARA EL CIELO'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  test('the version shown in About matches pubspec.yaml', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final version = RegExp(
+      r'^version:\s*([^+\s]+)',
+      multiLine: true,
+    ).firstMatch(pubspec)!.group(1);
+    expect(ProfileAboutBottomSheet.appVersion, version);
   });
 
   test('every website page footer carries the developer credit', () {

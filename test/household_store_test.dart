@@ -12,7 +12,6 @@ import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
-import 'package:gps_cielo/features/home/domain/services/home_service.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 
 import 'support/fake_household_repository.dart';
@@ -201,21 +200,20 @@ void main() {
     expect(repository.savedStatuses.single.uid, 'alice');
   });
 
-  // HomeService has no UserRepository at all, so nothing on Home (search,
-  // GPS or the range filter) can write the profile.
-  HomeService homeService() => HomeService(
+  // NeighborhoodService has no UserRepository at all, so looking around
+  // (search or GPS) can never write the profile.
+  NeighborhoodService lookAround() => NeighborhoodService(
     store,
-    LocationService(
+    locationService: LocationService(
       addressSearch: AddressSuggestionService(
         provider: _SylhetPhoton(),
         minInterval: Duration.zero,
       ),
     ),
-    FakeNotificationRepository(),
   );
 
-  test('HomeService.searchNeighborhood is temporary', () async {
-    final service = homeService();
+  test('NeighborhoodService.searchNeighborhood is temporary', () async {
+    final service = lookAround();
     await store.bindUser(user());
     final location = await service.searchNeighborhood('Zindabazar, Sylhet');
 
@@ -264,16 +262,15 @@ void main() {
       'the Home count changes the list, never the range or the query',
       () async {
         repository.available = 40;
-        final service = homeService();
         await store.bindUser(user(radiusHomes: 10, rangeKm: 5));
         final fetches = repository.fetches.length;
 
-        await service.filterRadius(20);
+        await store.filterRadius(20);
         expect(store.households.length, 20);
         expect(store.households.first.id, 'demo_0');
         expect(store.isRadiusFiltered.value, isTrue);
 
-        await service.filterRadius(5);
+        await store.filterRadius(5);
         expect(store.households.length, 5);
         expect(store.households.last.id, 'demo_4');
 
@@ -284,9 +281,8 @@ void main() {
 
     test('the count filter survives a temporary search', () async {
       repository.available = 40;
-      final service = homeService();
       await store.bindUser(user(radiusHomes: 10));
-      await service.filterRadius(5);
+      await store.filterRadius(5);
       await store.searchAround(uttara);
       expect(repository.fetches.last.latitude, uttara.latitude);
       expect(repository.fetches.last.radiusKm, 5);
@@ -295,15 +291,14 @@ void main() {
 
     test('Default (or picking the default) clears the filter', () async {
       repository.available = 40;
-      final service = homeService();
       await store.bindUser(user(radiusHomes: 10));
-      await service.filterRadius(25);
-      await service.filterRadius(null);
+      await store.filterRadius(25);
+      await store.filterRadius(null);
       expect(store.households.length, 10);
       expect(store.isRadiusFiltered.value, isFalse);
 
-      await service.filterRadius(5);
-      await service.filterRadius(10);
+      await store.filterRadius(5);
+      await store.filterRadius(10);
       expect(store.isRadiusFiltered.value, isFalse);
     });
 
@@ -311,9 +306,8 @@ void main() {
       'a new range from Settings reloads and keeps the Home count',
       () async {
         repository.available = 40;
-        final service = homeService();
         await store.bindUser(user(radiusHomes: 10, rangeKm: 5));
-        await service.filterRadius(20);
+        await store.filterRadius(20);
 
         await store.bindUser(user(radiusHomes: 10, rangeKm: 1));
 
@@ -328,9 +322,8 @@ void main() {
       'a new default count from Settings replaces the Home filter',
       () async {
         repository.available = 40;
-        final service = homeService();
         await store.bindUser(user(radiusHomes: 10));
-        await service.filterRadius(25);
+        await store.filterRadius(25);
         final fetches = repository.fetches.length;
 
         await store.bindUser(user(radiusHomes: 15));
@@ -343,9 +336,8 @@ void main() {
 
     test('signing in as someone else clears the filter', () async {
       repository.available = 40;
-      final service = homeService();
       await store.bindUser(user(radiusHomes: 10));
-      await service.filterRadius(5);
+      await store.filterRadius(5);
       await store.bindUser(user(id: 'bob', radiusHomes: 10));
       expect(store.households.length, 10);
       expect(store.isRadiusFiltered.value, isFalse);
@@ -359,13 +351,12 @@ void main() {
       'my neighborhood stays at home during a search and a Home filter',
       () async {
         repository.available = 40;
-        final service = homeService();
         await store.bindUser(user(radiusHomes: 10));
         final home = store.homeHouseholds.map((h) => h.id).toList();
         expect(home.length, 10);
 
         await store.searchAround(uttara);
-        await service.filterRadius(5);
+        await store.filterRadius(5);
         expect(store.households.length, 5);
         expect(store.homeHouseholds.map((h) => h.id), home);
         expect(store.homeHouseholds.first.latitude, closeTo(23.7474, 0.0001));
@@ -493,116 +484,34 @@ void main() {
     });
   });
 
-  group('Neighborhood paging', () {
+  group('Neighborhood tab', () {
     tearDown(Get.reset);
 
-    test('the list is the neighborhood: the same homes as Home', () async {
+    test('shows the same homes as Home, with prayed counts', () async {
       repository.available = 40;
       await store.bindUser(user(radiusHomes: 20, rangeKm: 5));
       final controller = Get.put(
         NeighborhoodController(NeighborhoodService(store)),
       );
       expect(
-        controller.pagedHouseholds.map((h) => h.id),
+        controller.households.map((h) => h.id),
         store.households.map((h) => h.id),
       );
-      expect(controller.pagedHouseholds.length, 20);
-      expect(controller.hasMore, isFalse); // no paging inside it
-      expect(controller.hasMoreInRange, isTrue); // "Browse all in range"
-      expect(controller.loadMore(), isFalse);
+      expect(controller.households.length, 20);
+      expect(controller.prayedCount, 0);
+      expect(controller.toPrayCount, 20);
     });
 
-    test('browsing all in range lists them 10 at a time', () async {
-      // More than the nearest 50 read up front (the largest count); homes
-      // are ~100 m apart, so all 80 are within 10 km.
-      repository.available = 80;
-      await store.bindUser(user(radiusHomes: 20, rangeKm: 10));
-      final controller = Get.put(
-        NeighborhoodController(NeighborhoodService(store)),
-      );
-
-      expect(controller.households.length, 20); // map pins (Settings count)
-      // Only the nearest are read up front; the rest as the list scrolls.
-      expect(controller.areaHouseholds.length, lessThan(80));
-      expect(controller.areaComplete.value, isFalse);
-      controller.setShowAllInRange(true);
-      // Starts with the neighborhood plus the next page.
-      expect(controller.visibleCount.value, 30);
-      expect(controller.hasMore, isTrue);
-
-      // Scroll to the end until nothing more comes, letting reads finish.
-      for (var i = 0; i < 20 && controller.hasMore; i++) {
-        controller.loadMore();
-        await pumpEventQueue();
-      }
-      expect(controller.areaComplete.value, isTrue);
-      expect(controller.pagedHouseholds.length, 80);
-      expect(controller.hasMore, isFalse);
-      expect(controller.loadMore(), isFalse);
-      final ids = controller.pagedHouseholds.map((h) => h.id).toList();
-      // Every household, once, nearest first.
-      expect(ids, [for (var i = 0; i < 80; i++) 'demo_$i']);
-      // No household document was read twice.
-      expect(repository.lastIndex!.documentsRead, 80);
-    });
-
-    test(
-      'a page asked for before it is read appears when it arrives',
-      () async {
-        repository.available = 80;
-        await store.bindUser(user(radiusHomes: 10, rangeKm: 10));
-        final controller = Get.put(
-          NeighborhoodController(NeighborhoodService(store)),
-        );
-        // All in range, before any further read has started.
-        controller.showAllInRange.value = true;
-        // Show everything already read, then ask for one more page.
-        while (controller.visibleCount.value <
-            controller.areaHouseholds.length) {
-          controller.visibleCount.value += NeighborhoodController.pageSize;
-        }
-        final before = controller.visibleCount.value;
-        expect(controller.loadMore(), isFalse); // not read yet
-        await pumpEventQueue();
-        expect(controller.visibleCount.value, before + 10);
-        expect(controller.pagedHouseholds.length, greaterThan(before));
-      },
-    );
-
-    test(
-      'reaching the end when nothing more is in range stops the spinner',
-      () async {
-        // 26 households (the last 2.6 km out); the first read asks for the
-        // nearest 50, so the last read only confirms the range is empty.
-        repository.available = 26;
-        await store.bindUser(user(radiusHomes: 10, rangeKm: 5));
-        final controller = Get.put(
-          NeighborhoodController(NeighborhoodService(store)),
-        );
-        controller.setShowAllInRange(true);
-        for (var i = 0; i < 10 && controller.hasMore; i++) {
-          controller.loadMore();
-          await pumpEventQueue();
-        }
-        expect(controller.areaComplete.value, isTrue);
-        expect(controller.isLoadingMore.value, isFalse); // no stuck spinner
-        expect(controller.hasMore, isFalse); // footer: "All 26 shown"
-        expect(controller.pagedHouseholds.length, 26);
-      },
-    );
-
-    test('a new search area goes back to the nearest homes', () async {
+    test('a searched place shows its nearest homes', () async {
       repository.available = 40;
       await store.bindUser(user());
       final controller = Get.put(
         NeighborhoodController(NeighborhoodService(store)),
       );
-      controller.setShowAllInRange(true);
-      expect(controller.pagedHouseholds.length, 20);
-
+      expect(controller.isTemporary.value, isFalse);
       await store.searchAround(uttara);
-      expect(controller.showAllInRange.value, isFalse);
-      expect(controller.pagedHouseholds.length, 10);
+      expect(controller.isTemporary.value, isTrue);
+      expect(controller.households.length, 10);
     });
   });
 

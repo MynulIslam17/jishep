@@ -39,7 +39,21 @@ class PrayerListController extends GetxController {
   /// (e.g. no permission) is not retried on every rebuild.
   DateTime? _autoRoundTriedOn;
 
+  /// "Next neighbors" is open (after today's goal is reached).
+  final showNext = false.obs;
+
   List<HouseholdModel> get todayHouseholds => plan.value.today;
+
+  /// The next homes not yet prayed for in this round, after today's list
+  /// (up to one more day's worth), nearest first.
+  List<HouseholdModel> get nextNeighbors =>
+      PrayerListService.nextNeighbors(neighborhood, plan.value);
+
+  /// Homes visited / invited in the neighborhood (round-complete stats).
+  int get visitedCount => neighborhood.where((h) => h.isVisited).length;
+  int get invitedCount => neighborhood.where((h) => h.isInvited).length;
+
+  void toggleNext() => showNext.value = !showNext.value;
 
   /// Every home in "my neighborhood", nearest first.
   List<HouseholdModel> get neighborhood => _service.neighborhood;

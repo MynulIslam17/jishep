@@ -156,7 +156,9 @@ void main() {
       await pumpApp(tester, screen());
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -20));
       await tester.pumpAndSettle();
-      final scroll = tester.state<ScrollableState>(find.byType(Scrollable).first);
+      final scroll = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
       expect(scroll.position.pixels, 0);
     });
 
