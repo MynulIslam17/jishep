@@ -1,1 +1,77 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"gps-cielo","appId":"1:93438539556:android:80e7f904cfad0096cfe5b1","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"gps-cielo","appId":"1:93438539556:ios:9f7e21f59b77e74dcfe5b1","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"gps-cielo","configurations":{"android":"1:93438539556:android:80e7f904cfad0096cfe5b1","ios":"1:93438539556:ios:9f7e21f59b77e74dcfe5b1"}}}}},"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "gps-para-el-cielo",
+          "appId": "1:1044715224614:android:f1cd5fefe98d5d2417b0e7",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "gps-para-el-cielo",
+          "appId": "1:1044715224614:ios:8fe76620733d1f4217b0e7",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "gps-para-el-cielo",
+          "configurations": {
+            "android": "1:1044715224614:android:f1cd5fefe98d5d2417b0e7",
+            "ios": "1:1044715224614:ios:8fe76620733d1f4217b0e7"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "legal_site",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*"
+    ],
+    "trailingSlash": false
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "hosting": {
+      "port": 5000
+    },
+    "ui": {
+      "enabled": true
+    },
+    "functions": {
+      "port": 5001
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        "test",
+        "tool",
+        ".git",
+        "*.log",
+        ".melissa-recordings",
+        ".melissa-fixtures",
+        ".secret.local",
+        ".env.local"
+      ]
+    }
+  ]
+}

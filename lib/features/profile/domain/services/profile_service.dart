@@ -28,6 +28,9 @@ class ProfileService {
 
   RxInt get visitsMade => _store.visitedCount;
 
+  /// Lifetime prayers over every round (prayer history).
+  RxInt get prayersOffered => _store.prayersOffered;
+
   Future<UserModel> updateAddress(
     UserModel user,
     String address, {

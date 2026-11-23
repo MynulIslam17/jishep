@@ -1,9 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gps_cielo/core/data/geo_record.dart';
 
 class HouseholdModel {
   final String id;
   final int number;
-  final String residentName;
+
+  /// The name the user gave this household (private to them, stored in
+  /// their `household_status/{id}`), or null when none was set.
+  final String? residentName;
+
+  /// The recorded property owner from Melissa Property (public record),
+  /// known after an address check of this home. Not necessarily who lives
+  /// there. Never stored in the user's status document.
+  final String? ownerName;
+
+  /// A second recorded owner (public record), shown in the details only.
+  final String? ownerSecondName;
+
+  /// True when the recorded owner is a company or trust (public record).
+  final bool ownerIsEntity;
+
+  /// Melissa property use, e.g. "Single Family Residential" (null when not
+  /// known).
+  final String? propertyClass;
   final String address;
   final String cityStateZip;
   final bool isPrayed;
@@ -21,7 +40,11 @@ class HouseholdModel {
   HouseholdModel({
     required this.id,
     required this.number,
-    required this.residentName,
+    String? residentName,
+    String? ownerName,
+    String? ownerSecondName,
+    this.ownerIsEntity = false,
+    this.propertyClass,
     required this.address,
     this.cityStateZip = '',
     this.isPrayed = false,
@@ -35,7 +58,72 @@ class HouseholdModel {
     this.longitude = 0,
     this.prayedAt,
     this.updatedAt,
-  });
+  }) : residentName = cleanName(residentName),
+       ownerName = cleanName(ownerName),
+       ownerSecondName = cleanName(ownerSecondName);
+
+  /// Longest resident name stored (Firestore rules allow 120).
+  static const int maxNameLength = 120;
+
+  /// The title when a household has no resident name and no recorded
+  /// owner (the street address is always shown under the title).
+  static const String unnamed = 'Unknown Resident';
+
+  static final RegExp _placeholder = RegExp(
+    r'^(resident|neighbor|demo household \d{3})$',
+    caseSensitive: false,
+  );
+
+  /// A name as stored: trimmed and at most [maxNameLength] characters, or
+  /// null when empty or a placeholder ("Resident", "Neighbor", "Demo
+  /// Household NNN" — written by older versions, not by the user).
+  static String? cleanName(Object? raw) {
+    final name = raw?.toString().trim() ?? '';
+    if (name.isEmpty || _placeholder.hasMatch(name)) return null;
+    return name.length > maxNameLength
+        ? name.substring(0, maxNameLength).trim()
+        : name;
+  }
+
+  /// The title shown for the household, everywhere (never empty):
+  ///   1. the resident name the user gave it (private to them),
+  ///   2. the recorded property owner (Melissa, from the shared cache),
+  ///   3. "Unknown Resident".
+  /// The street address is always shown under it.
+  String get displayName => residentName ?? ownerName ?? unnamed;
+
+  /// True when the title is the recorded owner (label it as such).
+  bool get showsOwnerName => residentName == null && ownerName != null;
+
+  /// How a recorded owner is labelled everywhere. Never "resident": the
+  /// owner may not live there.
+  static const String ownerLabel = 'Property Owner (Public Record)';
+
+  /// A copy with [name] as the resident name (null or empty removes it).
+  HouseholdModel withName(String? name) {
+    return HouseholdModel(
+      id: id,
+      number: number,
+      residentName: name,
+      ownerName: ownerName,
+      ownerSecondName: ownerSecondName,
+      ownerIsEntity: ownerIsEntity,
+      propertyClass: propertyClass,
+      address: address,
+      cityStateZip: cityStateZip,
+      isPrayed: isPrayed,
+      isVisited: isVisited,
+      isInvited: isInvited,
+      hasFollowUp: hasFollowUp,
+      followUpDate: followUpDate,
+      lastUpdated: lastUpdated,
+      notes: notes,
+      latitude: latitude,
+      longitude: longitude,
+      prayedAt: prayedAt,
+      updatedAt: updatedAt,
+    );
+  }
 
   String get fullAddress =>
       cityStateZip.isEmpty ? address : '$address, $cityStateZip';
@@ -82,7 +170,7 @@ class HouseholdModel {
     return HouseholdModel(
       id: id,
       number: number,
-      residentName: status['residentName']?.toString() ?? 'Resident',
+      residentName: status['residentName']?.toString(),
       address: status['address']?.toString() ?? '',
       isPrayed: prayedInCycle(status, cycleStart),
       isVisited: status['isVisited'] == true,
@@ -112,11 +200,44 @@ class HouseholdModel {
     return HouseholdModel(
       id: doc.id,
       number: number,
-      residentName: data['residentName']?.toString() ?? 'Resident',
+      residentName: status?['residentName']?.toString(),
       address: data['address']?.toString() ?? '',
       cityStateZip: data['cityStateZip']?.toString() ?? '',
       latitude: geopoint is GeoPoint ? geopoint.latitude : 0,
       longitude: geopoint is GeoPoint ? geopoint.longitude : 0,
+      isPrayed: prayedInCycle(status, cycleStart),
+      isVisited: status?['isVisited'] == true,
+      isInvited: status?['isInvited'] == true,
+      hasFollowUp: status?['hasFollowUp'] == true,
+      followUpDate: status?['followUpDate']?.toString(),
+      notes: status?['notes']?.toString(),
+      prayedAt: _toDate(status?['prayedAt']),
+      updatedAt: updatedAt,
+      lastUpdated: _describeUpdatedAt(updatedAt),
+    );
+  }
+
+  /// Builds a household from a [GeoRecord] (a `households` document or an
+  /// Overture cell entry) merged with the signed-in user's status document.
+  factory HouseholdModel.fromRecord({
+    required GeoRecord record,
+    Map<String, dynamic>? status,
+    required int number,
+    DateTime? cycleStart,
+  }) {
+    final updatedAt = _toDate(status?['updatedAt']);
+    return HouseholdModel(
+      id: record.id,
+      number: number,
+      residentName: status?['residentName']?.toString(),
+      ownerName: record.ownerName,
+      ownerSecondName: record.ownerSecondName,
+      ownerIsEntity: record.ownerIsEntity,
+      propertyClass: record.propertyClass,
+      address: record.address,
+      cityStateZip: record.cityStateZip,
+      latitude: record.latitude,
+      longitude: record.longitude,
       isPrayed: prayedInCycle(status, cycleStart),
       isVisited: status?['isVisited'] == true,
       isInvited: status?['isInvited'] == true,
@@ -135,7 +256,7 @@ class HouseholdModel {
       number: json['number'] is int
           ? json['number']
           : int.tryParse(json['number']?.toString() ?? '1') ?? 1,
-      residentName: json['residentName']?.toString() ?? 'Resident',
+      residentName: json['residentName']?.toString(),
       address: json['address']?.toString() ?? '',
       cityStateZip: json['cityStateZip']?.toString() ?? '',
       isPrayed: json['isPrayed'] == true,
@@ -170,6 +291,8 @@ class HouseholdModel {
   }
 
   /// The per-user fields written to `users/{uid}/household_status/{id}`.
+  /// `residentName` is not included: it is written only when the user
+  /// changes it (see `HouseholdRepository.saveStatus`).
   Map<String, dynamic> toStatusFirestore() {
     return {
       'isPrayed': isPrayed,
@@ -178,7 +301,6 @@ class HouseholdModel {
       'hasFollowUp': hasFollowUp,
       'followUpDate': hasFollowUp ? followUpDate : null,
       'notes': notes,
-      'residentName': residentName,
       'address': fullAddress,
     };
   }
@@ -189,13 +311,18 @@ class HouseholdModel {
         isInvited == other.isInvited &&
         hasFollowUp == other.hasFollowUp &&
         followUpDate == other.followUpDate &&
-        notes == other.notes;
+        notes == other.notes &&
+        residentName == other.residentName;
   }
 
   HouseholdModel copyWith({
     String? id,
     int? number,
     String? residentName,
+    String? ownerName,
+    String? ownerSecondName,
+    bool? ownerIsEntity,
+    String? propertyClass,
     String? address,
     String? cityStateZip,
     bool? isPrayed,
@@ -214,6 +341,10 @@ class HouseholdModel {
       id: id ?? this.id,
       number: number ?? this.number,
       residentName: residentName ?? this.residentName,
+      ownerName: ownerName ?? this.ownerName,
+      ownerSecondName: ownerSecondName ?? this.ownerSecondName,
+      ownerIsEntity: ownerIsEntity ?? this.ownerIsEntity,
+      propertyClass: propertyClass ?? this.propertyClass,
       address: address ?? this.address,
       cityStateZip: cityStateZip ?? this.cityStateZip,
       isPrayed: isPrayed ?? this.isPrayed,

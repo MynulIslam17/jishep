@@ -49,7 +49,10 @@ class SignUpController extends GetxController {
       return;
     }
     if (!agreeToTerms.value) {
-      SnackbarService.showError('Terms', 'Please accept the Terms of Use');
+      SnackbarService.showError(
+        'Terms',
+        'Please accept the Terms of Use and Privacy Policy',
+      );
       return;
     }
 

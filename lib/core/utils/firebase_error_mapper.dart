@@ -49,6 +49,9 @@ abstract final class FirebaseErrorMapper {
       'failed' ||
       'invalid-response' ||
       'not-handled' => 'Sign in with Apple did not complete. Please try again.',
+      'user-mismatch' =>
+        'That is a different account. Choose the account you are signed in '
+            'with.',
       'requires-recent-login' =>
         'For security, please sign in again and retry.',
       'missing-client-identifier' || 'app-not-authorized' =>

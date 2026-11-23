@@ -1,0 +1,6 @@
+node_modules/
+.secret.local
+.env.local
+*.log
+.melissa-fixtures
+.melissa-recordings/

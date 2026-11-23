@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/app_config.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/system_ui_config.dart';
@@ -24,6 +25,7 @@ class ForgotPasswordScreen extends GetView<ForgotPasswordController> {
       child: Scaffold(
         backgroundColor: AppColors.surface,
         body: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             children: [
               // Navy Auth Header with Back Button
@@ -31,7 +33,9 @@ class ForgotPasswordScreen extends GetView<ForgotPasswordController> {
                 children: [
                   const AppAuthHeader(
                     title: 'Forgot Password',
-                    subtitle: 'Recover your account by phone or email',
+                    subtitle: AppConfig.phoneAuthEnabled
+                        ? 'Recover your account by phone or email'
+                        : 'Recover your account by email',
                   ),
                   Positioned(
                     top: 48.h,
@@ -51,17 +55,21 @@ class ForgotPasswordScreen extends GetView<ForgotPasswordController> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Phone (SMS code) or Email (reset link)
-                    Obx(
-                      () => AppSegmentedSwitch(
-                        key: const ValueKey('reset-method'),
-                        labels: const ['Phone', 'Email'],
-                        icons: const [Icons.sms_outlined, Icons.email_outlined],
-                        selectedIndex: controller.useEmail.value ? 1 : 0,
-                        onChanged: (i) => controller.setUseEmail(i == 1),
+                    if (AppConfig.phoneAuthEnabled) ...[
+                      Obx(
+                        () => AppSegmentedSwitch(
+                          key: const ValueKey('reset-method'),
+                          labels: const ['Phone', 'Email'],
+                          icons: const [
+                            Icons.sms_outlined,
+                            Icons.email_outlined,
+                          ],
+                          selectedIndex: controller.useEmail.value ? 1 : 0,
+                          onChanged: (i) => controller.setUseEmail(i == 1),
+                        ),
                       ),
-                    ),
-
-                    SizedBox(height: 20.h),
+                      SizedBox(height: 20.h),
+                    ],
 
                     Obx(() {
                       if (!controller.useEmail.value) {

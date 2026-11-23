@@ -99,7 +99,7 @@ class FollowUpHouseholdItem extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              item.residentName,
+                              item.displayName,
                               style: AppTypography.heading(
                                 color: AppColors.textPrimary,
                                 fontSize: 14.sp,

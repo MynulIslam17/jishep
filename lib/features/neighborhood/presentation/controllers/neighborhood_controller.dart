@@ -1,160 +1,103 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/core/services/address_suggestion_service.dart';
+import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/utils/search_range.dart';
+import 'package:gps_cielo/core/services/location_service.dart';
+import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
+import 'package:gps_cielo/core/utils/show_snackbar.dart';
+import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
 import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
 
 enum NeighborhoodViewMode { map, list }
 
+/// Neighborhood tab (Figma "My Neighborhood"): the nearest N homes on a map
+/// or in a list. The header search looks around another place for a while
+/// (never saved unless the user picks "Set as my home").
 class NeighborhoodController extends GetxController {
   final NeighborhoodService _service;
+  final AuthController? _auth;
+  final HomeAddressService? _homeAddress;
 
-  NeighborhoodController(this._service);
+  NeighborhoodController(
+    this._service, {
+    AuthController? auth,
+    HomeAddressService? homeAddress,
+  }) : _auth = auth,
+       _homeAddress = homeAddress;
 
   final viewMode = NeighborhoodViewMode.map.obs;
 
-  /// The nearest households (Home count), pinned on the map.
+  /// The nearest N homes around the center: pins and rows.
   final households = <HouseholdModel>[].obs;
 
-  /// Households within the range read so far, nearest first.
-  final areaHouseholds = <HouseholdModel>[].obs;
+  /// No household data exists around the current center (cells).
+  final areaUnavailable = false.obs;
 
-  /// True once every household within the range has been read (until then
-  /// counts show as "N+").
-  final areaComplete = false.obs;
-
-  /// True while households further out are being read.
-  final isLoadingMore = false.obs;
-
-  /// The list shows [pageSize] more households each time the user scrolls
-  /// to the end; households further out are read from Firestore only as the
-  /// list reaches them (one page ahead).
-  static const int pageSize = 10;
-  final visibleCount = pageSize.obs;
-
-  List<HouseholdModel> get pagedHouseholds =>
-      areaHouseholds.take(visibleCount.value).toList();
-
-  bool get hasMore =>
-      visibleCount.value < areaHouseholds.length || !areaComplete.value;
-
-  /// Shows the next page. Returns false when everything is shown.
-  bool loadMore() {
-    if (!hasMore) return false;
-    // Wait for the read when the next page is not in yet.
-    if (visibleCount.value >= areaHouseholds.length) {
-      _pageWaiting = true;
-      _prefetch();
-      return false;
-    }
-    visibleCount.value += pageSize;
-    _prefetch();
-    return true;
-  }
-
-  /// A page was asked for before it was read; shown once it arrives.
-  bool _pageWaiting = false;
-
-  void _onArea(List<HouseholdModel> area) {
-    areaHouseholds.assignAll(area);
-    if (_pageWaiting && area.length > visibleCount.value) {
-      _pageWaiting = false;
-      visibleCount.value += pageSize;
-      _prefetch();
-    } else if (area.isNotEmpty &&
-        areaComplete.value &&
-        area.length <= visibleCount.value) {
-      // The range held nothing more. (assignAll first reports an empty
-      // list, then the new one: only the real list may end the wait.)
-      _pageWaiting = false;
-    }
-  }
-
-  void _resetPaging() {
-    _pageWaiting = false;
-    visibleCount.value = pageSize;
-  }
-
-  /// Reads two pages past the visible ones, so scrolling rarely waits —
-  /// including the last read, which only confirms nothing more is in range.
-  void _prefetch() {
-    if (areaComplete.value) return;
-    final wanted = visibleCount.value + 2 * pageSize;
-    if (areaHouseholds.length >= wanted) return;
-    _service.loadMoreArea(wanted);
-  }
-
-  final selectedHousehold = Rxn<HouseholdModel>();
-  final radiusHomes = 10.obs;
-  final rangeMeters = RxnDouble();
+  /// Where the homes came from (Melissa-first), or null.
+  final areaSourceNote = RxnString();
   final isLoading = false.obs;
+
+  /// True while showing a searched place instead of the saved home.
+  final isTemporary = false.obs;
+
+  /// The center's label: the home address or the searched place.
+  final centerLabel = ''.obs;
   final centerLatitude = RxnDouble();
   final centerLongitude = RxnDouble();
 
-  /// Zooms the neighborhood map from the +/- buttons.
+  /// Zooms the map from the +/- buttons.
   final mapHandle = HouseholdMapHandle();
 
+  // Search ("look around another place").
+  final searchController = TextEditingController();
+  final isSearching = false.obs;
+  final isLocating = false.obs;
+  final isSavingHome = false.obs;
+
+  /// The searched place, kept so it can be saved as the home address.
+  ResolvedLocation? _searchedLocation;
+
   final List<Worker> _workers = [];
+
+  int get prayedCount => households.where((h) => h.isPrayed).length;
+  int get toPrayCount => households.length - prayedCount;
+
+  /// The saved home, which biases address suggestions.
+  double? get homeLatitude => _auth?.currentUser.value?.latitude;
+  double? get homeLongitude => _auth?.currentUser.value?.longitude;
 
   @override
   void onInit() {
     super.onInit();
     households.assignAll(_service.households);
-    areaHouseholds.assignAll(_service.areaHouseholds);
-    areaComplete.value = _service.areaComplete.value;
-    isLoadingMore.value = _service.isLoadingArea.value;
-    rangeMeters.value = _service.rangeMeters.value;
+    areaUnavailable.value = _service.areaUnavailable.value;
+    areaSourceNote.value = _service.areaSourceNote.value;
     isLoading.value = _service.isLoading.value;
-    _applyRadius(_service.activeRadius.value);
     _applyCenter(_service.center.value);
 
     _workers.addAll([
-      ever(_service.center, (SearchCenter? c) {
-        _applyCenter(c);
-        _resetPaging(); // a new area starts at page one
-      }),
-      ever(_service.rangeMeters, (_) => _resetPaging()),
-      ever(_service.areaHouseholds, _onArea),
-      ever(_service.areaComplete, (bool c) => areaComplete.value = c),
-      ever(_service.isLoadingArea, (bool l) => isLoadingMore.value = l),
-      ever(_service.rangeMeters, (double? m) => rangeMeters.value = m),
+      ever(_service.center, _applyCenter),
       ever(_service.households, households.assignAll),
+      ever(_service.areaUnavailable, (bool u) => areaUnavailable.value = u),
+      ever(_service.areaSourceNote, (String? n) => areaSourceNote.value = n),
       ever(_service.isLoading, (bool loading) => isLoading.value = loading),
-      ever(_service.activeRadius, _applyRadius),
     ]);
   }
 
-  /// Same range as Home (the Home filter, or the default from Settings).
-  void _applyRadius(int homes) {
-    if (homes > 0) radiusHomes.value = homes;
-  }
-
-  /// The map follows the active search center (home or a searched place).
   void _applyCenter(SearchCenter? center) {
     centerLatitude.value = center?.latitude;
     centerLongitude.value = center?.longitude;
-  }
-
-  /// "Nearest 10 homes · within 1.2 km".
-  String get rangeLabel {
-    final meters = rangeMeters.value;
-    return SearchRange.label(
-      shown: households.length,
-      requested: radiusHomes.value,
-      rangeKm: meters == null || isLoading.value ? null : meters / 1000,
-    );
+    isTemporary.value = center?.isTemporary ?? false;
+    centerLabel.value = center?.label ?? '';
   }
 
   Future<void> loadHouseholds() => _service.refreshHouseholds();
 
-  void switchViewMode(NeighborhoodViewMode mode) {
-    viewMode.value = mode;
-  }
-
-  void selectHousehold(HouseholdModel household) {
-    selectedHousehold.value = household;
-  }
+  void switchViewMode(NeighborhoodViewMode mode) => viewMode.value = mode;
 
   Future<void> zoomIn() => mapHandle.zoomIn();
 
@@ -164,12 +107,123 @@ class NeighborhoodController extends GetxController {
     return _service.togglePray(household.id);
   }
 
-  Future<void> toggleVisit(HouseholdModel household) {
-    return _service.toggleVisit(household.id);
-  }
-
   void updateHousehold(HouseholdModel updated) {
     _service.updateHousehold(updated);
+  }
+
+  /// Looks around the address picked from the suggestions list.
+  Future<void> selectSuggestion(AddressSuggestion suggestion) {
+    return searchNeighborhood(location: suggestion.toResolvedLocation());
+  }
+
+  /// Looks around the device's GPS position (not saved to the profile).
+  Future<void> useCurrentLocation() async {
+    if (isLocating.value || isSearching.value) return;
+    isLocating.value = true;
+    try {
+      final location = await _service.currentLocation();
+      searchController.text = location.hasAddress
+          ? location.address
+          : location.coordinatesLabel;
+      await searchNeighborhood(location: location);
+    } catch (error) {
+      SnackbarService.showError(
+        'Location Unavailable',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isLocating.value = false;
+    }
+  }
+
+  bool _isSavedAddress(String text) {
+    final saved = _auth?.currentUser.value?.address.trim() ?? '';
+    return saved.isNotEmpty && text.trim().toLowerCase() == saved.toLowerCase();
+  }
+
+  /// Temporary search around an address. The saved home address is kept.
+  Future<void> searchNeighborhood({ResolvedLocation? location}) async {
+    if (isSearching.value || (location == null && isLocating.value)) return;
+    final address = location?.address ?? searchController.text.trim();
+    if (address.isEmpty && location == null) {
+      SnackbarService.showError('Validation', 'Please enter an address');
+      return;
+    }
+    isSearching.value = true;
+    try {
+      // Searching the saved home address simply shows home again.
+      if (location == null && _isSavedAddress(address)) {
+        await useHomeAddress();
+        return;
+      }
+      _searchedLocation = await _service.searchNeighborhood(
+        address,
+        location: location,
+      );
+      final found = _service.households.length;
+      SnackbarService.showSuccess(
+        'Looking around',
+        found == 0
+            ? (_service.areaUnavailable.value
+                  ? AppStrings.areaUnavailable
+                  : 'No households found near this place yet')
+            : 'The nearest $found homes to this place',
+      );
+    } catch (error) {
+      SnackbarService.showError(
+        'Search Failed',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isSearching.value = false;
+    }
+  }
+
+  /// Back to the homes around the saved home address.
+  Future<void> useHomeAddress() async {
+    _searchedLocation = null;
+    searchController.clear();
+    if (_service.center.value?.isTemporary ?? false) {
+      await _service.useSavedLocation();
+    } else {
+      await _service.refreshHouseholds();
+    }
+  }
+
+  /// Saves the searched place as the home address (after the user
+  /// confirmed). Prayer List, Neighborhood and Home then use it.
+  Future<void> setSearchedPlaceAsHome() async {
+    final auth = _auth;
+    final homeAddress = _homeAddress;
+    final user = auth?.currentUser.value;
+    final center = _service.center.value;
+    if (auth == null || homeAddress == null || user == null) return;
+    if (center == null || !center.isTemporary || isSavingHome.value) return;
+    final location =
+        _searchedLocation ??
+        ResolvedLocation(
+          address: center.label,
+          latitude: center.latitude,
+          longitude: center.longitude,
+        );
+    isSavingHome.value = true;
+    try {
+      final updated = await homeAddress.save(user, location);
+      auth.updateUser(updated);
+      _searchedLocation = null;
+      searchController.clear();
+      SnackbarService.showSuccess(
+        'Home Address Updated',
+        'Your neighbors are now the homes nearest ${updated.address}.',
+      );
+    } catch (error) {
+      SnackbarService.showError(
+        'Address Not Saved',
+        FirebaseErrorMapper.message(error),
+      );
+    } finally {
+      isSavingHome.value = false;
+    }
   }
 
   @override
@@ -177,6 +231,7 @@ class NeighborhoodController extends GetxController {
     for (final worker in _workers) {
       worker.dispose();
     }
+    searchController.dispose();
     super.onClose();
   }
 }

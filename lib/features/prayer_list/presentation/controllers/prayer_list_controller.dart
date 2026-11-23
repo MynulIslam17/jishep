@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/utils/day_change.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
@@ -22,12 +25,42 @@ class PrayerListController extends GetxController {
   /// Search range from Settings, in meters.
   final rangeMeters = RxnDouble();
 
+  /// No household data exists around the saved home (cells).
+  final homeUnavailable = false.obs;
+
+  /// Why the neighborhood is empty (Melissa only), or null.
+  final homeNote = RxnString();
+
   /// The saved home address, for messages ("within 5 km of Demra").
   final homeLabel = 'your home'.obs;
 
   final List<Worker> _workers = [];
 
+  /// Rebuilds the plan at midnight, when a new prayer day begins.
+  DayChangeWatcher? _dayWatcher;
+
+  /// The day an automatic new round was last tried, so a failed write
+  /// (e.g. no permission) is not retried on every rebuild.
+  DateTime? _autoRoundTriedOn;
+
+  /// "Next neighbors" is open (after today's goal is reached).
+  final showNext = false.obs;
+
   List<HouseholdModel> get todayHouseholds => plan.value.today;
+
+  /// The next homes not yet prayed for in this round, after today's list
+  /// (up to one more day's worth), nearest first.
+  List<HouseholdModel> get nextNeighbors =>
+      PrayerListService.nextNeighbors(neighborhood, plan.value);
+
+  /// Homes visited / invited in the neighborhood (round-complete stats).
+  int get visitedCount => neighborhood.where((h) => h.isVisited).length;
+  int get invitedCount => neighborhood.where((h) => h.isInvited).length;
+
+  void toggleNext() => showNext.value = !showNext.value;
+
+  /// Every home in "my neighborhood", nearest first.
+  List<HouseholdModel> get neighborhood => _service.neighborhood;
 
   @override
   void onInit() {
@@ -39,8 +72,26 @@ class PrayerListController extends GetxController {
       ever(_service.neighborhood, (_) => _rebuild()),
       ever(_authController.currentUser, (_) => _rebuild()),
       ever(_service.rangeMeters, (_) => _rebuild()),
-      ever(_service.isLoading, (bool loading) => isLoading.value = loading),
+      ever(_service.homeUnavailable, (_) => _rebuild()),
+      ever(_service.homeSourceNote, (_) => _rebuild()),
+      ever(_service.isLoading, (bool loading) {
+        isLoading.value = loading;
+        if (!loading) _maybeStartNewRound();
+      }),
     ]);
+    _dayWatcher = DayChangeWatcher(_rebuild);
+  }
+
+  /// Starts the next round on its own the first day after a round was
+  /// finished. The day the round is finished stays a day of celebration.
+  void _maybeStartNewRound() {
+    if (!plan.value.needsNewRound) return;
+    if (_service.isLoading.value || isStartingCycle.value) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (_autoRoundTriedOn == today) return;
+    _autoRoundTriedOn = today;
+    _startRound(automatic: true);
   }
 
   void _rebuild() {
@@ -49,10 +100,13 @@ class PrayerListController extends GetxController {
     final address = user?.address.trim() ?? '';
     homeLabel.value = address.isEmpty ? 'your home' : address;
     rangeMeters.value = _service.rangeMeters.value;
+    homeUnavailable.value = _service.homeUnavailable.value;
+    homeNote.value = _service.homeSourceNote.value;
     plan.value = PrayerListService.buildPlan(
       _service.neighborhood,
       user?.dailyPrayerTarget ?? 5,
     );
+    _maybeStartNewRound();
   }
 
   Future<void> loadTodayPrayers() => _service.refreshHouseholds();
@@ -65,22 +119,27 @@ class PrayerListController extends GetxController {
     _service.updateHousehold(updated);
   }
 
-  /// Begins praying through the whole neighborhood again.
-  Future<void> startNewCycle() async {
+  /// Starts the next round now instead of at midnight.
+  Future<void> startNewCycle() => _startRound(automatic: false);
+
+  Future<void> _startRound({required bool automatic}) async {
     final user = _authController.currentUser.value;
     if (user == null || isStartingCycle.value) return;
     isStartingCycle.value = true;
     try {
       await _service.startNewCycle(user.id);
       SnackbarService.showSuccess(
-        'New Prayer Cycle',
-        'Your neighborhood is ready to be prayed for again.',
+        'A new round has begun',
+        'Every neighbor is on your prayer list again.',
       );
     } catch (error) {
-      SnackbarService.showError(
-        'Could not start a new cycle',
-        FirebaseErrorMapper.message(error),
-      );
+      // An automatic round is tried again tomorrow or on the next app start.
+      if (!automatic) {
+        SnackbarService.showError(
+          'Could not start a new round',
+          FirebaseErrorMapper.message(error),
+        );
+      }
     } finally {
       isStartingCycle.value = false;
     }
@@ -88,6 +147,7 @@ class PrayerListController extends GetxController {
 
   @override
   void onClose() {
+    _dayWatcher?.dispose();
     for (final worker in _workers) {
       worker.dispose();
     }

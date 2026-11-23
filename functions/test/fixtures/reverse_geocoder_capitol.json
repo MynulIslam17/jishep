@@ -1,0 +1,79 @@
+{
+ "Version": "10.5225.1.20261006",
+ "TransmissionReference": "",
+ "TransmissionResults": "",
+ "Results": "GS07",
+ "TotalRecords": 5,
+ "Records": [
+  {
+   "AddressLine1": "1 Independence Sq SW",
+   "SuiteName": "",
+   "SuiteCount": "0",
+   "City": "Washington",
+   "State": "DC",
+   "PostalCode": "20219",
+   "AddressKey": "20219000101",
+   "Latitude": "38.88762",
+   "Longitude": "-77.00916",
+   "Distance": "0.150827",
+   "MelissaAddressKey": "3707255260",
+   "MelissaAddressKeyBase": "0"
+  },
+  {
+   "AddressLine1": "1027 Longworth Hob",
+   "SuiteName": "",
+   "SuiteCount": "0",
+   "City": "Washington",
+   "State": "DC",
+   "PostalCode": "20515",
+   "AddressKey": "20515210127",
+   "Latitude": "38.887498",
+   "Longitude": "-77.00863",
+   "Distance": "0.160787",
+   "MelissaAddressKey": "1948427361",
+   "MelissaAddressKeyBase": "0"
+  },
+  {
+   "AddressLine1": "1005 Longworth Hob",
+   "SuiteName": "",
+   "SuiteCount": "0",
+   "City": "Washington",
+   "State": "DC",
+   "PostalCode": "20515",
+   "AddressKey": "20515070105",
+   "Latitude": "38.887498",
+   "Longitude": "-77.00863",
+   "Distance": "0.160787",
+   "MelissaAddressKey": "2044020015",
+   "MelissaAddressKeyBase": "0"
+  },
+  {
+   "AddressLine1": "1029 Longworth Hob",
+   "SuiteName": "",
+   "SuiteCount": "0",
+   "City": "Washington",
+   "State": "DC",
+   "PostalCode": "20515",
+   "AddressKey": "20515230429",
+   "Latitude": "38.887498",
+   "Longitude": "-77.00863",
+   "Distance": "0.160787",
+   "MelissaAddressKey": "2321315891",
+   "MelissaAddressKeyBase": "0"
+  },
+  {
+   "AddressLine1": "1009 Longworth Hob",
+   "SuiteName": "",
+   "SuiteCount": "0",
+   "City": "Washington",
+   "State": "DC",
+   "PostalCode": "20515",
+   "AddressKey": "20515351109",
+   "Latitude": "38.887498",
+   "Longitude": "-77.00863",
+   "Distance": "0.160787",
+   "MelissaAddressKey": "2934204861",
+   "MelissaAddressKeyBase": "0"
+  }
+ ]
+}

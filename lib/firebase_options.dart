@@ -50,22 +50,22 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAxIMGG1mDWs_5IRPxuSG0sljThK1qfGNE',
-    appId: '1:93438539556:android:80e7f904cfad0096cfe5b1',
-    messagingSenderId: '93438539556',
-    projectId: 'gps-cielo',
-    storageBucket: 'gps-cielo.firebasestorage.app',
+    apiKey: 'AIzaSyAfyJBNcUBIQI4ksTsnxA7hQAEF8cX51Kg',
+    appId: '1:1044715224614:android:f1cd5fefe98d5d2417b0e7',
+    messagingSenderId: '1044715224614',
+    projectId: 'gps-para-el-cielo',
+    storageBucket: 'gps-para-el-cielo.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBFdy7gxtkwzy9e-IER9pXS-WHbuovuwjY',
-    appId: '1:93438539556:ios:9f7e21f59b77e74dcfe5b1',
-    messagingSenderId: '93438539556',
-    projectId: 'gps-cielo',
-    storageBucket: 'gps-cielo.firebasestorage.app',
+    apiKey: 'AIzaSyAq9ZIqg9nxABb-nl2GsIEoSNQ1GC4TmMY',
+    appId: '1:1044715224614:ios:8fe76620733d1f4217b0e7',
+    messagingSenderId: '1044715224614',
+    projectId: 'gps-para-el-cielo',
+    storageBucket: 'gps-para-el-cielo.firebasestorage.app',
     androidClientId:
-        '93438539556-vi7dp5868dofivtlh00moh32c2cvgito.apps.googleusercontent.com',
+        '1044715224614-i325luv9qsmmbjireq69c2glte0b9bet.apps.googleusercontent.com',
     iosClientId:
-        '93438539556-0ufdeljbdj5a47lvgifvi3jjt7k0ib5q.apps.googleusercontent.com',
+        '1044715224614-vv9k918kemdimgv8sljjvni26ljc0osg.apps.googleusercontent.com',
     iosBundleId: 'org.gaccchurch.gpsceilo',
   );
 }

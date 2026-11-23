@@ -125,6 +125,7 @@ class _CollapsingHeaderScrollViewState
       child: CustomScrollView(
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           SliverPersistentHeader(
             pinned: true,

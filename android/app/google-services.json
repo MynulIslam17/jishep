@@ -1,45 +1,45 @@
 {
   "project_info": {
-    "project_number": "93438539556",
-    "project_id": "gps-cielo",
-    "storage_bucket": "gps-cielo.firebasestorage.app"
+    "project_number": "1044715224614",
+    "project_id": "gps-para-el-cielo",
+    "storage_bucket": "gps-para-el-cielo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:93438539556:android:80e7f904cfad0096cfe5b1",
+        "mobilesdk_app_id": "1:1044715224614:android:f1cd5fefe98d5d2417b0e7",
         "android_client_info": {
           "package_name": "org.gaccchurch.gpsceilo"
         }
       },
       "oauth_client": [
         {
-          "client_id": "93438539556-vi7dp5868dofivtlh00moh32c2cvgito.apps.googleusercontent.com",
+          "client_id": "1044715224614-rctmtpum31ulf7rhq0266i2qc2fsui6s.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "org.gaccchurch.gpsceilo",
-            "certificate_hash": "734fc626a3dd3181e2aa35dba960089b1718e27d"
+            "certificate_hash": "776b08ec17e625dae158293bdacfdc3b1e38d383"
           }
         },
         {
-          "client_id": "93438539556-gsa3n5iqjn47ai9h56t143uqe4sdhih1.apps.googleusercontent.com",
+          "client_id": "1044715224614-i325luv9qsmmbjireq69c2glte0b9bet.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAxIMGG1mDWs_5IRPxuSG0sljThK1qfGNE"
+          "current_key": "AIzaSyAfyJBNcUBIQI4ksTsnxA7hQAEF8cX51Kg"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "93438539556-gsa3n5iqjn47ai9h56t143uqe4sdhih1.apps.googleusercontent.com",
+              "client_id": "1044715224614-i325luv9qsmmbjireq69c2glte0b9bet.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "93438539556-0ufdeljbdj5a47lvgifvi3jjt7k0ib5q.apps.googleusercontent.com",
+              "client_id": "1044715224614-vv9k918kemdimgv8sljjvni26ljc0osg.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
                 "bundle_id": "org.gaccchurch.gpsceilo"

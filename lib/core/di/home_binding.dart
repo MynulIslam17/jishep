@@ -1,7 +1,5 @@
 import 'package:get/get.dart';
-import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/features/home/domain/services/home_service.dart';
 import 'package:gps_cielo/features/home/presentation/controllers/home_controller.dart';
@@ -14,18 +12,14 @@ class HomeBinding extends Bindings {
       Get.lazyPut<HomeService>(
         () => HomeService(
           Get.find<HouseholdStore>(),
-          Get.find<LocationService>(),
           Get.find<NotificationRepository>(),
         ),
       );
     }
     if (!Get.isRegistered<HomeController>()) {
       Get.lazyPut<HomeController>(
-        () => HomeController(
-          Get.find<HomeService>(),
-          Get.find<AuthController>(),
-          Get.find<HomeAddressService>(),
-        ),
+        () =>
+            HomeController(Get.find<HomeService>(), Get.find<AuthController>()),
       );
     }
   }

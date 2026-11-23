@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/features/legal/legal_info.dart';
 
 class ProfileAboutBottomSheet extends StatelessWidget {
   const ProfileAboutBottomSheet({super.key});
@@ -70,7 +71,8 @@ class ProfileAboutBottomSheet extends StatelessWidget {
           ),
           SizedBox(height: 4.h),
           Text(
-            'Version 1.0.0 \u2022 Faith-based community outreach',
+            'Version $appVersion \u2022 Faith-based community outreach',
+            key: const ValueKey('about-version'),
             style: TextStyle(color: const Color(0xFF64748B), fontSize: 12.sp),
           ),
 
@@ -108,10 +110,64 @@ class ProfileAboutBottomSheet extends StatelessWidget {
               ),
             ),
           ),
+
+          SizedBox(height: 18.h),
+
+          // Credits
+          Text(
+            'GPS PARA EL CIELO',
+            style: TextStyle(
+              color: AppColors.primaryNavy,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            developerCredit,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            copyrightNotice,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            dataCredit,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            mapCredit,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: const Color(0xFF64748B), fontSize: 11.sp),
+          ),
         ],
       ),
     );
   }
+
+  /// Keep in step with `version:` in pubspec.yaml (a test checks it).
+  static const String appVersion = '1.0.0';
+
+  /// Map tiles come from OpenStreetMap (attribution required).
+  static const String mapCredit = 'Map data \u00A9 OpenStreetMap contributors';
+
+  static const String developerCredit = LegalInfo.developerCredit;
+  static const String copyrightNotice = '\u00A9 2026 ${LegalInfo.operatorName}';
+
+  /// Household addresses come from Overture Maps (open data, attribution
+  /// required).
+  static const String dataCredit =
+      'Address data \u00A9 Overture Maps Foundation';
 
   Widget _buildModalHandle() {
     return Center(
@@ -130,14 +186,17 @@ class ProfileAboutBottomSheet extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: AppTypography.heading(
-            color: AppColors.primaryNavy,
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Text(
+            title,
+            style: AppTypography.heading(
+              color: AppColors.primaryNavy,
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
+        SizedBox(width: 12.w),
         GestureDetector(
           onTap: () => Navigator.of(context).pop(),
           child: Container(

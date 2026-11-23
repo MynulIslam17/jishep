@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
+import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/pages/neighborhood_screen.dart';
@@ -11,8 +13,17 @@ import 'package:gps_cielo/features/neighborhood/presentation/pages/neighborhood_
 import 'support/fake_household_repository.dart';
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   setUp(() => Get.testMode = true);
   tearDown(Get.reset);
+
+  late HouseholdStore store;
 
   Future<NeighborhoodController> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -20,7 +31,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final repository = FakeHouseholdRepository()..available = 60;
-    final store = HouseholdStore(repository, FakeNotificationRepository());
+    store = HouseholdStore(repository, FakeNotificationRepository());
     await store.bindUser(
       UserModel(
         id: 'alice',
@@ -49,43 +60,26 @@ void main() {
     return controller;
   }
 
-  testWidgets('map scrolls away with the page; count and switch stay pinned', (
-    tester,
-  ) async {
-    final c = await pump(tester);
+  testWidgets('map view: chip, legend and the pinned count', (tester) async {
+    await pump(tester);
     expect(find.text('My Neighborhood'), findsWidgets);
-    final mapCard = find.text('Set your address to see your neighborhood map');
-    expect(mapCard, findsOneWidget);
-    final pinnedBefore = tester.getTopLeft(
-      find.byKey(const ValueKey('area-count')),
-    );
-
-    await tester.drag(
-      find.byKey(const ValueKey('area-demo_0')),
-      const Offset(0, -700),
-    );
-    await tester.pumpAndSettle();
-
-    // The map is off screen and the list fills it.
-    expect(mapCard.hitTestable(), findsNothing);
-    // The strip moved up with the collapsing title, then stuck.
-    final pinnedAfter = tester.getTopLeft(
-      find.byKey(const ValueKey('area-count')),
-    );
-    expect(pinnedAfter.dy, lessThan(pinnedBefore.dy));
     expect(
-      find.byKey(const ValueKey('area-count')).hitTestable(),
+      find.text('Set your address to see your neighborhood map'),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('view-mode')).hitTestable(),
-      findsOneWidget,
-    );
-    expect(c.pagedHouseholds.length, greaterThan(10)); // paged on scroll
+    expect(find.text('Nearest 10 homes'), findsOneWidget);
+    expect(find.text('10 households \u00b7 0 prayed'), findsOneWidget);
+    expect(find.text('10 to pray'), findsOneWidget);
+    expect(find.text('0 prayed this round'), findsOneWidget);
+    expect(find.byKey(const ValueKey('neighborhood-subtitle')), findsOneWidget);
+    // Rows are on the List side.
+    expect(find.byKey(const ValueKey('area-demo_0')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('List mode hides the map', (tester) async {
+  testWidgets('list view: numbered rows, nearest first, no browse-all', (
+    tester,
+  ) async {
     await pump(tester);
     await tester.tap(find.text('List'));
     await tester.pumpAndSettle();
@@ -94,27 +88,52 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('area-demo_0')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('area-demo_9')),
+      300,
+    );
+    expect(find.byKey(const ValueKey('area-demo_10')), findsNothing);
+    expect(find.byKey(const ValueKey('browse-all')), findsNothing);
+    // The pinned strip stays on screen after scrolling.
+    expect(
+      find.byKey(const ValueKey('area-count')).hitTestable(),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('scrolling to the end shows every household once', (
+  testWidgets('the header search opens the look-around sheet', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('neighborhood-search')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('neighborhood-search-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('Look around another place'), findsOneWidget);
+    expect(find.byKey(const ValueKey('search-back-to-home')), findsNothing);
+  });
+
+  testWidgets('looking around shows a banner with the way back home', (
     tester,
   ) async {
     final c = await pump(tester);
-    await tester.tap(find.text('List'));
-    await tester.pumpAndSettle();
-    for (var i = 0; i < 30 && c.hasMore; i++) {
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
-      await tester.pumpAndSettle();
-    }
-    expect(c.hasMore, isFalse);
-    await tester.fling(
-      find.byType(CustomScrollView),
-      const Offset(0, -3000),
-      4000,
+    await store.searchAround(
+      const ResolvedLocation(
+        address: 'Uttara, Dhaka',
+        latitude: 23.8759,
+        longitude: 90.3795,
+        source: LocationSource.search,
+      ),
     );
+    c.centerLatitude.value = null; // still no tiles
+    await tester.pump();
+    expect(find.byKey(const ValueKey('viewing-banner')), findsOneWidget);
+    expect(find.text('Viewing near Uttara, Dhaka'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('back-to-home')));
     await tester.pumpAndSettle();
-    expect(c.pagedHouseholds.length, 50); // 60 at 100 m steps, 5 km range
-    expect(find.text('All 50 households shown'), findsOneWidget);
+    expect(c.isTemporary.value, isFalse);
+    expect(find.byKey(const ValueKey('viewing-banner')), findsNothing);
   });
 }

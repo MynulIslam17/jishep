@@ -1,8 +1,13 @@
+import 'package:gps_cielo/core/data/gap_fill.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'dart:async';
 
+import 'package:gps_cielo/core/data/cell_source.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/core/models/prayer_round.dart';
 import 'package:gps_cielo/features/notifications/data/repositories/notification_repository.dart';
 
 import 'synthetic_households.dart';
@@ -12,6 +17,9 @@ class FakeHouseholdRepository implements HouseholdRepository {
   final List<({double latitude, double longitude, double radiusKm})> fetches =
       [];
   final List<({String uid, String householdId})> savedStatuses = [];
+
+  /// Resident names written (null = removed), in order.
+  final List<({String id, String? name})> savedNames = [];
   final statusStreams =
       <String, StreamController<Map<String, Map<String, dynamic>>>>{};
 
@@ -34,7 +42,11 @@ class FakeHouseholdRepository implements HouseholdRepository {
     // Homes going north from the center, ~100 m (0.000899°) apart.
     final index = IndexedHouseholds([
       for (var i = 0; i < available; i++)
-        (id: 'demo_$i', lat: latitude + 0.0008990 * (i + 1), lng: longitude),
+        (
+          id: '$idPrefix$i',
+          lat: latitude + 0.0008990 * (i + 1),
+          lng: longitude,
+        ),
     ], fields: (h) => {'residentName': 'Demo ${h.id}'});
     lastIndex = index;
     return GeoSearch(
@@ -45,8 +57,58 @@ class FakeHouseholdRepository implements HouseholdRepository {
     );
   }
 
+  /// Household id prefix (a changed answer for the same place).
+  String idPrefix = 'demo_';
+
   /// How many households exist near any point (0 = none).
   int available = 0;
+
+  /// Overture cells, for tests with `FeatureFlags.useCellHouseholds` on.
+  FirestoreCellSource? cells;
+
+  /// Cell areas started (center).
+  final List<({double latitude, double longitude})> cellFetches = [];
+
+  @override
+  CellArea cellArea({required double latitude, required double longitude}) {
+    cellFetches.add((latitude: latitude, longitude: longitude));
+    return cells!.area(latitude: latitude, longitude: longitude);
+  }
+
+  @override
+  GapFillService gapFillService = GapFillService(call: (_) async => {});
+
+  /// Every nearestArea request (preview = location setup).
+  final nearestAreaCalls =
+      <({double latitude, double longitude, bool preview})>[];
+
+  @override
+  AreaSearch nearestArea({
+    required double latitude,
+    required double longitude,
+    bool preview = false,
+  }) {
+    nearestAreaCalls.add((
+      latitude: latitude,
+      longitude: longitude,
+      preview: preview,
+    ));
+    final cells = cellArea(latitude: latitude, longitude: longitude);
+    if (preview || !FeatureFlags.melissaGapFill) return cells;
+    return GapFilledArea(
+      inner: cells,
+      service: gapFillService,
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
+  /// Owner names returned by [fetchOwnerNames], by uid.
+  final Map<String, Map<String, String>> ownerNames = {};
+
+  @override
+  Future<Map<String, String>> fetchOwnerNames(String uid) async =>
+      ownerNames[uid] ?? const {};
 
   @override
   Future<Map<String, Map<String, dynamic>>> fetchStatuses(
@@ -92,11 +154,52 @@ class FakeHouseholdRepository implements HouseholdRepository {
     required String uid,
     required HouseholdModel household,
     required bool wasPrayed,
+    bool nameChanged = false,
+    String? roundId,
   }) async {
     savedStatuses.add((uid: uid, householdId: household.id));
+    savedRounds.add(roundId);
+    if (nameChanged) {
+      savedNames.add((id: household.id, name: household.residentName));
+    }
     final error = failWith;
     if (error != null) throw error;
   }
+
+  /// Prayer rounds on the "server", by user and round id.
+  final rounds = <String, Map<String, PrayerRound>>{};
+
+  /// Every round membership written (uid, round id, homes).
+  final roundWrites = <({String uid, String roundId, List<String> ids})>[];
+
+  /// When set, reading rounds fails (e.g. rules without prayer_rounds).
+  Object? roundReadError;
+
+  /// Lifetime prayer events on the "server", by user.
+  final prayerEvents = <String, int>{};
+
+  @override
+  Future<PrayerRound?> fetchRound(String uid, String roundId) async {
+    final error = roundReadError;
+    if (error != null) throw error;
+    return rounds[uid]?[roundId];
+  }
+
+  @override
+  Future<void> saveRoundMembers(
+    String uid,
+    String roundId,
+    PrayerRound round,
+  ) async {
+    roundWrites.add((uid: uid, roundId: roundId, ids: round.ids));
+    (rounds[uid] ??= {})[roundId] = round;
+  }
+
+  @override
+  Future<int> countPrayerEvents(String uid) async => prayerEvents[uid] ?? 0;
+
+  /// The round id passed with each status write.
+  final savedRounds = <String?>[];
 
   /// When set, every status write fails with this error.
   Object? failWith;

@@ -1,5 +1,12 @@
 abstract final class AppStrings {
   static const String appName = 'GPS PARA EL CIELO';
+
+  /// No household data exists for an area (Overture cells not loaded).
+  static const String areaUnavailable = "This area isn't available yet";
+  static const String areaComingSoon = "We're adding more states soon.";
+
+  /// States whose households are loaded (keep in step with the seeding).
+  static const String areasAvailable = 'Available now: New Jersey, California';
   static const String appTagline = 'Conectando hogares, alcanzando vidas.';
 
   // Auth Strings
@@ -23,7 +30,7 @@ abstract final class AppStrings {
   static const String phoneHint = '+1 (201) 555-0000';
   static const String passwordMinLength = 'Minimum 8 characters';
   static const String agreeToTerms =
-      'I agree to the Terms of use and Privacy policy';
+      'I agree to the Terms of Use and Privacy Policy';
   static const String alreadyHaveAccount = 'Already have an account? ';
 
   // Navigation
@@ -34,13 +41,6 @@ abstract final class AppStrings {
   static const String navProfile = 'Profile';
 
   // Home
-  static const String enterAddress = 'Enter your address';
-  static const String searchNeighborhood = 'Search my neighborhood';
-  static const String searchHint =
-      'We\'ll find nearby households for you to pray for.';
-  static const String nearbyHouseholds = 'Nearby Households';
-  static const String viewOnMap = 'View on map';
-  static const String viewAllHouseholds = 'View all households';
   static const String pray = 'Pray';
   static const String prayed = 'Prayed';
   static const String visited = 'Visited';

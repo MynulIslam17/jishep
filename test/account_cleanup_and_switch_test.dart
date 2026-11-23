@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -29,6 +30,48 @@ void main() {
         (await db.collection('users/me/household_status').get()).docs,
         isEmpty,
       );
+    });
+  });
+
+  group('deleteUserData with older deployed rules', () {
+    test('a denied devices collection does not block deletion', () async {
+      final db = _DevicesDeniedFirestore();
+      await db.collection('users').doc('me').set({'fullName': 'Me'});
+      await db.collection('users/me/household_status').doc('h1').set({
+        'isPrayed': true,
+      });
+      await db.collection('users/me/notifications').doc('n1').set({
+        'title': 'hi',
+      });
+
+      await UserRepository(firestore: db).deleteUserData('me');
+
+      expect((await db.collection('users').doc('me').get()).exists, isFalse);
+      expect(
+        (await db.collection('users/me/household_status').get()).docs,
+        isEmpty,
+      );
+      expect(
+        (await db.collection('users/me/notifications').get()).docs,
+        isEmpty,
+      );
+    });
+
+    test('a denied required collection still fails the deletion', () async {
+      final db = _DevicesDeniedFirestore(deny: 'household_status');
+      await db.collection('users').doc('me').set({'fullName': 'Me'});
+
+      await expectLater(
+        UserRepository(firestore: db).deleteUserData('me'),
+        throwsA(
+          isA<FirebaseException>().having(
+            (e) => e.code,
+            'code',
+            'permission-denied',
+          ),
+        ),
+      );
+      expect((await db.collection('users').doc('me').get()).exists, isTrue);
     });
   });
 
@@ -76,4 +119,33 @@ void main() {
       expect(find.byType(AnimatedAlign), findsOneWidget);
     });
   });
+}
+
+/// Behaves like Firestore with rules that have no match for one of the
+/// user's subcollections: reading it is denied.
+class _DevicesDeniedFirestore extends FakeFirebaseFirestore {
+  final String deny;
+
+  _DevicesDeniedFirestore({this.deny = 'devices'});
+
+  @override
+  CollectionReference<Map<String, dynamic>> collection(String path) {
+    if (path.endsWith('/$deny')) return _DeniedCollection();
+    return super.collection(path);
+  }
+}
+
+// ignore: subtype_of_sealed_class
+class _DeniedCollection implements CollectionReference<Map<String, dynamic>> {
+  @override
+  Query<Map<String, dynamic>> limit(int limit) => this;
+
+  @override
+  Future<QuerySnapshot<Map<String, dynamic>>> get([GetOptions? options]) =>
+      Future.error(
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

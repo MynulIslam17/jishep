@@ -3,6 +3,12 @@
 //
 //   flutter test test/benchmark/geo_benchmark_test.dart
 //
+// The results table is printed every run, but written to
+// docs/performance/geo_benchmark.md only when asked, so ordinary test runs
+// leave the repo unchanged:
+//
+//   WRITE_BENCHMARK=1 flutter test test/benchmark/geo_benchmark_test.dart
+//
 // Reads are counted the way Firestore bills them (documents returned + 1 per
 // empty query) against an in-memory model of the same indexed query, so
 // they are exact. Wall time is client CPU only (no network): network cost
@@ -106,9 +112,11 @@ void main() {
         }
       }
     }
-    final file = File('docs/performance/geo_benchmark.md')
-      ..createSync(recursive: true);
-    file.writeAsStringSync(out.toString());
+    if (Platform.environment['WRITE_BENCHMARK'] == '1') {
+      File('docs/performance/geo_benchmark.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(out.toString());
+    }
     // ignore: avoid_print
     print(out);
   }, timeout: const Timeout(Duration(minutes: 10)));

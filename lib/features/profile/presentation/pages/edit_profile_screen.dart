@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/app_config.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/app_system_insets.dart';
@@ -65,6 +66,7 @@ class EditProfileScreen extends GetView<ProfileController> {
 
           Expanded(
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 28.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -151,9 +153,10 @@ class EditProfileScreen extends GetView<ProfileController> {
                   SizedBox(height: 20.h),
 
                   // Phone: verified by SMS, then used for phone sign-in.
-                  Obx(() => _buildPhoneSection()),
-
-                  SizedBox(height: 20.h),
+                  if (AppConfig.phoneAuthEnabled) ...[
+                    Obx(() => _buildPhoneSection()),
+                    SizedBox(height: 20.h),
+                  ],
 
                   // Church Affiliation Field
                   _buildEditField(

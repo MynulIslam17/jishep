@@ -118,7 +118,7 @@ class VerifyEmailScreen extends GetView<VerifyEmailController> {
                       SizedBox(height: 18.h),
                       Text(
                         "Can't find it? Check Spam or Promotions. It comes "
-                        'from noreply@gps-cielo.firebaseapp.com.',
+                        'from noreply@gps-para-el-cielo.firebaseapp.com.',
                         textAlign: TextAlign.center,
                         style: AppTypography.body(
                           color: AppColors.textSecondary,

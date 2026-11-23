@@ -211,7 +211,133 @@ test('notifications: well-formed create; clients only mark read', async () => {
   await assertSucceeds(updateDoc(doc(alice(), 'users/alice/notifications/n1'), { isRead: true }));
 });
 
+test('devices: owner registers and removes own push tokens only', async () => {
+  const token = 'fcm-token:APA91b_abc-123';
+  const device = (over = {}) => ({
+    token, platform: 'ios', updatedAt: serverTimestamp(), ...over,
+  });
+  await assertSucceeds(setDoc(doc(alice(), `users/alice/devices/${token}`), device()));
+  // Re-registering the same token overwrites the one document.
+  await assertSucceeds(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ platform: 'ios' })));
+  await assertSucceeds(getDocs(collection(alice(), 'users/alice/devices')));
+  await assertSucceeds(deleteDoc(doc(alice(), `users/alice/devices/${token}`)));
+
+  // The document id must be the token; known platforms and fields only.
+  await assertFails(setDoc(doc(alice(), 'users/alice/devices/other'), device()));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ platform: 'web' })));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ extra: 1 })));
+  await assertFails(setDoc(doc(alice(), `users/alice/devices/${token}`), device({ updatedAt: new Date(0) })));
+
+  // Nobody else can read or add devices for Alice.
+  await assertFails(getDocs(collection(bob(), 'users/alice/devices')));
+  await assertFails(setDoc(doc(bob(), `users/alice/devices/${token}`), device()));
+  await assertFails(getDocs(collection(guest(), 'users/alice/devices')));
+});
+
+test('profile: optional prayer intention, a string of at most 120 chars', async () => {
+  await assertSucceeds(updateDoc(doc(alice(), 'users/alice'), { prayerIntention: 'Peace and safety' }));
+  await assertFails(updateDoc(doc(alice(), 'users/alice'), { prayerIntention: 'x'.repeat(121) }));
+  await assertFails(updateDoc(doc(alice(), 'users/alice'), { prayerIntention: 7 }));
+  await assertFails(updateDoc(doc(bob(), 'users/alice'), { prayerIntention: 'Healing' }));
+});
+
+test('enrichment: owner reads and deletes; only the server writes', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice/enrichment/h1'), { status: 'verified' });
+  });
+  await assertSucceeds(getDoc(doc(alice(), 'users/alice/enrichment/h1')));
+  await assertFails(setDoc(doc(alice(), 'users/alice/enrichment/h2'), { status: 'verified' }));
+  await assertFails(updateDoc(doc(alice(), 'users/alice/enrichment/h1'), { status: 'x' }));
+  await assertFails(getDoc(doc(bob(), 'users/alice/enrichment/h1')));
+  await assertFails(getDoc(doc(guest(), 'users/alice/enrichment/h1')));
+  await assertSucceeds(deleteDoc(doc(alice(), 'users/alice/enrichment/h1')));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice/gap_areas/36.170_-115.140'), { records: [] });
+  });
+  await assertSucceeds(getDoc(doc(alice(), 'users/alice/gap_areas/36.170_-115.140')));
+  await assertFails(setDoc(doc(alice(), 'users/alice/gap_areas/x'), { records: [] }));
+  await assertFails(getDoc(doc(bob(), 'users/alice/gap_areas/36.170_-115.140')));
+  // Budgets and the shared cache are server-only.
+  await assertFails(getDoc(doc(alice(), 'melissa_usage/2026-11-21')));
+  await assertFails(setDoc(doc(alice(), 'melissa_usage/2026-11-21'), { credits: 0 }));
+});
+
 test('unknown collections are denied by default', async () => {
   await assertFails(getDoc(doc(alice(), 'admin/config')));
   await assertFails(setDoc(doc(alice(), 'anything/x'), { a: 1 }));
+});
+
+test('prayer_log: owner appends events; id must match; private; bad fields rejected', async () => {
+  const event = (over = {}) => ({ householdId: 'mel:1', roundId: 'r0', prayedAt: new Date(), createdAt: serverTimestamp(), ...over });
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_log/r0_mel:1'), event()));
+  // Same home, next round: a separate event (history kept).
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_log/r9_mel:1'), event({ roundId: 'r9' })));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_log/r0_mel:2'), event()));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_log/r0_mel:1'), event({ extra: 1 })));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_log/r0_mel:1'), event({ prayedAt: 'today' })));
+  await assertFails(setDoc(doc(aliceUnverified(), 'users/alice/prayer_log/r0_mel:3'), event({ householdId: 'mel:3' })));
+  await assertFails(getDoc(doc(bob(), 'users/alice/prayer_log/r0_mel:1')));
+  await assertFails(setDoc(doc(bob(), 'users/alice/prayer_log/r1_mel:1'), event({ roundId: 'r1' })));
+  await assertFails(deleteDoc(doc(bob(), 'users/alice/prayer_log/r0_mel:1')));
+  await assertSucceeds(deleteDoc(doc(alice(), 'users/alice/prayer_log/r0_mel:1')));
+});
+
+test('prayer_rounds: owner records round membership; others denied', async () => {
+  const round = { startedAt: new Date(), householdIds: ['mel:1', 'mel:2'], size: 2, updatedAt: serverTimestamp() };
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_rounds/r1'), round));
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_rounds/r0'), { completedAt: new Date(), updatedAt: serverTimestamp() }, { merge: true }));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_rounds/r2'), { ...round, householdIds: Array(201).fill('x') }));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_rounds/r2'), { ...round, other: true }));
+  await assertFails(getDoc(doc(bob(), 'users/alice/prayer_rounds/r1')));
+  await assertFails(setDoc(doc(bob(), 'users/alice/prayer_rounds/r3'), round));
+});
+
+test('prayer_rounds: fixed members (point, street, city), center and count', async () => {
+  const member = (i) => ({ i: `mel:${i}`, a: 32.64, o: -117.0, l: `${i} TEST ST`, c: 'CHULA VISTA, CA 91910' });
+  const fixed = {
+    startedAt: new Date(),
+    members: Array.from({ length: 50 }, (_, i) => member(i)),
+    householdIds: Array.from({ length: 50 }, (_, i) => `mel:${i}`),
+    size: 50,
+    target: 50,
+    center: new GeoPoint(32.64, -117.0),
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_rounds/r7'), fixed));
+  // Re-fixing the same round (moved home) merges new members.
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_rounds/r7'),
+    { members: [member(1)], householdIds: ['mel:1'], size: 1, target: 5, center: new GeoPoint(32.7, -117.0), updatedAt: serverTimestamp() }, { merge: true }));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_rounds/r8'), { ...fixed, members: Array.from({ length: 201 }, (_, i) => member(i)) }));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_rounds/r8'), { ...fixed, center: 'here' }));
+  await assertFails(setDoc(doc(alice(), 'users/alice/prayer_rounds/r8'), { ...fixed, target: 1.5 }));
+  await assertFails(setDoc(doc(bob(), 'users/alice/prayer_rounds/r8'), fixed));
+  await assertFails(getDoc(doc(bob(), 'users/alice/prayer_rounds/r7')));
+});
+
+test('existing client data: old-shape documents still validate on update', async () => {
+  // Documents written by the app before this change, updated by the new app.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'users/alice/prayer_rounds/r0'), { householdIds: ['mel:1'], size: 1, startedAt: new Date(), updatedAt: new Date() });
+  });
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice/prayer_rounds/r0'),
+    { members: [{ i: 'mel:1', a: 1, o: 2, l: 'x' }], target: 50, center: new GeoPoint(1, 2), updatedAt: serverTimestamp() }, { merge: true }));
+});
+
+test('Melissa owner data, locks and credit counters: no client access at all', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1',
+      'melissa_usage/2026-11-22', 'melissa_usage/2026-11-22/users/alice',
+      'users/alice/owner_areas/a1', 'users/alice/owner_scans/s1', 'users/alice/owner_properties/mel:1']) {
+      await setDoc(doc(db, p), { x: 1 });
+    }
+  });
+  for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1',
+    'melissa_usage/2026-11-22', 'melissa_usage/2026-11-22/users/alice',
+    'users/alice/owner_areas/a1', 'users/alice/owner_scans/s1', 'users/alice/owner_properties/mel:1']) {
+    await assertFails(getDoc(doc(alice(), p)));
+    await assertFails(setDoc(doc(alice(), p), { x: 2 }));
+    await assertFails(deleteDoc(doc(alice(), p)));
+  }
 });

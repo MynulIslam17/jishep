@@ -56,3 +56,17 @@ temp_interactive_push.bat
 **/node_modules/
 ios/Runner/Info.plist.backup
 ios/Runner/Info.plist.before-url-fix
+
+# Local emulator data and backups (real Melissa owner data: never commit)
+/.emulator-data/
+/.local-backups/
+
+# Claude Code personal settings
+.claude/settings.local.json
+
+# Local-only files (deploy cache, backups, local emulator test login)
+.firebase/
+android/app/google-services1.json
+functions/.env.*.before-*
+tool/emulator/test_user.json
+tool/seed_households/backups/

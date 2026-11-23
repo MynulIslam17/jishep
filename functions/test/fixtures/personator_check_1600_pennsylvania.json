@@ -1,0 +1,40 @@
+{
+ "Records": [
+  {
+   "AddressExtras": " ",
+   "AddressKey": "20500000500",
+   "AddressLine1": "1600 Pennsylvania Ave NW",
+   "AddressLine2": " ",
+   "AddressTypeCode": "S",
+   "CarrierRoute": "C000",
+   "City": "Washington",
+   "CityAbbreviation": "Washington",
+   "CompanyName": " ",
+   "CountryCode": "US",
+   "CountryName": "United States of America",
+   "DeliveryIndicator": "B",
+   "DeliveryPointCheckDigit": "8",
+   "DeliveryPointCode": "00",
+   "EmailAddress": " ",
+   "Latitude": "38.897199",
+   "Longitude": "-77.036548",
+   "MelissaAddressKey": "4547376753",
+   "MelissaAddressKeyBase": " ",
+   "NameFull": " ",
+   "PhoneNumber": " ",
+   "PostalCode": "20500-0005",
+   "RecordExtras": " ",
+   "RecordID": "1",
+   "Reserved": " ",
+   "Results": "AS01,GS05",
+   "State": "DC",
+   "StateName": "District of Columbia",
+   "UTC": "-05:00",
+   "UrbanizationName": " "
+  }
+ ],
+ "TotalRecords": "1",
+ "TransmissionReference": " ",
+ "TransmissionResults": " ",
+ "Version": "10.1448.1.20261019"
+}

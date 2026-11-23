@@ -5,6 +5,7 @@ import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
+import 'package:gps_cielo/shared/widgets/inputs/option_chips.dart';
 
 class ProfilePrayerPreferencesBottomSheet extends StatefulWidget {
   final int initialTarget;
@@ -67,13 +68,23 @@ class ProfilePrayerPreferencesBottomSheet extends StatefulWidget {
 
 class _ProfilePrayerPreferencesBottomSheetState
     extends State<ProfilePrayerPreferencesBottomSheet> {
-  static const _targets = [3, 5, 10, 15];
+  static const _targets = SearchRange.goalOptions;
 
   // Kept in State so a rebuild never resets what the user picked.
-  late final _selectedTargetRx = widget.initialTarget.obs;
   late final _selectedRadiusRx = SearchRange.normalize(
     widget.initialRadius,
   ).obs;
+
+  /// A goal saved before the limit existed (e.g. 15 a day among 10 homes)
+  /// opens already lowered, with the note saying why.
+  late final _selectedTargetRx = SearchRange.clampGoal(
+    widget.initialTarget,
+    _selectedRadiusRx.value,
+  ).obs;
+
+  /// True after the goal was lowered to fit a smaller neighborhood.
+  late final _goalLoweredRx =
+      (_selectedTargetRx.value != widget.initialTarget).obs;
   late final _selectedKmRx = SearchRange.normalizeKm(widget.initialRangeKm).obs;
 
   void _close() => Navigator.of(context).maybePop();
@@ -82,7 +93,6 @@ class _ProfilePrayerPreferencesBottomSheetState
   Widget build(BuildContext context) {
     final targets = _targets;
     final selectedTargetRx = _selectedTargetRx;
-    final options = SearchRange.options;
     final selectedRadiusRx = _selectedRadiusRx;
     final selectedKmRx = _selectedKmRx;
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
@@ -109,6 +119,7 @@ class _ProfilePrayerPreferencesBottomSheetState
           const Divider(color: AppColors.border, height: 1),
           Expanded(
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               controller: widget.scrollController,
               padding: EdgeInsets.fromLTRB(
                 20.w,
@@ -116,141 +127,193 @@ class _ProfilePrayerPreferencesBottomSheetState
                 20.w,
                 20.h + bottomInset,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'How many households would you like to pray for each day?',
-                    style: TextStyle(
-                      color: const Color(0xFF64748B),
-                      fontSize: 13.sp,
-                      height: 1.35,
+              child: Obx(() {
+                final goal = selectedTargetRx.value;
+                final homes = selectedRadiusRx.value;
+                final km = selectedKmRx.value;
+                final tooBig = {
+                  for (final t in targets)
+                    if (t > homes) t,
+                };
+                final note = roundLengthText(
+                  homes,
+                  goal,
+                  lead: "At $goal a day you'll",
+                );
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionTitle('Daily goal'),
+                    SizedBox(height: 4.h),
+                    _sectionText(
+                      'How many households would you like to pray for each day?',
                     ),
-                  ),
-                  SizedBox(height: 16.h),
-
-                  Obx(
-                    () => Column(
-                      children: targets.map((target) {
-                        final isSelected = selectedTargetRx.value == target;
-                        return GestureDetector(
-                          onTap: () => selectedTargetRx.value = target,
-                          child: Container(
-                            margin: EdgeInsets.only(bottom: 10.h),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 16.w,
-                              vertical: 14.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFFF1F5F9)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(12.r),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primaryNavy
-                                    : const Color(0xFFE2E8F0),
-                                width: isSelected ? 1.5 : 1.0,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '$target households / day',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 14.sp,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                  ),
-                                ),
-                                if (isSelected)
-                                  Container(
-                                    width: 22.r,
-                                    height: 22.r,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.primaryNavy,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.check_rounded,
-                                      size: 14.r,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                    SizedBox(height: 12.h),
+                    OptionChips(
+                      options: targets,
+                      selected: goal,
+                      caption: 'a day',
+                      keyPrefix: 'goal',
+                      disabled: tooBig,
+                      onSelected: (t) {
+                        selectedTargetRx.value = t;
+                        _goalLoweredRx.value = false;
+                      },
                     ),
-                  ),
+                    if (tooBig.isNotEmpty) ...[
+                      SizedBox(height: 6.h),
+                      Text(
+                        'Goals more than your $homes homes are off.',
+                        key: const ValueKey('goal-too-big-hint'),
+                        style: AppTypography.body(
+                          color: AppColors.textMuted,
+                          fontSize: 11.sp,
+                        ),
+                      ),
+                    ],
 
-                  SizedBox(height: 10.h),
-                  const Divider(color: AppColors.border, height: 1),
-                  SizedBox(height: 16.h),
+                    SizedBox(height: 22.h),
 
-                  // Search range (distance)
-                  _OptionSlider(
-                    sliderKey: const ValueKey('range-km-slider'),
-                    title: 'Search range',
-                    description:
+                    // Search range (distance). Not offered with cell
+                    // households: the neighborhood is the nearest N homes.
+                    if (SearchRange.userChoosesRange) ...[
+                      _sectionTitle('Search range'),
+                      SizedBox(height: 4.h),
+                      _sectionText(
                         'Households are searched within this distance of your '
                         'home or a searched place.',
-                    valueText: () =>
-                        'Within ${SearchRange.formatKm(selectedKmRx.value)}',
-                    labels: [
-                      for (final km in SearchRange.distanceOptionsKm)
-                        SearchRange.formatKm(km),
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Within ${SearchRange.formatKm(km)}',
+                        style: _valueStyle,
+                      ),
+                      SizedBox(height: 8.h),
+                      Wrap(
+                        spacing: 8.w,
+                        runSpacing: 8.h,
+                        children: [
+                          for (final option in SearchRange.distanceOptionsKm)
+                            ChoiceChip(
+                              key: ValueKey('range-km-$option'),
+                              label: Text(SearchRange.formatKm(option)),
+                              selected: option == km,
+                              showCheckmark: false,
+                              selectedColor: AppColors.primaryNavy,
+                              labelStyle: TextStyle(
+                                color: option == km
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              onSelected: (_) => selectedKmRx.value = option,
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: 22.h),
                     ],
-                    index: () => SearchRange.distanceOptionsKm.indexOf(
-                      selectedKmRx.value,
+
+                    _sectionTitle('Homes in my neighborhood'),
+                    SizedBox(height: 4.h),
+                    _sectionText(
+                      SearchRange.userChoosesRange
+                          ? 'Your neighborhood is this many homes nearest your '
+                                'home, within the search range. Home, '
+                                'Neighborhood and your prayer rounds all use it.'
+                          : 'Your neighborhood is this many homes nearest your '
+                                'home. Home, Neighborhood and your prayer '
+                                'rounds all use it.',
                     ),
-                    onIndex: (i) =>
-                        selectedKmRx.value = SearchRange.distanceOptionsKm[i],
-                  ),
+                    SizedBox(height: 8.h),
+                    Text('Nearest $homes homes', style: _valueStyle),
+                    SizedBox(height: 8.h),
+                    OptionChips(
+                      options: SearchRange.options,
+                      selected: homes,
+                      keyPrefix: 'homes',
+                      onSelected: (h) {
+                        selectedRadiusRx.value = h;
+                        // Keep the daily goal within the neighborhood.
+                        final lowered = SearchRange.clampGoal(
+                          selectedTargetRx.value,
+                          h,
+                        );
+                        if (lowered != selectedTargetRx.value) {
+                          selectedTargetRx.value = lowered;
+                          _goalLoweredRx.value = true;
+                        }
+                      },
+                    ),
 
-                  SizedBox(height: 10.h),
-                  const Divider(color: AppColors.border, height: 1),
-                  SizedBox(height: 16.h),
+                    // Says why the daily goal just changed.
+                    if (_goalLoweredRx.value)
+                      Container(
+                        key: const ValueKey('goal-above-homes'),
+                        margin: EdgeInsets.only(top: 12.h),
+                        padding: EdgeInsets.all(12.r),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        child: Text(
+                          'Your daily goal is now $goal a day, so it fits the '
+                          '$homes homes in your neighborhood.',
+                          style: AppTypography.body(
+                            color: const Color(0xFF92400E),
+                            fontSize: 12.sp,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
 
-                  // Number of households (default for the Home filter)
-                  _OptionSlider(
-                    sliderKey: const ValueKey('default-radius-slider'),
-                    title: 'Households to show',
-                    description:
-                        'How many of the nearest households within the range to '
-                        'show. You can change this on Home anytime.',
-                    valueText: () => 'Nearest ${selectedRadiusRx.value} homes',
-                    labels: [for (final option in options) '$option'],
-                    index: () => options.indexOf(selectedRadiusRx.value),
-                    onIndex: (i) => selectedRadiusRx.value = options[i],
-                  ),
+                    if (note != null) ...[
+                      SizedBox(height: 16.h),
+                      GoalNote(key: const ValueKey('round-note'), text: note),
+                    ],
 
-                  SizedBox(height: 20.h),
+                    SizedBox(height: 20.h),
 
-                  AppPrimaryButton(
-                    label: 'Save Preferences',
-                    onPressed: () {
-                      widget.onSavePreferences(
-                        selectedTargetRx.value,
-                        selectedRadiusRx.value,
-                        selectedKmRx.value,
-                      );
-                      _close();
-                    },
-                  ),
-                ],
-              ),
+                    AppPrimaryButton(
+                      label: 'Save Preferences',
+                      onPressed: () {
+                        widget.onSavePreferences(goal, homes, km);
+                        _close();
+                      },
+                    ),
+                  ],
+                );
+              }),
             ),
           ),
         ],
       ),
     );
   }
+
+  TextStyle get _valueStyle => AppTypography.heading(
+    color: AppColors.primaryNavy,
+    fontSize: 14.sp,
+    fontWeight: FontWeight.w800,
+  );
+
+  Widget _sectionTitle(String text) => Text(
+    text,
+    style: AppTypography.heading(
+      color: AppColors.textPrimary,
+      fontSize: 14.sp,
+      fontWeight: FontWeight.w700,
+    ),
+  );
+
+  Widget _sectionText(String text) => Text(
+    text,
+    style: TextStyle(
+      color: const Color(0xFF64748B),
+      fontSize: 13.sp,
+      height: 1.35,
+    ),
+  );
 
   Widget _buildModalHandle() {
     return Center(
@@ -306,109 +369,6 @@ class _ProfilePrayerPreferencesBottomSheetState
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// A titled slider over a fixed list of options.
-class _OptionSlider extends StatelessWidget {
-  const _OptionSlider({
-    required this.sliderKey,
-    required this.title,
-    required this.description,
-    required this.valueText,
-    required this.labels,
-    required this.index,
-    required this.onIndex,
-  });
-
-  final Key sliderKey;
-  final String title;
-  final String description;
-  final String Function() valueText;
-  final List<String> labels;
-  final int Function() index;
-  final ValueChanged<int> onIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          title,
-          style: AppTypography.heading(
-            color: AppColors.textPrimary,
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        SizedBox(height: 4.h),
-        Text(
-          description,
-          style: TextStyle(
-            color: const Color(0xFF64748B),
-            fontSize: 13.sp,
-            height: 1.35,
-          ),
-        ),
-        SizedBox(height: 8.h),
-        Obx(() {
-          final current = index().clamp(0, labels.length - 1);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                valueText(),
-                style: AppTypography.heading(
-                  color: AppColors.primaryNavy,
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 4.h,
-                  activeTrackColor: AppColors.primaryNavy,
-                  inactiveTrackColor: const Color(0xFFE2E8F0),
-                  thumbColor: AppColors.primaryNavy,
-                  overlayColor: AppColors.primaryNavy.withValues(alpha: 0.12),
-                  activeTickMarkColor: Colors.white.withValues(alpha: 0.7),
-                  inactiveTickMarkColor: AppColors.primaryNavy.withValues(
-                    alpha: 0.25,
-                  ),
-                ),
-                child: Slider(
-                  key: sliderKey,
-                  value: current.toDouble(),
-                  max: (labels.length - 1).toDouble(),
-                  divisions: labels.length - 1,
-                  label: labels[current],
-                  onChanged: (v) => onIndex(v.round()),
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14.r),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (var i = 0; i < labels.length; i++)
-                      Text(
-                        labels[i],
-                        style: TextStyle(
-                          color: i == current
-                              ? AppColors.primaryNavy
-                              : const Color(0xFF64748B),
-                          fontSize: 10.5.sp,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }),
       ],
     );
   }

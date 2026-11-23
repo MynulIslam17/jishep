@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gps_cielo/features/legal/legal_info.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -112,7 +113,7 @@ class ProfileContactSupportBottomSheet extends StatelessWidget {
                   ),
                   SizedBox(width: 10.w),
                   Text(
-                    'support@gpscielochurch.org',
+                    LegalInfo.contactEmail,
                     style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 13.5.sp,

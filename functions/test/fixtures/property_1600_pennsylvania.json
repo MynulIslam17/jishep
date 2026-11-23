@@ -1,0 +1,111 @@
+{
+ "Version": "10.1126.1.20261015",
+ "TransmissionResults": "",
+ "TotalRecords": 1,
+ "Records": [
+  {
+   "Results": "YS02,YS07,YS05,YC02,GS05",
+   "Parcel": {
+    "FIPSCode": "11001",
+    "UnformattedAPN": "0187-S -0801",
+    "FormattedAPN": "0187S0801"
+   },
+   "Legal": {},
+   "PropertyAddress": {
+    "Address": "1600 Pennsylvania Ave NW",
+    "City": "Washington",
+    "State": "DC",
+    "Zip": "20500-0005",
+    "CarrierRoute": "C000",
+    "AddressKey": "20500000500",
+    "MAK": "4547376753",
+    "BaseMAK": "",
+    "Latitude": "38.897199",
+    "Longitude": "-77.036548",
+    "PrivacyInfo": ""
+   },
+   "ParsedPropertyAddress": {},
+   "PrimaryOwner": {
+    "Name1Full": "States Of America United",
+    "Name1First": "States",
+    "Name1Middle": "Of America",
+    "Name1Last": "United",
+    "Name1Suffix": "",
+    "TrustFlag": "",
+    "CompanyFlag": "Y",
+    "Name2Full": "",
+    "Name2First": "",
+    "Name2Middle": "",
+    "Name2Last": "",
+    "Name2Suffix": "",
+    "Type": "",
+    "VestingType": "",
+    "MelissaIdentityKey1": "",
+    "MelissaIdentityKey2": ""
+   },
+   "SecondaryOwner": {},
+   "OwnerAddress": {
+    "Address": "",
+    "City": "",
+    "State": "",
+    "Zip": "",
+    "CarrierRoute": "",
+    "MAK": "",
+    "BaseMAK": "",
+    "FormatInfo": "",
+    "PrivacyInfo": "",
+    "OwnerOccupied": ""
+   },
+   "LastDeedOwnerInfo": {},
+   "CurrentDeed": {
+    "MortgageAmount": "",
+    "MortgageDate": "",
+    "MortgageDueDate": "",
+    "LenderName": ""
+   },
+   "Tax": {
+    "AssessedValueTotal": "434571980",
+    "MarketValueTotal": "434571980",
+    "TaxFiscalYear": "2025",
+    "TaxBilledAmount": "0.00"
+   },
+   "PropertyUseInfo": {
+    "YearBuilt": "1840",
+    "YearBuiltEffective": "1840",
+    "ZonedCodeLocal": "UNZONED",
+    "PropertyUseMuni": "052",
+    "PropertyUseGroup": "Multi-Unit Professional",
+    "PropertyUseStandardized": "136"
+   },
+   "SaleInfo": {
+    "AssessorLastSaleDate": "",
+    "AssessorLastSaleAmount": "0",
+    "AssessorPriorSaleDate": "",
+    "AssessorPriorSaleAmount": "0",
+    "DeedLastSaleDate": "",
+    "DeedLastSalePrice": "0"
+   },
+   "PropertySize": {
+    "AreaBuilding": "0",
+    "AreaLotAcres": "5.2560",
+    "AreaLotSF": "228960.00"
+   },
+   "Pool": {},
+   "IntStructInfo": {},
+   "IntRoomInfo": {
+    "BathCount": "0",
+    "BedroomsCount": "0",
+    "RoomsCount": "0"
+   },
+   "IntAmenities": {},
+   "ExtStructInfo": {},
+   "ExtAmenities": {},
+   "ExtBuildings": {},
+   "Utilities": {},
+   "Parking": {},
+   "YardGardenInfo": {},
+   "EstimatedValue": {},
+   "Shape": {}
+  }
+ ]
+}

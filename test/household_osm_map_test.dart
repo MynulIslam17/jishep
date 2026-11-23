@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -21,6 +22,13 @@ HouseholdModel household(
 );
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   final households = [
     household('demo_bd_008', 23.7469, 90.3768),
     household('demo_bd_011', 23.7480, 90.3749, prayed: true),
@@ -175,5 +183,22 @@ void main() {
   testWidgets('a center without households still renders', (tester) async {
     await pumpMap(tester, items: const []);
     expect(find.byKey(const ValueKey('center-pin')), findsOneWidget);
+  });
+
+  testWidgets('nearest-N neighborhood (the default): no circle, every pin '
+      'in view', (tester) async {
+    FeatureFlags.useCellHouseholds = true;
+    await pumpMap(tester);
+    expect(find.byType(CircleLayer), findsNothing);
+    final camera = MapCamera.of(
+      tester.element(find.byKey(const ValueKey('center-pin'))),
+    );
+    for (final h in households) {
+      expect(
+        camera.visibleBounds.contains(LatLng(h.latitude, h.longitude)),
+        isTrue,
+        reason: h.id,
+      );
+    }
   });
 }

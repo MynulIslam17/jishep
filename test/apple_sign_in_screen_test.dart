@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/app_config.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
@@ -67,6 +68,17 @@ void main() {
     await tester.pump();
     return (service, auth);
   }
+
+  testWidgets('phone sign-in is hidden: email and password only', (
+    tester,
+  ) async {
+    expect(AppConfig.phoneAuthEnabled, isFalse);
+    await pump(tester, ios: false);
+    expect(find.byKey(const ValueKey('login-method')), findsNothing);
+    expect(find.text('Phone Number'), findsNothing);
+    expect(find.text('Email address'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+  });
 
   testWidgets('iOS shows Continue with Apple next to Google', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

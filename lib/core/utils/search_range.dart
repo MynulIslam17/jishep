@@ -1,23 +1,50 @@
 import 'dart:math' as math;
 
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:latlong2/latlong.dart';
 
-/// Search preferences (Settings > My preferences):
+/// Search preferences (Settings > Prayer preferences):
+///  * the **number of households** in "my neighborhood", nearest first
+///    (`users/{uid}.radiusHomes`, also the default for the Home filter);
 ///  * the search **range** — households are searched within this distance
-///    of the search center (`users/{uid}.searchRadiusKm`);
-///  * the **number of households** to show, nearest first
-///    (`users/{uid}.radiusHomes`, the default for the Home filter).
+///    of the search center (`users/{uid}.searchRadiusKm`). Only with the
+///    `households` collection: with `FeatureFlags.useCellHouseholds` the
+///    neighborhood is simply the nearest homes and no range is shown
+///    ([userChoosesRange]).
 abstract final class SearchRange {
   /// Household counts offered (Settings default and Home filter).
-  static const List<int> options = [5, 10, 15, 20, 25];
-  static const int defaultHomes = 10;
+  static const List<int> options = [5, 10, 15, 20, 25, 50];
+
+  /// The neighborhood size given to new accounts, and used when a stored
+  /// count is missing. Existing accounts keep their saved `radiusHomes`.
+  static const int defaultHomes = 50;
+
+  /// Whether the user picks a search range in km. False with cell
+  /// households: the neighborhood is "the nearest N homes", and the range
+  /// is neither offered in Settings nor shown in labels.
+  static bool get userChoosesRange => !FeatureFlags.useCellHouseholds;
+
+  /// "Nearest 50 homes", or "10 homes within 5 km" when the user picks a
+  /// range (Profile summary and the save confirmation).
+  static String neighborhoodSummary(int homes, double rangeKm) =>
+      userChoosesRange
+      ? '$homes homes within ${formatKm(rangeKm)}'
+      : 'Nearest $homes homes';
+
+  /// Daily prayer goals offered (Settings > Prayer preferences).
+  static const List<int> goalOptions = [3, 5, 10, 15];
+
+  /// A daily goal can never be more than the homes in the neighborhood
+  /// (you cannot pray for 15 different neighbors a day among 10). Returns
+  /// [goal], or the largest goal option that fits in [homes].
+  static int clampGoal(int goal, int homes) {
+    if (goal <= homes) return goal;
+    final fitting = goalOptions.where((g) => g <= homes);
+    return fitting.isEmpty ? goalOptions.first : fitting.last;
+  }
 
   /// The largest number of households the Home filter can show.
   static int get maxHomes => options.last;
-
-  /// At most this many households are loaded per search (nearest first).
-  /// The Home filter shows the nearest few; Neighborhood pages through all.
-  static const int maxInRange = 200;
 
   /// Search ranges offered, in kilometres.
   static const List<double> distanceOptionsKm = [0.5, 1, 2, 5, 10, 20];
@@ -80,14 +107,48 @@ abstract final class SearchRange {
 
   static String formatKm(double km) => formatDistance(km * 1000);
 
+  /// Meters between two points, or null when either has no location (0, 0).
+  static double? distanceMeters(
+    double fromLatitude,
+    double fromLongitude,
+    double toLatitude,
+    double toLongitude,
+  ) {
+    if ((fromLatitude == 0 && fromLongitude == 0) ||
+        (toLatitude == 0 && toLongitude == 0)) {
+      return null;
+    }
+    return const Distance().as(
+      LengthUnit.Meter,
+      LatLng(fromLatitude, fromLongitude),
+      LatLng(toLatitude, toLongitude),
+    );
+  }
+
+  /// How far a home is: "30 m", "450 m", "1.2 km", "14 km".
+  static String formatHomeDistance(double meters) {
+    final rounded = math.max(10, (meters / 10).round() * 10);
+    if (rounded < 1000) return '$rounded m';
+    final km = meters / 1000;
+    return km < 10 ? '${km.toStringAsFixed(1)} km' : '${km.round()} km';
+  }
+
   /// "Nearest 10 homes within 5 km", "3 homes within 5 km" when fewer
-  /// exist, "No homes within 5 km". Without a range: "Nearest 10 homes".
+  /// exist, "No homes within 5 km". Without a range (unknown yet, or not
+  /// chosen by the user — see [userChoosesRange]): "Nearest 10 homes", or
+  /// "3 homes nearby" when fewer exist.
   static String label({
     required int shown,
     required int requested,
     double? rangeKm,
   }) {
-    if (rangeKm == null) return 'Nearest $requested homes';
+    if (!userChoosesRange) rangeKm = null;
+    if (rangeKm == null) {
+      if (shown > 0 && shown < requested) {
+        return '$shown ${shown == 1 ? 'home' : 'homes'} nearby';
+      }
+      return 'Nearest $requested homes';
+    }
     final within = 'within ${formatKm(rangeKm)}';
     if (shown == 0) return 'No homes $within';
     if (shown < requested) {

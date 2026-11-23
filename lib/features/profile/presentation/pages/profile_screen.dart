@@ -163,6 +163,7 @@ class ProfileScreen extends GetView<ProfileController> {
                     return ProfileImpactCard(
                       homesPrayed: user?.homesPrayed ?? 0,
                       visitsMade: user?.visitsMade ?? 0,
+                      prayersOffered: controller.prayersOffered.value,
                     );
                   }),
 
@@ -208,8 +209,7 @@ class ProfileScreen extends GetView<ProfileController> {
                             title: 'Prayer preferences',
                             subtitle:
                                 '${controller.user.value?.dailyPrayerTarget ?? 5} households per day · '
-                                '${controller.user.value?.radiusHomes ?? SearchRange.defaultHomes} homes within '
-                                '${SearchRange.formatKm(controller.user.value?.searchRadiusKm ?? SearchRange.defaultKm)}',
+                                '${SearchRange.neighborhoodSummary(controller.user.value?.radiusHomes ?? SearchRange.defaultHomes, controller.user.value?.searchRadiusKm ?? SearchRange.defaultKm)}',
                             onTap: () =>
                                 ProfilePrayerPreferencesBottomSheet.show(
                                   context,
@@ -232,21 +232,25 @@ class ProfileScreen extends GetView<ProfileController> {
                         ),
                         const Divider(height: 1, color: AppColors.border),
 
-                        // Support the mission (donations)
-                        _buildMenuItem(
-                          icon: Icons.volunteer_activism_rounded,
-                          title: 'Support the mission',
-                          subtitle: 'Give once or monthly',
-                          iconColor: AppColors.primaryGoldDark,
-                          onTap: () => Get.toNamed(AppRoutes.donation),
-                        ),
-                        const Divider(height: 1, color: AppColors.border),
-
                         // 3. About GPS PARA EL CIELO
                         _buildMenuItem(
                           icon: Icons.info_outline_rounded,
                           title: 'About GPS PARA EL CIELO',
                           onTap: () => ProfileAboutBottomSheet.show(context),
+                        ),
+                        const Divider(height: 1, color: AppColors.border),
+
+                        // Legal
+                        _buildMenuItem(
+                          icon: Icons.privacy_tip_outlined,
+                          title: 'Privacy Policy',
+                          onTap: () => Get.toNamed(AppRoutes.privacy),
+                        ),
+                        const Divider(height: 1, color: AppColors.border),
+                        _buildMenuItem(
+                          icon: Icons.description_outlined,
+                          title: 'Terms of Use',
+                          onTap: () => Get.toNamed(AppRoutes.terms),
                         ),
                         const Divider(height: 1, color: AppColors.border),
 
@@ -278,13 +282,19 @@ class ProfileScreen extends GetView<ProfileController> {
                           title: 'Delete account',
                           titleColor: AppColors.danger,
                           iconColor: AppColors.danger,
-                          onTap: () => ProfileDeleteAccountDialog.show(
-                            context,
-                            requiresPassword: controller.accountUsesPassword,
-                            confirmWith: controller.deletionConfirmationLabel,
-                            onDelete: (password) =>
-                                controller.deleteAccount(password: password),
-                          ),
+                          onTap: () async {
+                            final deleted =
+                                await ProfileDeleteAccountDialog.show(
+                                  context,
+                                  requiresPassword:
+                                      controller.accountUsesPassword,
+                                  confirmWith:
+                                      controller.deletionConfirmationLabel,
+                                  onDelete: (password) => controller
+                                      .deleteAccount(password: password),
+                                );
+                            if (deleted) controller.finishAccountDeletion();
+                          },
                         ),
                       ],
                     ),

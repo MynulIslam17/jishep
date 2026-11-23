@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:gps_cielo/shared/widgets/household/household_row.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
@@ -83,8 +84,13 @@ class HouseholdOsmMap extends StatefulWidget {
   final ValueChanged<bool>? onReadyChanged;
 
   /// The search range in meters. When set, the circle is exactly this range
-  /// (whatever number of homes is pinned inside it).
+  /// (whatever number of homes is pinned inside it). Ignored when the user
+  /// does not choose a range ([SearchRange.userChoosesRange] false): then no
+  /// circle is drawn and the map fits the home and its households.
   final double? areaMeters;
+
+  /// [areaMeters], only when the user chooses a search range.
+  double? get _area => SearchRange.userChoosesRange ? areaMeters : null;
 
   @override
   State<HouseholdOsmMap> createState() => _HouseholdOsmMapState();
@@ -128,13 +134,13 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
     final householdsAppeared =
         oldWidget.households.isEmpty && widget.households.isNotEmpty;
     final householdsChanged = !_sameIds(oldWidget.households);
-    final areaChanged = oldWidget.areaMeters != widget.areaMeters;
+    final areaChanged = oldWidget._area != widget._area;
     // A Home filter only hides pins inside the same area: keep the view.
     final filteredOnly =
         householdsChanged &&
         !centerMoved &&
         !areaChanged &&
-        widget.areaMeters != null &&
+        widget._area != null &&
         oldWidget.households.isNotEmpty &&
         widget.households.isNotEmpty;
     if (centerMoved ||
@@ -180,7 +186,8 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
   }
 
   /// Zooms so the whole search circle (and so every household pin inside
-  /// it) is visible. This is the default view; the user's own zoom is not
+  /// it) is visible; without a chosen range, the circle just around the
+  /// farthest household (not drawn), i.e. the map fits the homes. This is the default view; the user's own zoom is not
   /// remembered and is replaced whenever the center or the homes change.
   void _frameAll() {
     if (!_isReady || !mounted) return;
@@ -197,7 +204,7 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
       widget.households.where((h) => h.latitude != 0 || h.longitude != 0);
 
   double _circleRadiusMeters() {
-    final area = widget.areaMeters;
+    final area = widget._area;
     if (area != null && area > 0) return area;
     return searchCircleRadiusMeters(
       widget.centerLatitude,
@@ -215,10 +222,9 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
 
   Marker _householdMarker(HouseholdModel household) {
     final size = _pinSize;
-    final pin = Icon(
-      Icons.location_on,
+    final pin = HouseMarker(
       size: size,
-      color: household.isPrayed ? AppColors.primaryGold : AppColors.primaryNavy,
+      color: household.isPrayed ? prayedGreen : AppColors.primaryNavy,
     );
     final onTap = widget.onHouseholdTap;
     return Marker(
@@ -226,7 +232,8 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
       point: LatLng(household.latitude, household.longitude),
       width: size,
       height: size,
-      alignment: Alignment.topCenter,
+      // The house sits on the home's point.
+      alignment: Alignment.center,
       child: onTap == null
           ? pin
           : GestureDetector(onTap: () => onTap(household), child: pin),
@@ -273,18 +280,19 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
           userAgentPackageName: _userAgentPackage,
           maxNativeZoom: 19,
         ),
-        CircleLayer(
-          circles: [
-            CircleMarker(
-              point: _center,
-              radius: _circleRadiusMeters(),
-              useRadiusInMeter: true,
-              color: AppColors.primaryNavy.withValues(alpha: 0.08),
-              borderColor: AppColors.primaryNavy.withValues(alpha: 0.4),
-              borderStrokeWidth: 2,
-            ),
-          ],
-        ),
+        if (SearchRange.userChoosesRange)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: _center,
+                radius: _circleRadiusMeters(),
+                useRadiusInMeter: true,
+                color: AppColors.primaryNavy.withValues(alpha: 0.08),
+                borderColor: AppColors.primaryNavy.withValues(alpha: 0.4),
+                borderStrokeWidth: 2,
+              ),
+            ],
+          ),
         MarkerLayer(
           markers: [
             for (final household in _locatedHouseholds)
@@ -321,6 +329,37 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A household on the map: a small rounded square with a white house
+/// (navy to pray, green when prayed). The user's own home is the larger red
+/// house.
+class HouseMarker extends StatelessWidget {
+  const HouseMarker({required this.size, required this.color, super.key});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(size * 0.28),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 3,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Icon(Icons.home_rounded, size: size * 0.66, color: Colors.white),
     );
   }
 }

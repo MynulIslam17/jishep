@@ -264,6 +264,84 @@ void main() {
       );
     });
 
+    test(
+      'search is limited to the US and finds states, counties and ZIPs',
+      () async {
+        late Uri requested;
+        final provider = PhotonAddressProvider(
+          client: MockClient((request) async {
+            requested = request.url;
+            return geoJson([
+              feature(
+                {
+                  'type': 'other',
+                  'name': '90210',
+                  'state': 'California',
+                  'countrycode': 'US',
+                },
+                lon: -118.4,
+                lat: 34.1,
+              ),
+              feature(
+                {
+                  'type': 'county',
+                  'name': 'Los Angeles',
+                  'state': 'California',
+                  'countrycode': 'US',
+                },
+                lon: -118.2,
+                lat: 34.3,
+              ),
+              feature(
+                {'type': 'state', 'name': 'Texas', 'countrycode': 'US'},
+                lon: -99.0,
+                lat: 31.0,
+              ),
+              feature(
+                {'type': 'city', 'name': 'Tijuana', 'countrycode': 'MX'},
+                lon: -117.0,
+                lat: 32.5,
+              ),
+            ]);
+          }),
+        );
+
+        final results = await provider.search('anything', limit: 5);
+
+        expect(requested.queryParameters['bbox'], PhotonAddressProvider.usBbox);
+        expect(
+          requested.queryParametersAll['layer'],
+          containsAll(['state', 'county', 'other']),
+        );
+        expect(results.map((r) => r.title), [
+          '90210',
+          'Los Angeles County',
+          'Texas',
+        ]);
+        expect(results.first.subtitle, 'CA');
+      },
+    );
+
+    test('usOnly: false searches worldwide', () async {
+      late Uri requested;
+      final provider = PhotonAddressProvider(
+        usOnly: false,
+        client: MockClient((request) async {
+          requested = request.url;
+          return geoJson([
+            feature(
+              {'type': 'city', 'name': 'Tijuana', 'countrycode': 'MX'},
+              lon: -117.0,
+              lat: 32.5,
+            ),
+          ]);
+        }),
+      );
+      final results = await provider.search('Tijuana');
+      expect(requested.queryParameters.containsKey('bbox'), isFalse);
+      expect(results.single.title, 'Tijuana');
+    });
+
     test('a custom base URL supports a self-hosted instance', () async {
       late Uri requested;
       final provider = PhotonAddressProvider(

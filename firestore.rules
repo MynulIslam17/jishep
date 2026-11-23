@@ -61,7 +61,7 @@ service cloud.firestore {
           'address', 'churchAffiliation', 'dailyPrayerTarget',
           'prayerCycleTarget', 'radiusHomes', 'searchRadiusKm',
           'latitude', 'longitude', 'prayerCycleStartedAt',
-          'createdAt', 'updatedAt'])
+          'prayerIntention', 'createdAt', 'updatedAt'])
         && optString('fullName', 100)
         && optString('email', 254)
         && optString('phone', 20)
@@ -77,6 +77,7 @@ service cloud.firestore {
         && optNumberIn('latitude', -90, 90)
         && optNumberIn('longitude', -180, 180)
         && optTimestamp('prayerCycleStartedAt')
+        && optString('prayerIntention', 120)
         && optTimestamp('createdAt')
         && optTimestamp('updatedAt');
     }
@@ -122,11 +123,90 @@ service cloud.firestore {
           && data().hasFollowUp is bool
           && optString('followUpDate', 64)
           && optString('notes', 2000)
-          && optString('residentName', 200)
+          && optString('residentName', 120)
           && optString('address', 300)
           && optTimestamp('prayedAt')
           && data().updatedAt == request.time;
       }
+
+      // Devices that receive push notifications: one document per FCM
+      // token (the document id), so a device is never stored twice. Only
+      // the owner reads or writes them; a server (Admin SDK) sends.
+      match /devices/{token} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && token.size() <= 4096
+          && data().keys().hasOnly(['token', 'platform', 'updatedAt'])
+          && data().token == token
+          && data().platform in ['ios', 'android']
+          && data().updatedAt == request.time;
+      }
+
+      // Address checks (Melissa) the user asked for, one per household.
+      // Written only by the enrichHousehold Cloud Function (Admin SDK);
+      // the owner may read or delete them, never write.
+      match /enrichment/{householdId} {
+        allow read, delete: if isOwner(uid);
+        allow write: if false;
+      }
+
+      // Melissa gap-fill results (addresses near a point where Overture has
+      // fewer than 50 homes). Written only by discoverNearby.
+      match /gap_areas/{areaId} {
+        allow read, delete: if isOwner(uid);
+        allow write: if false;
+      }
+
+      // Prayer history: one event per home per round
+      // ({roundId}_{householdId}), written with the status. Earlier rounds
+      // are never overwritten (a new round has a new id); the owner may
+      // delete an event (un-pray in the same round, account deletion).
+      match /prayer_log/{eventId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && verified()
+          && eventId.size() <= 200
+          && data().keys().hasOnly(['householdId', 'roundId', 'prayedAt',
+                                    'createdAt'])
+          && data().householdId is string
+          && data().householdId.size() <= 128
+          && data().roundId is string
+          && data().roundId.size() <= 40
+          && eventId == data().roundId + '_' + data().householdId
+          && data().prayedAt is timestamp
+          && data().createdAt == request.time;
+      }
+
+      // Prayer rounds: the homes in each round (the same neighborhood).
+      match /prayer_rounds/{roundId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && verified()
+          && roundId.size() <= 40
+          && data().keys().hasOnly(['startedAt', 'completedAt',
+                                    'householdIds', 'members', 'center',
+                                    'target', 'size', 'updatedAt'])
+          && optTimestamp('startedAt')
+          && optTimestamp('completedAt')
+          && (!('householdIds' in data())
+              || (data().householdIds is list
+                  && data().householdIds.size() <= 200))
+          // Members: id, point, street, city only (no owner data).
+          && (!('members' in data())
+              || (data().members is list
+                  && data().members.size() <= 200))
+          && (!('center' in data()) || data().center is latlng)
+          && optIntIn('target', 0, 1000)
+          && optIntIn('size', 0, 1000)
+          && data().updatedAt == request.time;
+      }
+
+      // Melissa property data (owner names): server only. The app gets it
+      // through the discoverOwners function; no client reads or writes,
+      // the owner included (licence: not exported to devices as data).
+      match /owner_areas/{areaId} { allow read, write: if false; }
+      match /owner_scans/{scanId} { allow read, write: if false; }
+      match /owner_properties/{propertyId} { allow read, write: if false; }
 
       // In-app notifications. Clients can only mark them read or delete.
       match /notifications/{notificationId} {
@@ -155,6 +235,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Household cells from Overture (tool/overture_cells): one gzipped
+    // file per geohash cell. Written only with admin access (seed script).
+    match /cells/{id} { allow read: if request.auth != null; allow write: if false; }
+
     // Contact Support messages: users can send them, and read or delete
     // only their own (account deletion removes them). Admins use the
     // Admin SDK / console.
@@ -174,6 +258,14 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid;
       allow update: if false;
     }
+
+    // Shared Melissa property cache, discovery locks and credit counters:
+    // written and read only by Cloud Functions (Admin SDK).
+    match /owner_scans/{id} { allow read, write: if false; }
+    match /owner_properties/{id} { allow read, write: if false; }
+    match /owner_areas/{id} { allow read, write: if false; }
+    match /discovery_jobs/{id} { allow read, write: if false; }
+    match /melissa_usage/{document=**} { allow read, write: if false; }
 
     // Anything else is closed.
   }

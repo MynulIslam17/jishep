@@ -1,7 +1,11 @@
+import 'package:gps_cielo/core/data/gap_fill.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/data/cell_source.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -12,6 +16,7 @@ import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller
 import 'package:gps_cielo/features/auth/presentation/controllers/location_setup_controller.dart';
 import 'package:gps_cielo/features/auth/presentation/pages/location_setup_screen.dart';
 
+import 'support/fake_cell_reader.dart';
 import 'support/synthetic_households.dart';
 
 class _Households implements HouseholdRepository {
@@ -43,6 +48,44 @@ class _Households implements HouseholdRepository {
       latitude: latitude,
       longitude: longitude,
       maxMeters: radiusKm * 1000,
+    );
+  }
+
+  /// Overture cells (an empty server = no data anywhere).
+  final cells = FakeCellReader();
+
+  @override
+  CellArea cellArea({required double latitude, required double longitude}) =>
+      FirestoreCellSource(
+        reader: cells,
+        misses: MemoryCellMissCache(),
+      ).area(latitude: latitude, longitude: longitude);
+
+  @override
+  GapFillService gapFillService = GapFillService(call: (_) async => {});
+
+  /// Every nearestArea request (preview = location setup).
+  final nearestAreaCalls =
+      <({double latitude, double longitude, bool preview})>[];
+
+  @override
+  AreaSearch nearestArea({
+    required double latitude,
+    required double longitude,
+    bool preview = false,
+  }) {
+    nearestAreaCalls.add((
+      latitude: latitude,
+      longitude: longitude,
+      preview: preview,
+    ));
+    final cells = cellArea(latitude: latitude, longitude: longitude);
+    if (preview || !FeatureFlags.melissaGapFill) return cells;
+    return GapFilledArea(
+      inner: cells,
+      service: gapFillService,
+      latitude: latitude,
+      longitude: longitude,
     );
   }
 
@@ -78,6 +121,7 @@ class _Service implements AuthService {
     required double longitude,
     required double searchRadiusKm,
     required int dailyPrayerTarget,
+    String? prayerIntention,
   }) async {
     saved = {
       'address': address,
@@ -85,6 +129,7 @@ class _Service implements AuthService {
       'longitude': longitude,
       'searchRadiusKm': searchRadiusKm,
       'dailyPrayerTarget': dailyPrayerTarget,
+      'prayerIntention': ?prayerIntention,
     };
   }
 
@@ -115,6 +160,13 @@ const demra = AddressSuggestion(
 );
 
 void main() {
+  // These tests cover the old `households` path (km range) unless a test
+  // turns cell households on; the app default is on.
+  setUp(() => FeatureFlags.useCellHouseholds = false);
+  tearDown(
+    () => FeatureFlags.useCellHouseholds = FeatureFlags.cellHouseholdsDefault,
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => Get.testMode = true);
   tearDown(Get.reset);
@@ -155,6 +207,28 @@ void main() {
       expect(c.cycleDays, 8); // 40 / 5 a day
     });
 
+    test(
+      'trying spots never asks for property owners (no Melissa credits)',
+      () async {
+        await make();
+        FeatureFlags.useCellHouseholds = true;
+        final dense = _Households(1000, spacing: 0.0000899);
+        final d = LocationSetupController(
+          service,
+          auth,
+          location,
+          dense,
+          previewDebounce: Duration.zero,
+        )..onInit();
+        d.selectSuggestion(demra);
+        await settle();
+        d.setRange(1);
+        await settle();
+        expect(dense.nearestAreaCalls, isNotEmpty);
+        expect(dense.nearestAreaCalls.every((c) => c.preview), isTrue);
+      },
+    );
+
     test('changing the range refreshes the preview', () async {
       final c = await make();
       c.selectSuggestion(demra);
@@ -168,7 +242,7 @@ void main() {
       expect(c.cycleDays, 1);
     });
 
-    test('a dense range reads only the nearest 200 and shows "200+"', () async {
+    test('a dense range reads only the neighborhood (nearest 50)', () async {
       final c = await make();
       // 1000 households ~10 m apart: all within 5 km.
       final dense = _Households(1000, spacing: 0.0000899);
@@ -181,13 +255,30 @@ void main() {
       )..onInit();
       d.selectSuggestion(demra);
       await settle();
-      expect(d.previewHouseholds.length, 200);
+      expect(d.previewHouseholds.length, 50); // new accounts: 50 homes
       expect(d.previewHouseholds.first.id, 'demo_0'); // nearest first
-      expect(d.previewHouseholds.last.id, 'demo_199');
-      expect(d.previewComplete.value, isFalse);
-      expect(d.previewSummary, '200+ neighbors within 5 km');
+      expect(d.previewHouseholds.last.id, 'demo_49');
+      expect(d.previewSummary, 'Nearest 50 neighbors within 5 km');
+      expect(d.cycleDays, 10); // one round: 50 homes at 5 a day
       c.onClose();
       d.onClose();
+    });
+
+    test('a saved neighborhood size is what the preview counts', () async {
+      final c = await make(
+        user: UserModel(
+          id: 'u1',
+          fullName: 'N',
+          email: 'n@example.com',
+          radiusHomes: 10,
+        ),
+      );
+      c.selectSuggestion(demra);
+      await settle();
+      expect(c.previewHouseholds.length, 10);
+      expect(c.previewSummary, 'Nearest 10 neighbors within 5 km');
+      expect(c.cycleDays, 2);
+      c.onClose();
     });
 
     test('editing the address clears the pick and the map', () async {
@@ -259,6 +350,28 @@ void main() {
       expect(auth.currentUser.value?.dailyPrayerTarget, 10);
     });
 
+    test(
+      'a prayer focus is saved only when chosen; tapping again clears it',
+      () async {
+        final c = await make();
+        c.addressController.text = demra.fullAddress;
+        c.selectSuggestion(demra);
+        c.toggleIntention('Healing');
+        expect(c.prayerIntention.value, 'Healing');
+        c.toggleIntention('Healing');
+        expect(c.prayerIntention.value, isNull);
+        c.setCustomIntention('  Our street and its schools  ');
+        await c.confirmLocation();
+        expect(service.saved?['prayerIntention'], 'Our street and its schools');
+        expect(
+          auth.currentUser.value?.prayerIntention,
+          'Our street and its schools',
+        );
+        expect(UserModel.cleanIntention('x' * 200)!.length, 120);
+        expect(UserModel.cleanIntention('   '), isNull);
+      },
+    );
+
     test('a typed address without a pick is looked up on save', () async {
       final c = await make();
       c.addressController.text = 'Road 5, Demra';
@@ -271,6 +384,37 @@ void main() {
       final c = await make();
       await c.confirmLocation();
       expect(service.saved, isNull);
+    });
+
+    test('Continue looks up a typed address, then shows the pin', () async {
+      final c = await make();
+      expect(c.step.value, 0);
+      await c.continueFromAddress();
+      expect(c.step.value, 0, reason: 'nothing typed or picked');
+      c.addressController.text = 'Road 5, Demra';
+      await c.continueFromAddress();
+      expect(c.step.value, 1);
+      expect(c.selectedLocation.value?.latitude, 1);
+      c.back();
+      expect(c.step.value, 0);
+    });
+
+    test('dragging the pin moves home, keeps the address, reloads', () async {
+      final c = await make();
+      c.addressController.text = demra.fullAddress;
+      c.selectSuggestion(demra);
+      await settle();
+      final reads = households.calls.length;
+      c.adjustPin(23.7215, 90.4835);
+      await settle();
+      expect(c.selectedLocation.value?.latitude, 23.7215);
+      expect(c.addressController.text, demra.fullAddress);
+      expect(c.hasLocation, isTrue);
+      expect(households.calls.length, greaterThan(reads));
+      await c.confirmLocation();
+      expect(service.saved?['latitude'], 23.7215);
+      expect(service.saved?['longitude'], 90.4835);
+      expect(service.saved?['address'], 'Demra, Dhaka, Bangladesh');
     });
 
     test('a saved home is shown again with its preferences', () async {
@@ -309,50 +453,171 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('without a home: placeholder map and guidance', (tester) async {
+    Future<void> frames(WidgetTester tester) async {
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('step 1: where is your home, with GPS and Continue', (
+      tester,
+    ) async {
       final c = await tester.runAsync(make);
       await pump(tester, c!);
-      expect(find.byKey(const ValueKey('map-placeholder')), findsOneWidget);
+      expect(find.text('Step 1 of 4'), findsOneWidget);
+      expect(find.text('Where do you want to pray?'), findsOneWidget);
       expect(
-        find.text('Choose your home to see your neighbors'),
+        find.byKey(const ValueKey('use-current-location')),
         findsOneWidget,
       );
-      expect(find.text('Continue'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('goal-5')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.byKey(const ValueKey('range-5.0')), findsOneWidget);
-      expect(find.byKey(const ValueKey('goal-5')), findsOneWidget);
-      // The header collapsed; the summary strip stays pinned.
-      expect(find.byKey(const ValueKey('setup-summary')), findsOneWidget);
+      expect(find.byKey(const ValueKey('setup-back')), findsNothing);
+      expect(find.byKey(const ValueKey('setup-sign-out')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('with a home: real map, count and save button', (tester) async {
+    testWidgets('steps 2–4: pin, goal, then meet your neighbors', (
+      tester,
+    ) async {
       final c = await tester.runAsync(make);
       c!.selectSuggestion(demra);
       await tester.runAsync(settle);
       await pump(tester, c);
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-      expect(find.byKey(const ValueKey('setup-map')), findsOneWidget);
-      expect(find.byKey(const ValueKey('map-badge')), findsOneWidget);
-      expect(find.text('40 neighbors within 5 km'), findsWidgets);
-      expect(find.text('Save my home and continue'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('cycle-days')),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.byKey(const ValueKey('cycle-days')), findsOneWidget);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('goal-10')));
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('setup-continue')));
+      await frames(tester);
+      expect(find.text('Step 2 of 4'), findsOneWidget);
+      expect(find.text('Is this the right spot?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pin-map')), findsOneWidget);
+      expect(find.byKey(const ValueKey('center-pin')), findsOneWidget);
+      expect(find.text('Demra, Dhaka, Bangladesh'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('confirm-pin')));
+      await frames(tester);
+      expect(find.text('How many neighbors a day?'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('goal-10')));
       await tester.pump();
       expect(c.dailyGoal.value, 10);
+      expect(
+        find.text(
+          "You'll pray for all 50 neighbors in about 5 days. Then a new "
+          'round starts.',
+        ),
+        findsOneWidget,
+      );
+      // The old households path still offers a km range here.
+      expect(find.byKey(const ValueKey('range-5.0')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('setup-continue')));
+      await frames(tester);
+      expect(find.text('Step 4 of 4'), findsOneWidget);
+      expect(find.text('Meet your 40 neighbors'), findsOneWidget);
+      expect(find.byKey(const ValueKey('setup-map')), findsOneWidget);
+      expect(
+        find.text('Only 40 homes · 10 a day, full round in about 4 days'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('preview-home-demo_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('preview-home-demo_5')), findsNothing);
+      await tester.scrollUntilVisible(find.text('and 35 more'), 200);
+      expect(find.byKey(const ValueKey('preview-home-demo_4')), findsOneWidget);
+      expect(find.text('Start praying'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('setup-back')));
+      await frames(tester);
+      expect(find.text('Step 3 of 4'), findsOneWidget);
+    });
+
+    testWidgets('Change address goes back to step 1', (tester) async {
+      final c = await tester.runAsync(make);
+      c!.selectSuggestion(demra);
+      c.goToStep(1);
+      await pump(tester, c);
+      await tester.tap(find.byKey(const ValueKey('change-address')));
+      await frames(tester);
+      expect(find.text('Where do you want to pray?'), findsOneWidget);
+    });
+
+    group('nearest-N neighborhood (the default)', () {
+      setUp(() => FeatureFlags.useCellHouseholds = true);
+
+      const springValley = AddressSuggestion(
+        title: '3510 Helix St',
+        subtitle: 'Spring Valley, CA',
+        latitude: 32.7448,
+        longitude: -116.9989,
+      );
+
+      testWidgets('no km anywhere; the preview lists the nearest homes', (
+        tester,
+      ) async {
+        final c = await tester.runAsync(make);
+        households.cells.seed([
+          for (var i = 0; i < 12; i++)
+            (
+              id: 'h$i',
+              lat: springValley.latitude + 0.0003 * (i + 1),
+              lng: springValley.longitude,
+            ),
+        ]);
+        c!.selectSuggestion(springValley);
+        await tester.runAsync(settle);
+        c.goToStep(2);
+        await pump(tester, c);
+        expect(find.byKey(const ValueKey('range-5.0')), findsNothing);
+        expect(find.text('Neighborhood range'), findsNothing);
+        expect(
+          find.text(
+            'You can change the number of homes and your goal later in '
+            'Profile.',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('setup-continue')));
+        await frames(tester);
+        expect(find.textContaining(' km'), findsNothing);
+        expect(find.text('Meet your 12 neighbors'), findsOneWidget);
+        expect(
+          find.text('Only 12 homes · 5 a day, full round in about 3 days'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('preview-home-h0')), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('and 7 more'), 200);
+        expect(find.byKey(const ValueKey('preview-home-h4')), findsOneWidget);
+        expect(find.byKey(const ValueKey('preview-home-h5')), findsNothing);
+        expect(households.calls, isEmpty, reason: 'no `households` reads');
+      });
+
+      testWidgets('outside the loaded area: "not available yet", and setup '
+          'can still be finished', (tester) async {
+        final c = await tester.runAsync(make);
+        await tester.runAsync(() async {
+          c!.selectSuggestion(demra);
+          await settle(); // the preview starts after the change event
+          for (var i = 0; i < 100 && c.isLoadingPreview.value; i++) {
+            await settle();
+          }
+        });
+        c!.goToStep(3);
+        await pump(tester, c);
+        await frames(tester);
+        expect(c.previewUnavailable.value, isTrue);
+        expect(find.text("This area isn't available yet"), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('preview-unavailable')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Available now: New Jersey, California'),
+          findsOneWidget,
+        );
+        expect(find.text('Finish setup'), findsOneWidget);
+        expect(find.byKey(const ValueKey('change-address')), findsOneWidget);
+        expect(households.calls, isEmpty, reason: 'no Bangladesh demo data');
+
+        await tester.runAsync(c.confirmLocation);
+        expect(service.saved, isNotNull, reason: 'setup saved the home');
+      });
     });
   });
 }

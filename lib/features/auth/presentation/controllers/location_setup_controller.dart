@@ -2,9 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:gps_cielo/core/services/location_selection.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
@@ -14,9 +18,15 @@ import 'package:gps_cielo/features/auth/domain/services/auth_service.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
 
-/// First-run setup: the home address (the center of the user's
-/// neighborhood), the search range and the daily prayer goal. The map and
-/// count preview the real households the Prayer List will be built from.
+/// First-run setup, a 4-step wizard (Figma 1.1–1.5):
+///  0. Where do you want to pray? (any US city, state, ZIP, address or GPS;
+///     it does not have to be where the user lives)
+///  1. Is this the right spot? (drag the map under a fixed pin to adjust)
+///  2. How many neighbors a day? (and the km range, only when
+///     [SearchRange.userChoosesRange])
+///  3. Meet your N neighbors: a preview of "my neighborhood", the nearest
+///     [neighborhoodHomes] households the Prayer List is built from — or
+///     "This area isn't available yet", where setup can still be finished.
 class LocationSetupController extends GetxController {
   LocationSetupController(
     this._authService,
@@ -35,6 +45,19 @@ class LocationSetupController extends GetxController {
   /// Daily prayer goals offered (same as Profile › Prayer preferences).
   static const List<int> dailyGoals = [3, 5, 10, 15];
 
+  /// Suggested prayer focuses for the chosen area (setup step 3). The user
+  /// may also type their own, or choose none.
+  static const List<String> intentionOptions = [
+    'Salvation',
+    'Peace and safety',
+    'Healing',
+    'Families and children',
+    'Provision',
+  ];
+
+  /// The chosen or typed prayer focus; null = none.
+  final prayerIntention = RxnString();
+
   final addressController = TextEditingController();
 
   final rangeKm = SearchRange.defaultKm.obs;
@@ -48,13 +71,27 @@ class LocationSetupController extends GetxController {
   /// The picked location while it still matches the field.
   final selectedLocation = Rxn<ResolvedLocation>();
 
-  /// Households within [rangeKm] of [selectedLocation] (nearest first).
+  /// "My neighborhood" around [selectedLocation]: the nearest
+  /// [neighborhoodHomes] households (within [rangeKm] when the user picks a
+  /// range), nearest first.
   final previewHouseholds = <HouseholdModel>[].obs;
   final isLoadingPreview = false.obs;
-
-  /// False when the range holds more than the preview read ("200+").
-  final previewComplete = true.obs;
   final previewError = false.obs;
+
+  /// No household data exists around [selectedLocation] yet (cells). Setup
+  /// can still be finished.
+  final previewUnavailable = false.obs;
+
+  /// Homes in the neighborhood: the saved `radiusHomes` (new accounts are
+  /// created with [SearchRange.defaultHomes]).
+  int neighborhoodHomes = SearchRange.defaultHomes;
+
+  /// The wizard step on screen (0–3).
+  final step = 0.obs;
+  static const int stepCount = 4;
+
+  /// True while a typed address (no suggestion picked) is looked up.
+  final isResolving = false.obs;
 
   /// The signed-in account (email, or phone for phone-only accounts).
   final accountLabel = ''.obs;
@@ -66,19 +103,41 @@ class LocationSetupController extends GetxController {
 
   bool get hasLocation => selectedLocation.value != null;
 
-  /// e.g. "40 neighbors within 2 km".
+  /// e.g. "Your nearest 50 neighbors", "12 neighbors nearby"; with a range
+  /// "Nearest 50 neighbors within 2 km", "40 neighbors within 2 km".
   String get previewSummary {
+    if (previewError.value) return 'Could not load neighbors';
+    if (previewUnavailable.value && !isLoadingPreview.value) {
+      return AppStrings.areaUnavailable;
+    }
+    final n = previewHouseholds.length;
+    final noun = n == 1 ? 'neighbor' : 'neighbors';
+    final full = n >= neighborhoodHomes;
+    if (!SearchRange.userChoosesRange) {
+      if (isLoadingPreview.value) return 'Finding your nearest neighbors…';
+      if (n == 0) return 'No households near this address yet';
+      return full ? 'Your nearest $n $noun' : '$n $noun nearby';
+    }
     final range = SearchRange.formatKm(rangeKm.value);
     if (isLoadingPreview.value) return 'Finding neighbors within $range…';
-    if (previewError.value) return 'Could not load neighbors';
-    final n = previewHouseholds.length;
-    final count = previewComplete.value ? '$n' : '$n+';
-    return n == 0
-        ? 'No households within $range yet'
-        : '$count ${n == 1 ? 'neighbor' : 'neighbors'} within $range';
+    if (n == 0) return 'No households within $range yet';
+    return full ? 'Nearest $n $noun within $range' : '$n $noun within $range';
   }
 
-  /// Days to pray once for every household in range at the daily goal.
+  /// Meters from the picked home to [household], or null.
+  double? distanceTo(HouseholdModel household) {
+    final home = selectedLocation.value;
+    if (home == null) return null;
+    return SearchRange.distanceMeters(
+      home.latitude,
+      home.longitude,
+      household.latitude,
+      household.longitude,
+    );
+  }
+
+  /// Days to pray once for every household in the neighborhood at the
+  /// daily goal (one round).
   int? get cycleDays {
     final n = previewHouseholds.length;
     if (n == 0 || dailyGoal.value <= 0) return null;
@@ -94,9 +153,11 @@ class LocationSetupController extends GetxController {
           ? user.email
           : (user.phone ?? '');
       rangeKm.value = SearchRange.normalizeKm(user.searchRadiusKm);
+      neighborhoodHomes = user.radiusHomes;
       dailyGoal.value = dailyGoals.contains(user.dailyPrayerTarget)
           ? user.dailyPrayerTarget
           : 5;
+      prayerIntention.value = user.prayerIntention;
       // Coming back to setup: start from what is already saved.
       final lat = user.latitude;
       final lng = user.longitude;
@@ -130,7 +191,77 @@ class LocationSetupController extends GetxController {
 
   void setRange(double km) => rangeKm.value = km;
 
+  /// Step 0 → 1. A typed address without a pick is looked up first.
+  Future<void> continueFromAddress() async {
+    if (isResolving.value) return;
+    if (!hasLocation) {
+      final text = addressController.text.trim();
+      if (text.isEmpty) {
+        SnackbarService.showError(
+          'Home address',
+          'Search for your address or use your current location.',
+        );
+        return;
+      }
+      isResolving.value = true;
+      try {
+        final location = await _locationService.resolveAddress(text);
+        _selection.pick(location);
+        selectedLocation.value = location;
+      } catch (error) {
+        SnackbarService.showError(
+          'Address not found',
+          FirebaseErrorMapper.message(error),
+        );
+        return;
+      } finally {
+        isResolving.value = false;
+      }
+    }
+    step.value = 1;
+  }
+
+  void goToStep(int value) => step.value = value.clamp(0, stepCount - 1);
+
+  void back() {
+    if (step.value > 0) step.value--;
+  }
+
+  /// The map was dragged under the pin: home is now at [latitude],
+  /// [longitude]; the address label stays. Reloads the preview.
+  void adjustPin(double latitude, double longitude) {
+    final current = selectedLocation.value;
+    if (current == null) return;
+    if (SearchRange.distanceMeters(
+          current.latitude,
+          current.longitude,
+          latitude,
+          longitude,
+        )! <
+        1) {
+      return;
+    }
+    final moved = ResolvedLocation(
+      address: current.address,
+      latitude: latitude,
+      longitude: longitude,
+      source: current.source,
+    );
+    _selection.pick(moved);
+    selectedLocation.value = moved;
+  }
+
   void setDailyGoal(int goal) => dailyGoal.value = goal;
+
+  /// Chooses (or, when [value] is already chosen, clears) the prayer focus.
+  void toggleIntention(String value) {
+    final clean = UserModel.cleanIntention(value);
+    prayerIntention.value = prayerIntention.value == clean ? null : clean;
+  }
+
+  /// A focus the user typed; empty clears it.
+  void setCustomIntention(String value) =>
+      prayerIntention.value = UserModel.cleanIntention(value);
 
   /// Fills the field from the device GPS. Nothing is saved until the user
   /// confirms.
@@ -175,6 +306,7 @@ class LocationSetupController extends GetxController {
     _previewTimer?.cancel();
     final location = selectedLocation.value;
     final generation = ++_previewGeneration;
+    previewUnavailable.value = false;
     if (location == null) {
       previewHouseholds.clear();
       isLoadingPreview.value = false;
@@ -195,22 +327,28 @@ class LocationSetupController extends GetxController {
     int generation,
   ) async {
     try {
-      // Nearest first, reading only as far as the preview needs.
-      final search = _households.geoSearch(
-        latitude: location.latitude,
-        longitude: location.longitude,
-        radiusKm: km,
-      );
-      await search.ensure(SearchRange.maxInRange);
+      // Nearest first, reading only as far as the neighborhood needs.
+      final AreaSearch search = FeatureFlags.useCellHouseholds
+          ? _households.nearestArea(
+              latitude: location.latitude,
+              longitude: location.longitude,
+              // Never Melissa while choosing a spot (no credits).
+              preview: true,
+            )
+          : GeoSearchArea(
+              _households.geoSearch(
+                latitude: location.latitude,
+                longitude: location.longitude,
+                radiusKm: km,
+              ),
+            );
+      await search.ensure(neighborhoodHomes);
       if (generation != _previewGeneration) return;
-      final docs = [
-        for (final hit in search.confirmed.take(SearchRange.maxInRange))
-          hit.doc,
-      ];
-      previewComplete.value = search.isComplete;
+      previewUnavailable.value = search.isUnavailable;
+      final records = search.records.take(neighborhoodHomes).toList();
       previewHouseholds.assignAll([
-        for (var i = 0; i < docs.length; i++)
-          HouseholdModel.fromFirestore(doc: docs[i], number: i + 1),
+        for (var i = 0; i < records.length; i++)
+          HouseholdModel.fromRecord(record: records[i], number: i + 1),
       ]);
     } catch (_) {
       if (generation != _previewGeneration) return;
@@ -229,8 +367,8 @@ class LocationSetupController extends GetxController {
     final address = addressController.text.trim();
     if (address.isEmpty && selectedLocation.value == null) {
       SnackbarService.showError(
-        'Home address',
-        'Search for your address or use your current location.',
+        'Prayer area',
+        'Search for a US city, ZIP or address, or use your current location.',
       );
       return;
     }
@@ -250,6 +388,7 @@ class LocationSetupController extends GetxController {
         longitude: location.longitude,
         searchRadiusKm: rangeKm.value,
         dailyPrayerTarget: dailyGoal.value,
+        prayerIntention: prayerIntention.value,
       );
 
       final currentUser = _globalAuthController.currentUser.value;
@@ -261,6 +400,7 @@ class LocationSetupController extends GetxController {
             longitude: location.longitude,
             searchRadiusKm: rangeKm.value,
             dailyPrayerTarget: dailyGoal.value,
+            prayerIntention: prayerIntention.value,
           ),
         );
       }
@@ -268,7 +408,7 @@ class LocationSetupController extends GetxController {
       Get.offAllNamed(AppRoutes.mainNav);
     } catch (error) {
       SnackbarService.showError(
-        'Could not save your home',
+        'Could not save your prayer area',
         FirebaseErrorMapper.message(error),
       );
     } finally {

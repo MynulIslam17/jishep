@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
-import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
-import 'package:gps_cielo/shared/widgets/buttons/app_primary_button.dart';
 import 'package:gps_cielo/features/prayer_list/presentation/controllers/prayer_list_controller.dart';
-import 'package:gps_cielo/features/prayer_list/presentation/widgets/prayer_list_item_card.dart';
+import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/shared/widgets/bottom_sheets/household_detail_bottom_sheet.dart';
+import 'package:gps_cielo/shared/widgets/household/household_row.dart';
+import 'package:gps_cielo/shared/widgets/household/today_neighbors_card.dart';
 import 'package:gps_cielo/features/prayer_list/presentation/widgets/prayer_progress_card.dart';
 import 'package:gps_cielo/features/main_nav/presentation/controllers/main_nav_controller.dart';
 import 'package:gps_cielo/features/main_nav/presentation/models/main_nav_destination.dart';
@@ -25,38 +28,24 @@ class PrayerListScreen extends GetView<PrayerListController> {
         onRefresh: controller.loadTodayPrayers,
         subtitle: Obx(() {
           final plan = controller.plan.value;
+          final n = plan.today.length;
           return Text(
             plan.cycleTotal == 0
                 ? 'Your daily prayers for the neighbors nearest your home'
-                : 'Today \u2022 ${plan.today.length} of your '
-                      '${plan.cycleTotal} neighbors',
+                : plan.isCycleComplete
+                ? 'Round complete \u2022 ${plan.cycleTotal} neighbors'
+                : 'Today \u2022 $n ${n == 1 ? 'neighbor' : 'neighbors'}',
+            key: const ValueKey('prayer-list-subtitle'),
           );
         }),
-        // Today's progress stays in view while scrolling the list.
-        pinnedHeight: 46.h,
-        pinned: Obx(() => _TodayStrip(plan: controller.plan.value)),
         slivers: [
           SliverPadding(
             padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
-            sliver: SliverToBoxAdapter(
-              child: Obx(() => PrayerProgressCard(plan: controller.plan.value)),
-            ),
+            sliver: SliverToBoxAdapter(child: _buildVerse()),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 0),
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
             sliver: Obx(() => _buildBody()),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  _buildVerse(),
-                  SizedBox(height: 12.h),
-                  _buildReminder(),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -86,6 +75,20 @@ class PrayerListScreen extends GetView<PrayerListController> {
         ),
       );
     }
+    if (plan.cycleTotal == 0 && controller.homeUnavailable.value) {
+      return SliverToBoxAdapter(
+        child: AppNoticeCard(
+          icon: Icons.travel_explore_rounded,
+          title: AppStrings.areaUnavailable,
+          message:
+              controller.homeNote.value ??
+              'Household data for the area around '
+                  '${controller.homeLabel.value} has not been added yet. '
+                  '${AppStrings.areaComingSoon}',
+          actions: [ChangeHomeAddress.button()],
+        ),
+      );
+    }
     if (plan.cycleTotal == 0) {
       final meters = controller.rangeMeters.value;
       final range = meters == null
@@ -95,48 +98,124 @@ class PrayerListScreen extends GetView<PrayerListController> {
         child: AppNoticeCard(
           icon: Icons.travel_explore_rounded,
           title: 'No households near your home yet',
-          message:
-              'None within $range of ${controller.homeLabel.value}. '
-              'Choose a larger search range or change your home address.',
+          message: SearchRange.userChoosesRange
+              ? 'None within $range of ${controller.homeLabel.value}. '
+                    'Choose a larger search range or change your home '
+                    'address.'
+              : 'None found near ${controller.homeLabel.value}. '
+                    'Try changing your home address.',
           actions: [
-            _settingsButton('Search range', Icons.tune_rounded),
+            if (SearchRange.userChoosesRange)
+              _settingsButton('Search range', Icons.tune_rounded),
             _settingsButton('Home address', Icons.home_outlined),
           ],
         ),
       );
     }
 
-    final notices = <Widget>[
-      if (plan.isCycleComplete) _buildCycleComplete(plan),
-      if (!plan.isCycleComplete && plan.isTodayDone)
-        AppNoticeCard(
-          icon: Icons.check_circle_rounded,
-          title: "Today's prayers are done",
-          message:
-              'Thank you! Tomorrow brings the next '
-              '${plan.dailyTarget} neighbors.',
+    if (plan.isCycleComplete) {
+      return SliverToBoxAdapter(
+        child: RoundCompleteCard(
+          plan: plan,
+          visited: controller.visitedCount,
+          invited: controller.invitedCount,
+          isStarting: controller.isStartingCycle.value,
+          onStartNewRound: controller.startNewCycle,
         ),
-    ];
+      );
+    }
+
+    final next = plan.isTodayDone
+        ? controller.nextNeighbors
+        : const <HouseholdModel>[];
+    final showNext = controller.showNext.value && next.isNotEmpty;
 
     return SliverMainAxisGroup(
       slivers: [
-        for (final notice in notices)
+        SliverToBoxAdapter(child: TodayNeighborsCard(plan: plan)),
+        if (plan.isTodayDone)
           SliverPadding(
-            padding: EdgeInsets.only(bottom: 12.h),
-            sliver: SliverToBoxAdapter(child: notice),
+            padding: EdgeInsets.only(top: 12.h),
+            sliver: SliverToBoxAdapter(
+              child: GoalReachedCard(
+                plan: plan,
+                showingNext: showNext,
+                onNextNeighbors: next.isEmpty ? null : controller.toggleNext,
+              ),
+            ),
           ),
-        SliverList.separated(
-          itemCount: plan.today.length,
-          separatorBuilder: (context, _) => SizedBox(height: 12.h),
-          itemBuilder: (context, index) {
-            final household = plan.today[index];
-            return PrayerListItemCard(
-              key: ValueKey('prayer-item-${household.id}'),
+        SliverPadding(
+          padding: EdgeInsets.only(top: 20.h, bottom: 10.h),
+          sliver: SliverToBoxAdapter(
+            child: _sectionHeader(
+              'Today',
+              '${plan.countedToday} of ${plan.todayGoal} prayed',
+              key: const ValueKey('today-header'),
+            ),
+          ),
+        ),
+        _rows(plan.today, 'prayer-item'),
+        if (showNext) ...[
+          SliverPadding(
+            padding: EdgeInsets.only(top: 20.h, bottom: 10.h),
+            sliver: SliverToBoxAdapter(
+              child: _sectionHeader(
+                'Next neighbors',
+                'Extra prayers today',
+                key: const ValueKey('next-header'),
+              ),
+            ),
+          ),
+          _rows(next, 'next-item'),
+        ],
+      ],
+    );
+  }
+
+  Widget _rows(List<HouseholdModel> homes, String keyPrefix) {
+    return SliverList.separated(
+      itemCount: homes.length,
+      separatorBuilder: (context, _) => SizedBox(height: 10.h),
+      itemBuilder: (context, index) {
+        final household = homes[index];
+        void pray() => controller.togglePray(household);
+        return KeyedSubtree(
+          key: ValueKey('$keyPrefix-${household.id}'),
+          child: HouseholdRow(
+            household: household,
+            onPrayToggle: pray,
+            onTap: () => HouseholdDetailBottomSheet.show(
+              context,
               household: household,
-              onPrayToggle: () => controller.togglePray(household),
+              onPrayToggle: pray,
               onUpdated: controller.updateHousehold,
-            );
-          },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sectionHeader(String title, String trailing, {Key? key}) {
+    return Row(
+      key: key,
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: AppTypography.heading(
+              color: AppColors.textPrimary,
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Text(
+          trailing,
+          style: AppTypography.body(
+            color: AppColors.textSecondary,
+            fontSize: 12.sp,
+          ),
         ),
       ],
     );
@@ -170,10 +249,11 @@ class PrayerListScreen extends GetView<PrayerListController> {
 
   Widget _buildVerse() {
     return Container(
+      key: const ValueKey('verse-card'),
       width: double.infinity,
       padding: EdgeInsets.all(14.r),
       decoration: BoxDecoration(
-        color: const Color(0xFF26375A),
+        color: AppColors.primaryNavy,
         borderRadius: BorderRadius.circular(16.r),
       ),
       child: Column(
@@ -198,132 +278,6 @@ class PrayerListScreen extends GetView<PrayerListController> {
               fontWeight: FontWeight.w700,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReminder() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(16.r),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B2A4A),
-        borderRadius: BorderRadius.circular(16.r),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'REMEMBER',
-            style: AppTypography.label(
-              color: AppColors.primaryGold,
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-            ),
-          ),
-          SizedBox(height: 8.h),
-          Text(
-            '"Go into all the world and preach the gospel to every creature."',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13.sp,
-              fontStyle: FontStyle.italic,
-              height: 1.4,
-            ),
-          ),
-          SizedBox(height: 8.h),
-          Text(
-            '\u2014 Mark 16:15',
-            style: AppTypography.label(
-              color: AppColors.primaryGold,
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCycleComplete(PrayerPlan plan) {
-    return AppNoticeCard(
-      icon: Icons.celebration_rounded,
-      highlight: true,
-      title: 'Prayer cycle complete',
-      message:
-          'You have prayed for all ${plan.cycleTotal} households in '
-          'your neighborhood. Start a new cycle to pray for them again.',
-      actions: [
-        Obx(
-          () => SizedBox(
-            width: 180.w,
-            child: AppPrimaryButton(
-              key: const ValueKey('start-new-cycle'),
-              label: 'Start new cycle',
-              height: 42,
-              isLoading: controller.isStartingCycle.value,
-              onPressed: controller.startNewCycle,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Sticky strip: today's progress toward the daily goal.
-class _TodayStrip extends StatelessWidget {
-  const _TodayStrip({required this.plan});
-
-  final PrayerPlan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = plan.today.length;
-    final done = plan.today.where((h) => h.isPrayed).length;
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.w),
-      child: Row(
-        children: [
-          Icon(
-            Icons.favorite_rounded,
-            size: 16.r,
-            color: AppColors.primaryGold,
-          ),
-          SizedBox(width: 8.w),
-          Text(
-            total == 0 ? 'Nothing to pray for yet' : '$done of $total today',
-            key: const ValueKey('today-strip'),
-            style: AppTypography.label(
-              color: AppColors.textPrimary,
-              fontSize: 13.sp,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          SizedBox(width: 12.w),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4.r),
-              child: LinearProgressIndicator(
-                value: total == 0 ? 0 : done / total,
-                minHeight: 6.h,
-                backgroundColor: const Color(0xFFE2E8F0),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF2E7D32)),
-              ),
-            ),
-          ),
-          if (plan.dailyTarget > 0) ...[
-            SizedBox(width: 12.w),
-            Text(
-              'Goal ${plan.dailyTarget}/day',
-              style: AppTypography.body(
-                color: AppColors.textSecondary,
-                fontSize: 11.5.sp,
-              ),
-            ),
-          ],
         ],
       ),
     );

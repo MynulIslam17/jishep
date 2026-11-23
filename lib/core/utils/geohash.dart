@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 /// Minimal geohash helpers (the same encoding the household documents use in
-/// `geo.geohash`, written by `tool/seed_households`).
+/// `geo.geohash`, written by `tool/seed_households`, and the Overture cells
+/// from `tool/overture_cells`). Identical to `geofire-common`, including
+/// points exactly on a cell boundary (they go to the lower cell: `>`).
 abstract final class Geohash {
   static const String alphabet = '0123456789bcdefghjkmnpqrstuvwxyz';
 
@@ -17,7 +19,7 @@ abstract final class Geohash {
     while (out.length < precision) {
       if (evenBit) {
         final mid = (minLng + maxLng) / 2;
-        if (longitude >= mid) {
+        if (longitude > mid) {
           ch = (ch << 1) | 1;
           minLng = mid;
         } else {
@@ -26,7 +28,7 @@ abstract final class Geohash {
         }
       } else {
         final mid = (minLat + maxLat) / 2;
-        if (latitude >= mid) {
+        if (latitude > mid) {
           ch = (ch << 1) | 1;
           minLat = mid;
         } else {

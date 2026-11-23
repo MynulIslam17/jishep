@@ -33,5 +33,10 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "cells", "fieldPath": "h", "ttl": false, "indexes": [] },
+    { "collectionGroup": "cells", "fieldPath": "v", "ttl": false, "indexes": [] },
+    { "collectionGroup": "cells", "fieldPath": "n", "ttl": false, "indexes": [] },
+    { "collectionGroup": "cells", "fieldPath": "split", "ttl": false, "indexes": [] }
+  ]
 }

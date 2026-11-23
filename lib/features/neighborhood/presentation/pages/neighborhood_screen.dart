@@ -1,15 +1,24 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
+import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
-import 'package:gps_cielo/features/neighborhood/presentation/widgets/neighborhood_household_card.dart';
-import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
 import 'package:gps_cielo/shared/widgets/bottom_sheets/household_detail_bottom_sheet.dart';
+import 'package:gps_cielo/shared/widgets/dialogs/app_confirmation_dialog.dart';
+import 'package:gps_cielo/shared/widgets/household/household_row.dart';
+import 'package:gps_cielo/shared/widgets/inputs/app_search_field.dart';
 import 'package:gps_cielo/shared/widgets/inputs/app_segmented_switch.dart';
 import 'package:gps_cielo/shared/widgets/layout/collapsing_header_scroll_view.dart';
+import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
 
+/// Figma "My Neighborhood": navy header with search, a Map | List switch,
+/// the nearest N homes (navy = to pray, green = prayed this round).
 class NeighborhoodScreen extends GetView<NeighborhoodController> {
   const NeighborhoodScreen({super.key});
 
@@ -17,46 +26,36 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      // One scrolling page, like the Prayer list: the large title collapses,
-      // the count and Map/List switch stay pinned, and the map scrolls away
-      // so the list gets the whole screen. Drags that start on the map still
-      // pan and zoom it (flutter_map claims them).
-      body: NotificationListener<ScrollUpdateNotification>(
-        // Load the next page shortly before the end is reached.
-        onNotification: (notification) {
-          if (notification.depth == 0 &&
-              notification.metrics.extentAfter < 400) {
-            controller.loadMore();
-          }
-          return false;
-        },
-        child: CollapsingHeaderScrollView(
-          title: 'My Neighborhood',
-          subtitle: Obx(() => Text(controller.rangeLabel)),
-          onRefresh: controller.loadHouseholds,
-          pinnedHeight: 64.h,
-          pinned: _buildPinnedStrip(),
-          slivers: [
-            Obx(() {
-              if (controller.viewMode.value != NeighborhoodViewMode.map) {
-                return const SliverToBoxAdapter(child: SizedBox.shrink());
-              }
-              return SliverPadding(
-                padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
-                sliver: SliverToBoxAdapter(child: _buildMapCard(context)),
-              );
-            }),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0),
-              sliver: Obx(_buildList),
-            ),
-          ],
-        ),
+      body: CollapsingHeaderScrollView(
+        title: 'My Neighborhood',
+        subtitle: Obx(() {
+          final n = controller.households.length;
+          final where = controller.centerLabel.value;
+          final lead = controller.isTemporary.value
+              ? 'Viewing'
+              : 'Nearest $n ${n == 1 ? 'home' : 'homes'}';
+          return Text(
+            where.isEmpty ? lead : '$lead · $where',
+            key: const ValueKey('neighborhood-subtitle'),
+          );
+        }),
+        actions: [
+          HeaderIconButton(
+            key: const ValueKey('neighborhood-search'),
+            icon: Icons.search_rounded,
+            tooltip: 'Look around another place',
+            onPressed: () => _openSearch(context),
+          ),
+        ],
+        onRefresh: controller.loadHouseholds,
+        pinnedHeight: 60.h,
+        pinned: _buildPinnedStrip(),
+        slivers: [Obx(() => _buildBody(context))],
       ),
     );
   }
 
-  /// Count of households in range and the Map / List switch.
+  /// "50 households · 12 prayed" and the Map / List switch.
   Widget _buildPinnedStrip() {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w),
@@ -64,18 +63,14 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         children: [
           Expanded(
             child: Obx(() {
-              final total = controller.areaHouseholds.length;
-              final shown = controller.pagedHouseholds.length;
-              // Until the whole range is read, the count is a lower bound.
-              final count = controller.areaComplete.value
-                  ? '$total'
-                  : '$total+';
+              final n = controller.households.length;
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$count ${total == 1 ? 'household' : 'households'} in range',
+                    '$n ${n == 1 ? 'household' : 'households'} · '
+                    '${controller.prayedCount} prayed',
                     key: const ValueKey('area-count'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -85,13 +80,10 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  SizedBox(height: 2.h),
                   Text(
-                    total == 0
-                        ? 'Nearest first'
-                        : 'Nearest first \u2022 showing $shown',
-                    key: const ValueKey('paging-status'),
-                    maxLines: 1,
+                    controller.areaSourceNote.value ?? 'Nearest first',
+                    key: const ValueKey('area-source-note'),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.body(
                       color: AppColors.textSecondary,
@@ -125,240 +117,474 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
     );
   }
 
-  /// Every household in range, nearest first, a page at a time.
-  Widget _buildList() {
-    if (controller.isLoading.value && controller.areaHouseholds.isEmpty) {
-      return SliverToBoxAdapter(
-        child: SizedBox(
-          height: 160.h,
-          child: const Center(child: CircularProgressIndicator()),
+  /// Padding around the list, loading and empty states (the map is full
+  /// width, edge to edge).
+  static EdgeInsets get _pad => EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h);
+
+  Widget _buildBody(BuildContext context) {
+    final homes = controller.households.toList();
+    final banner = controller.isTemporary.value ? _buildViewingBanner() : null;
+
+    if (!(controller.isLoading.value && homes.isEmpty) &&
+        homes.isNotEmpty &&
+        controller.viewMode.value == NeighborhoodViewMode.map) {
+      // Map view: the map fills everything from below the Map | List strip
+      // down to the bottom navigation bar.
+      return SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final height = math.max(constraints.remainingPaintExtent, 320.h);
+          return SliverToBoxAdapter(
+            child: SizedBox(
+              height: height,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (banner != null)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
+                      child: banner,
+                    ),
+                  Expanded(child: _buildMap(context, homes)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final Widget content;
+    if (controller.isLoading.value && homes.isEmpty) {
+      content = SizedBox(
+        height: 160.h,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    } else if (homes.isEmpty) {
+      content = _buildEmpty();
+    } else {
+      return SliverPadding(
+        padding: _pad,
+        sliver: SliverMainAxisGroup(
+          slivers: [
+            if (banner != null)
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: 12.h),
+                sliver: SliverToBoxAdapter(child: banner),
+              ),
+            SliverList.separated(
+              key: const ValueKey('neighborhood-list'),
+              itemCount: homes.length,
+              separatorBuilder: (context, _) => SizedBox(height: 10.h),
+              itemBuilder: (context, i) => _row(context, homes[i], i + 1),
+            ),
+          ],
         ),
       );
     }
-    final items = controller.pagedHouseholds;
-    if (items.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 24.h),
-          child: Text(
-            'No households in range yet. Search another place on Home, or '
-            'choose a larger search range in Profile \u203a Prayer '
-            'preferences.',
+    return SliverPadding(
+      padding: _pad,
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (banner != null) ...[banner, SizedBox(height: 12.h)],
+            content,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, HouseholdModel household, int number) {
+    void pray() => controller.togglePray(household);
+    return HouseholdRow(
+      key: ValueKey('area-${household.id}'),
+      household: household,
+      number: number,
+      // Distances from the place on screen (home or the searched place).
+      from: _center,
+      onPrayToggle: pray,
+      onTap: () => _openHousehold(context, household),
+    );
+  }
+
+  ({double latitude, double longitude})? get _center {
+    final lat = controller.centerLatitude.value;
+    final lng = controller.centerLongitude.value;
+    if (lat == null || lng == null) return null;
+    return (latitude: lat, longitude: lng);
+  }
+
+  void _openHousehold(BuildContext context, HouseholdModel household) {
+    HouseholdDetailBottomSheet.show(
+      context,
+      household: household,
+      onPrayToggle: () => controller.togglePray(household),
+      onUpdated: controller.updateHousehold,
+    );
+  }
+
+  Widget _buildEmpty() {
+    final unavailable = controller.areaUnavailable.value;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 24.h),
+      child: Column(
+        children: [
+          Icon(
+            Icons.travel_explore_rounded,
+            size: 40.r,
+            color: AppColors.textMuted,
+          ),
+          SizedBox(height: 10.h),
+          Text(
+            unavailable
+                ? AppStrings.areaUnavailable
+                : 'No households near this place yet',
+            key: const ValueKey('neighborhood-empty'),
+            textAlign: TextAlign.center,
+            style: AppTypography.heading(
+              color: AppColors.textPrimary,
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            unavailable
+                ? '${AppStrings.areasAvailable}. ${AppStrings.areaComingSoon}'
+                : 'Search another place, or change your home address.',
             textAlign: TextAlign.center,
             style: AppTypography.body(
               color: AppColors.textSecondary,
               fontSize: 13.sp,
             ),
           ),
-        ),
-      );
-    }
-    final hasMore = controller.hasMore;
-    final loadingMore = controller.isLoadingMore.value;
-    return SliverList.separated(
-      key: const ValueKey('neighborhood-list'),
-      itemCount: items.length + 1,
-      separatorBuilder: (context, _) => SizedBox(height: 10.h),
-      itemBuilder: (context, index) {
-        if (index == items.length) {
-          return _buildListFooter(hasMore, items.length, loadingMore);
-        }
-        final household = items[index];
-        return NeighborhoodHouseholdCard(
-          key: ValueKey('area-${household.id}'),
-          household: household,
-          onPrayToggle: () => controller.togglePray(household),
-          onUpdated: controller.updateHousehold,
-        );
-      },
+          if (!controller.isTemporary.value) ...[
+            SizedBox(height: 12.h),
+            ChangeHomeAddress.button(),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildListFooter(bool hasMore, int shown, bool loadingMore) {
-    return Padding(
-      key: const ValueKey('list-footer'),
-      padding: EdgeInsets.symmetric(vertical: 8.h),
-      child: Center(
-        child: loadingMore && shown >= controller.areaHouseholds.length
-            ? Row(
-                key: const ValueKey('loading-more'),
+  /// "● 38 to pray  ● 12 prayed this round".
+  Widget _buildLegend() {
+    Widget item(Color color, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        HouseMarker(size: 15.r, color: color),
+        SizedBox(width: 3.w),
+        Text(
+          text,
+          style: AppTypography.body(
+            color: AppColors.textSecondary,
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    return Container(
+      key: const ValueKey('map-legend'),
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
+        ],
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 16.w,
+        runSpacing: 4.h,
+        children: [
+          item(AppColors.primaryNavy, '${controller.toPrayCount} to pray'),
+          item(prayedGreen, '${controller.prayedCount} prayed this round'),
+        ],
+      ),
+    );
+  }
+
+  /// Full-width map (no card), with the chip, zoom buttons and legend on top.
+  Widget _buildMap(BuildContext context, List<HouseholdModel> homes) {
+    final center = _center;
+    return Container(
+      key: const ValueKey('neighborhood-map'),
+      color: const Color(0xFFF1F5F9),
+      child: Stack(
+        children: [
+          if (center != null)
+            Positioned.fill(
+              child: HouseholdOsmMap(
+                centerLatitude: center.latitude,
+                centerLongitude: center.longitude,
+                households: homes,
+                handle: controller.mapHandle,
+                markerSize: 30,
+                onHouseholdTap: (h) => _openHousehold(context, h),
+              ),
+            )
+          else
+            Center(
+              child: Text(
+                'Set your address to see your neighborhood map',
+                style: AppTypography.label(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Positioned(
+            top: 12.h,
+            left: 12.w,
+            child: Container(
+              key: const ValueKey('map-chip'),
+              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20.r),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 18.r,
-                    height: 18.r,
-                    child: const CircularProgressIndicator(strokeWidth: 2.2),
+                  Icon(
+                    Icons.home_rounded,
+                    size: 14.r,
+                    color: AppColors.primaryNavy,
                   ),
-                  SizedBox(width: 10.w),
+                  SizedBox(width: 4.w),
                   Text(
-                    'Looking further out\u2026',
-                    style: AppTypography.body(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.sp,
+                    'Nearest ${homes.length} homes',
+                    style: AppTypography.label(
+                      color: AppColors.primaryNavy,
+                      fontSize: 11.5.sp,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
-              )
-            : hasMore
-            ? TextButton(
-                onPressed: controller.loadMore,
-                child: Text(
-                  'Load more',
-                  style: AppTypography.label(
-                    color: AppColors.primaryNavy,
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              )
-            : Text(
-                'All $shown households shown',
-                style: AppTypography.body(
-                  color: AppColors.textSecondary,
-                  fontSize: 12.sp,
-                ),
               ),
+            ),
+          ),
+          if (center != null)
+            Positioned(
+              top: 12.h,
+              right: 12.w,
+              child: Column(
+                children: [
+                  _zoomButton(Icons.add_rounded, controller.zoomIn),
+                  SizedBox(height: 6.h),
+                  _zoomButton(Icons.remove_rounded, controller.zoomOut),
+                ],
+              ),
+            ),
+          Positioned(
+            left: 12.w,
+            right: 12.w,
+            bottom: 36.h,
+            child: Center(child: _buildLegend()),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildMapCard(BuildContext context) {
-    return Container(
-      height: 300.h,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: AppColors.border),
+  Widget _zoomButton(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32.r,
+        height: 32.r,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Icon(icon, size: 18.r, color: AppColors.primaryNavy),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Obx(() {
-        final lat = controller.centerLatitude.value;
-        final lng = controller.centerLongitude.value;
+    );
+  }
 
-        return Stack(
-          children: [
-            if (lat != null && lng != null)
-              Positioned.fill(
-                child: HouseholdOsmMap(
-                  centerLatitude: lat,
-                  centerLongitude: lng,
-                  households: controller.households.toList(),
-                  areaMeters: controller.rangeMeters.value,
-                  handle: controller.mapHandle,
-                  initZoom: 17,
-                  onHouseholdTap: (household) {
-                    controller.selectHousehold(household);
-                    HouseholdDetailBottomSheet.show(
-                      context,
-                      household: household,
-                      onPrayToggle: () => controller.togglePray(household),
-                      onUpdated: controller.updateHousehold,
-                    );
-                  },
-                ),
-              )
-            else
-              Center(
-                child: Text(
-                  'Set your address to see your neighborhood map',
-                  style: AppTypography.label(
-                    color: AppColors.textSecondary,
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+  /// While looking at another place: say so, go back, or make it home.
+  Widget _buildViewingBanner() {
+    final place = controller.centerLabel.value;
+    return Container(
+      key: const ValueKey('viewing-banner'),
+      padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 4.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: const Color(0xFFDDD6FE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.travel_explore_rounded,
+                size: 18.r,
+                color: const Color(0xFF7C3AED),
               ),
-
-            // Floating Radius Tag (Top Left)
-            Positioned(
-              top: 12.h,
-              left: 12.w,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.radar_rounded,
-                      size: 14.r,
-                      color: AppColors.primaryNavy,
-                    ),
-                    SizedBox(width: 5.w),
                     Text(
-                      // The subtitle already gives the range; say what the
-                      // pins are.
-                      'Nearest ${controller.households.length} on the map',
+                      'Viewing near $place',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: AppTypography.label(
-                        color: AppColors.primaryNavy,
-                        fontSize: 11.5.sp,
+                        color: AppColors.textPrimary,
+                        fontSize: 13.sp,
                         fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      'Just looking around: your home and Prayer List are '
+                      'unchanged.',
+                      style: AppTypography.body(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.5.sp,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-
-            // Zoom Controls (+ / -) (Top Right)
-            if (lat != null && lng != null)
-              Positioned(
-                top: 12.h,
-                right: 12.w,
-                child: Column(
-                  children: [
-                    _buildZoomButton(
-                      icon: Icons.add_rounded,
-                      onTap: controller.zoomIn,
-                    ),
-                    SizedBox(height: 6.h),
-                    _buildZoomButton(
-                      icon: Icons.remove_rounded,
-                      onTap: controller.zoomOut,
-                    ),
-                  ],
+            ],
+          ),
+          Wrap(
+            spacing: 4.w,
+            children: [
+              TextButton.icon(
+                key: const ValueKey('back-to-home'),
+                onPressed: controller.useHomeAddress,
+                icon: Icon(Icons.home_outlined, size: 16.r),
+                label: const Text('Back to my home'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryNavy,
                 ),
               ),
-          ],
-        );
-      }),
+              TextButton.icon(
+                key: const ValueKey('set-as-home'),
+                onPressed: controller.isSavingHome.value
+                    ? null
+                    : () => AppConfirmationDialog.show(
+                        title: 'Set as your home?',
+                        message:
+                            'Your home address will change to "$place". Your '
+                            'Prayer List, Neighborhood and Home will use the '
+                            'homes nearest it.',
+                        confirmLabel: 'Set as home',
+                        onConfirm: controller.setSearchedPlaceAsHome,
+                      ),
+                icon: Icon(Icons.push_pin_outlined, size: 16.r),
+                label: const Text('Set as my home'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF7C3AED),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildZoomButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 30.r,
-        height: 30.r,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(6.r),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+  /// Bottom sheet: search an address or use GPS to look around there.
+  void _openSearch(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheet) {
+        void done() => Navigator.of(sheet).maybePop();
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheet).viewInsets.bottom,
+          ),
+          child: Container(
+            key: const ValueKey('neighborhood-search-sheet'),
+            padding: EdgeInsets.fromLTRB(
+              20.w,
+              16.h,
+              20.w,
+              20.h + MediaQuery.of(sheet).padding.bottom,
             ),
-          ],
-        ),
-        child: Icon(icon, size: 18.r, color: AppColors.primaryNavy),
-      ),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Look around another place',
+                  style: AppTypography.heading(
+                    color: AppColors.textPrimary,
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'See the nearest homes there. Your home and Prayer List '
+                  "don't change.",
+                  style: AppTypography.body(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.5.sp,
+                  ),
+                ),
+                SizedBox(height: 14.h),
+                Obx(
+                  () => AppSearchField(
+                    controller: controller.searchController,
+                    nearLatitude: controller.homeLatitude,
+                    nearLongitude: controller.homeLongitude,
+                    isLocating: controller.isLocating.value,
+                    onAddressSelected: (suggestion) {
+                      done();
+                      controller.selectSuggestion(suggestion);
+                    },
+                    onSubmitted: (_) {
+                      done();
+                      controller.searchNeighborhood();
+                    },
+                    onGpsPressed: () {
+                      done();
+                      controller.useCurrentLocation();
+                    },
+                  ),
+                ),
+                if (controller.isTemporary.value) ...[
+                  SizedBox(height: 8.h),
+                  TextButton.icon(
+                    key: const ValueKey('search-back-to-home'),
+                    onPressed: () {
+                      done();
+                      controller.useHomeAddress();
+                    },
+                    icon: Icon(Icons.home_outlined, size: 16.r),
+                    label: const Text('Back to my home'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

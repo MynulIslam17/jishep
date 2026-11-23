@@ -29,6 +29,23 @@ class UserModel {
   final double? latitude;
   final double? longitude;
 
+  /// What the user prays for in their chosen area (e.g. "Peace and
+  /// safety"), set during setup. Optional; at most [maxIntentionLength]
+  /// characters. Written only by `AuthService.updateLocation` when set, so
+  /// older rules that do not know the field are never sent it otherwise.
+  final String? prayerIntention;
+
+  static const int maxIntentionLength = 120;
+
+  /// Trimmed and shortened intention, or null when empty.
+  static String? cleanIntention(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return null;
+    return text.length > maxIntentionLength
+        ? text.substring(0, maxIntentionLength)
+        : text;
+  }
+
   UserModel({
     required this.id,
     required this.fullName,
@@ -47,6 +64,7 @@ class UserModel {
     this.prayerCycleStartedAt,
     this.latitude,
     this.longitude,
+    this.prayerIntention,
   });
 
   /// True once the user has confirmed a home location.
@@ -73,6 +91,7 @@ class UserModel {
       prayerCycleStartedAt: _toDate(json['prayerCycleStartedAt']),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      prayerIntention: cleanIntention(json['prayerIntention']?.toString()),
     );
   }
 
@@ -98,6 +117,7 @@ class UserModel {
       'searchRadiusKm': searchRadiusKm,
       'latitude': latitude,
       'longitude': longitude,
+      'prayerIntention': prayerIntention,
     };
   }
 
@@ -139,6 +159,7 @@ class UserModel {
     DateTime? prayerCycleStartedAt,
     double? latitude,
     double? longitude,
+    String? prayerIntention,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -158,6 +179,7 @@ class UserModel {
       prayerCycleStartedAt: prayerCycleStartedAt ?? this.prayerCycleStartedAt,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      prayerIntention: prayerIntention ?? this.prayerIntention,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/config/app_config.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/core/utils/validators.dart';
@@ -19,8 +20,9 @@ class ForgotPasswordController extends GetxController {
   final completePhoneNumber = ''.obs;
   final isLoading = false.obs;
 
-  /// Reset by emailed link instead of an SMS code.
-  final useEmail = false.obs;
+  /// Reset by emailed link instead of an SMS code (the only option while
+  /// phone sign-in is off).
+  final useEmail = (!AppConfig.phoneAuthEnabled).obs;
 
   /// Set once the reset email was sent (shows the confirmation).
   final emailSentTo = RxnString();

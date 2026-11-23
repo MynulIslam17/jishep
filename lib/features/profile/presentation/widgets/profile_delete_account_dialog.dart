@@ -23,20 +23,23 @@ class ProfileDeleteAccountDialog extends StatefulWidget {
     super.key,
   });
 
-  static Future<void> show(
+  /// Resolves to true when the account was deleted (the dialog is closed by
+  /// then).
+  static Future<bool> show(
     BuildContext context, {
     required bool requiresPassword,
     required Future<bool> Function(String? password) onDelete,
     String? confirmWith,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => ProfileDeleteAccountDialog(
         requiresPassword: requiresPassword,
         onDelete: onDelete,
         confirmWith: confirmWith,
       ),
-    );
+    ).then((deleted) => deleted ?? false);
   }
 
   @override
@@ -63,7 +66,8 @@ class _ProfileDeleteAccountDialogState
     );
     if (!mounted) return;
     if (deleted) {
-      Navigator.of(context).pop();
+      // Close the dialog first; the caller then moves to Sign In.
+      Navigator.of(context).pop(true);
     } else {
       setState(() => _isDeleting = false);
     }
@@ -125,7 +129,9 @@ class _ProfileDeleteAccountDialogState
       ),
       actions: [
         TextButton(
-          onPressed: _isDeleting ? null : () => Navigator.of(context).pop(),
+          onPressed: _isDeleting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         ElevatedButton(

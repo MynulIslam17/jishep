@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/services/push/push_payload.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/features/notifications/data/models/notification_model.dart';
@@ -207,7 +208,9 @@ class NotificationController extends GetxController {
   void handleNotificationTap(NotificationModel item) {
     markAsRead(item.id);
     final route = item.actionRoute;
-    if (route == null || route.isEmpty) return;
+    // Only known screens: an old or unexpected route (for example a screen
+    // that was removed) leaves the user on the inbox instead of failing.
+    if (route == null || !PushPayload.allowedRoutes.contains(route)) return;
 
     // Tab destinations live inside MainNav; switch tabs instead of pushing.
     final tab = _tabRoutes[route];
