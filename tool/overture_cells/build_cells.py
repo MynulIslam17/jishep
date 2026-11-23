@@ -21,6 +21,11 @@ Examples:
       --bbox=-117.02,32.72,-116.96,32.76
   .venv/bin/python build_cells.py --name california --state CA
   .venv/bin/python build_cells.py --name usa
+  .venv/bin/python build_cells.py --name usa --resume   # after an interruption
+
+--resume keeps out/_<name>_work/: a finished extract (extract.json) is
+reused; otherwise a fully downloaded `raw` table is reused, so the S3
+download is not repeated. The release is pinned in release.txt.
 """
 
 from __future__ import annotations
@@ -84,6 +89,7 @@ def connect(work_db: pathlib.Path, threads: int | None, memory: str | None):
     con.execute("SET s3_region='us-west-2'")
     con.execute(f"SET temp_directory='{work_db.parent / 'tmp'}'")
     con.execute("SET preserve_insertion_order=false")
+    con.execute("SET max_temp_directory_size='150GB'")
     if threads:
         con.execute(f"SET threads={threads}")
     if memory:
@@ -98,7 +104,31 @@ def connect(work_db: pathlib.Path, threads: int | None, memory: str | None):
     return con
 
 
-def extract(con, release: str, bbox, state: str | None) -> dict:
+# Large steps run in slices so a 16 GB machine can build the whole US. Each
+# slice holds whole groups (same point, same address or same id), so the
+# result is identical to running the step at once.
+SLICES = 16
+
+
+def sliced(con, table: str, sql: str, slices: int = SLICES) -> None:
+    """CREATE TABLE <table> from `sql`, run once per slice. In `sql`, {s}
+    is replaced by a condition `% SLICES = i` to append to a hash()."""
+    for i in range(slices):
+        q = sql.replace("{s}", f"% {slices} = {i}")
+        if i == 0:
+            con.execute(f"CREATE OR REPLACE TABLE {table} AS {q}")
+        else:
+            con.execute(f"INSERT INTO {table} {q}")
+
+
+def has_table(con, name: str) -> bool:
+    return con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
+        [name]).fetchone()[0] > 0
+
+
+def extract(con, release: str, bbox, state: str | None,
+            reuse_raw: bool = False) -> dict:
     src = (
         f"s3://{BUCKET}/release/{release}/theme=addresses/type=address/*"
     )
@@ -112,7 +142,10 @@ def extract(con, release: str, bbox, state: str | None) -> dict:
     if state:
         where.append(f"address_levels[1].value = '{state}'")
     unit = "upper(trim(unit))"
-    con.execute(
+    if reuse_raw:
+        print("  reusing the downloaded raw table (--resume)", flush=True)
+    else:
+      con.execute(
         f"""
         CREATE OR REPLACE TABLE raw AS
         SELECT
@@ -152,74 +185,69 @@ def extract(con, release: str, bbox, state: str | None) -> dict:
     no_number = count("SELECT count(*) FROM raw WHERE addr IS NULL")
 
     # 1. Homes: one row per label and point.
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE h1 AS
-        SELECT * FROM raw WHERE addr IS NOT NULL
-        QUALIFY row_number() OVER (
-          PARTITION BY addr, unit_part, lat, lon ORDER BY id) = 1
-        """
-    )
+    sliced(con, "h1", """
+        -- The row with the lowest id per label and point.
+        SELECT v.id AS id, lat, lon, addr, unit_part,
+          v.city AS city, v.st AS st, v.zip AS zip
+        FROM (
+          SELECT addr, unit_part, lat, lon,
+            arg_min({'id': id, 'city': city, 'st': st, 'zip': zip}, id) AS v
+          FROM raw WHERE addr IS NOT NULL AND hash(lat, lon) {s}
+          GROUP BY addr, unit_part, lat, lon
+        )
+        """)
     con.execute("DROP TABLE raw")
     homes = count("SELECT count(*) FROM h1")
 
     # 2. Units often lack city/postcode: take them from another address at
     #    the same point (usually the building record).
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE h2 AS
-        SELECT id, lat, lon, addr, unit_part, st,
-          city IS NULL AND max(city) OVER w IS NOT NULL
-            OR zip IS NULL AND max(zip) OVER w IS NOT NULL AS same_filled,
-          coalesce(city, max(city) OVER w) AS city,
-          coalesce(zip, max(zip) OVER w) AS zip
-        FROM h1
-        WINDOW w AS (PARTITION BY lat, lon)
-        """
-    )
+    sliced(con, "h2", """
+        SELECT h.id, h.lat, h.lon, h.addr, h.unit_part, h.st,
+          h.city IS NULL AND p.mc IS NOT NULL
+            OR h.zip IS NULL AND p.mz IS NOT NULL AS same_filled,
+          coalesce(h.city, p.mc) AS city,
+          coalesce(h.zip, p.mz) AS zip
+        FROM (SELECT * FROM h1 WHERE hash(lat, lon) {s}) h
+        JOIN (SELECT lat, lon, max(city) AS mc, max(zip) AS mz
+              FROM h1 WHERE hash(lat, lon) {s} GROUP BY lat, lon) p
+          USING (lat, lon)
+        """)
     con.execute("DROP TABLE h1")
     same_filled = count("SELECT count(*) FROM h2 WHERE same_filled")
     # Donors for step 4, including building records dropped in step 3.
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE donors AS
+    sliced(con, "donors", """
         SELECT DISTINCT lat, lon, city, zip,
           CAST(floor(lat * 1000) AS BIGINT) AS gy,
           CAST(floor(lon * 1000) AS BIGINT) AS gx
         FROM h2 WHERE city IS NOT NULL AND zip IS NOT NULL
-        """
-    )
+          AND hash(lat, lon) {s}
+        """)
 
     # 3. A building record (no unit) is dropped when records with the same
     #    house number + street (same state, and same ZIP when both have
     #    one) have units. Matched by address, not distance. Kept otherwise.
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE buildings AS
+    sliced(con, "buildings", """
         SELECT DISTINCT b.id
-        FROM h2 b JOIN h2 u
+        FROM (SELECT id, addr, st, zip FROM h2
+              WHERE unit_part = '' AND hash(addr) {s}) b
+        JOIN (SELECT DISTINCT addr, st, zip FROM h2
+              WHERE unit_part <> '' AND hash(addr) {s}) u
           ON u.addr = b.addr AND u.st IS NOT DISTINCT FROM b.st
-        WHERE b.unit_part = '' AND u.unit_part <> ''
-          AND (b.zip IS NULL OR u.zip IS NULL OR u.zip = b.zip)
-        """
-    )
+        WHERE b.zip IS NULL OR u.zip IS NULL OR u.zip = b.zip
+        """)
     buildings = count("SELECT count(*) FROM buildings")
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE h3 AS
-        SELECT * EXCLUDE (same_filled) FROM h2
-        WHERE id NOT IN (SELECT id FROM buildings)
-        """
-    )
+    sliced(con, "h3", """
+        SELECT h.* EXCLUDE (same_filled)
+        FROM (SELECT * FROM h2 WHERE hash(id) {s}) h
+        ANTI JOIN (SELECT id FROM buildings WHERE hash(id) {s}) b USING (id)
+        """)
     con.execute("DROP TABLE h2")
     con.execute("DROP TABLE buildings")
 
     # 4. Still missing: city and postcode of the nearest home within 100 m
     #    that has both. Grid of 0.001° cells; ±1 cell north/south (111 m)
     #    and ±3 east/west (>= 100 m up to ~72° N).
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE near_fill AS
+    sliced(con, "near_fill", """
         SELECT id, arg_min({'c': city, 'z': zip}, dist) AS v
         FROM (
           SELECT m.id, d.city, d.zip,
@@ -230,27 +258,24 @@ def extract(con, release: str, bbox, state: str | None) -> dict:
               CAST(floor(lat * 1000) AS BIGINT) + dy AS gy,
               CAST(floor(lon * 1000) AS BIGINT) + dx AS gx
             FROM h3, range(-1, 2) t1(dy), range(-3, 4) t2(dx)
-            WHERE city IS NULL OR zip IS NULL
+            WHERE (city IS NULL OR zip IS NULL) AND hash(id) {s}
           ) m
           JOIN donors d USING (gy, gx)
         )
         WHERE dist <= 100
         GROUP BY id
-        """
-    )
+        """)
     near_filled = count("SELECT count(*) FROM near_fill")
-    con.execute(
-        """
-        CREATE OR REPLACE TABLE pts AS
+    sliced(con, "pts", """
         SELECT h.id, h.lat, h.lon,
           h.addr || h.unit_part AS label,
           nullif(concat_ws(', ', coalesce(h.city, f.v.c), h.st), '') AS c,
           coalesce(h.zip, f.v.z) AS z,
           coalesce(h.city, f.v.c) IS NULL OR coalesce(h.zip, f.v.z) IS NULL
             AS incomplete
-        FROM h3 h LEFT JOIN near_fill f USING (id)
-        """
-    )
+        FROM (SELECT * FROM h3 WHERE hash(id) {s}) h
+        LEFT JOIN (SELECT * FROM near_fill WHERE hash(id) {s}) f USING (id)
+        """)
     for t in ("h3", "donors", "near_fill"):
         con.execute(f"DROP TABLE {t}")
     still_missing = count("SELECT count(*) FROM pts WHERE incomplete")
@@ -258,6 +283,7 @@ def extract(con, release: str, bbox, state: str | None) -> dict:
     kept = count("SELECT count(*) FROM pts")
     con.execute("ALTER TABLE pts ADD COLUMN g VARCHAR")
     con.execute("UPDATE pts SET g = gh9(lat, lon)")
+    con.execute("CHECKPOINT")
     return {
         "read": raw,
         "skippedNoHouseNumber": no_number,
@@ -273,28 +299,39 @@ def extract(con, release: str, bbox, state: str | None) -> dict:
 def assign_files(con, max_per_file: int):
     """Each point's file prefix: the shortest prefix (>= 5) holding at most
     max_per_file points; plus the split stubs above it."""
-    counts = ", ".join(
-        f"count(*) OVER (PARTITION BY left(g, {k})) AS c{k}"
-        for k in range(CELL_PRECISION, MAX_PRECISION + 1)
+    # Split prefixes, level by level: a prefix is split when it holds more
+    # than max_per_file points (only children of split prefixes are counted).
+    con.execute("CREATE OR REPLACE TABLE split_p (p VARCHAR, k INT)")
+    for k in range(CELL_PRECISION, MAX_PRECISION):
+        parent = (f"WHERE left(g, {k - 1}) IN (SELECT p FROM split_p "
+                  f"WHERE k = {k - 1})" if k > CELL_PRECISION else "")
+        con.execute(
+            f"""
+            INSERT INTO split_p
+            SELECT left(g, {k}), {k} FROM pts {parent}
+            GROUP BY 1 HAVING count(*) > {max_per_file}
+            """
+        )
+    # A point's file: its g cut after the split prefixes above it (splits
+    # are nested), i.e. the shortest prefix with <= max_per_file points.
+    joins = " ".join(
+        f"LEFT JOIN (SELECT p FROM split_p WHERE k = {k}) s{k} "
+        f"ON s{k}.p = left(pts.g, {k})"
+        for k in range(CELL_PRECISION, MAX_PRECISION)
     )
-    cases = " ".join(
-        f"WHEN c{k} <= {max_per_file} THEN left(g, {k})"
+    depth = " + ".join(
+        f"CAST(s{k}.p IS NOT NULL AS INT)"
         for k in range(CELL_PRECISION, MAX_PRECISION)
     )
     con.execute(
         f"""
         CREATE OR REPLACE TABLE placed AS
-        SELECT *, CASE {cases} ELSE g END AS f
-        FROM (SELECT *, {counts} FROM pts)
+        SELECT pts.*, left(pts.g, {CELL_PRECISION} + {depth}) AS f
+        FROM pts {joins}
         """
     )
     stubs = con.execute(
-        " UNION ".join(
-            f"SELECT DISTINCT left(g, {k}) AS p, {k + 1} AS split "
-            f"FROM placed WHERE c{k} > {max_per_file}"
-            for k in range(CELL_PRECISION, MAX_PRECISION)
-        )
-        + " ORDER BY p"
+        "SELECT p, k + 1 AS split FROM split_p ORDER BY p"
     ).fetchall()
     return stubs
 
@@ -370,21 +407,28 @@ def main():
     ap.add_argument("--out", default=str(pathlib.Path(__file__).parent / "out"))
     ap.add_argument("--threads", type=int)
     ap.add_argument("--memory", help="DuckDB memory limit, e.g. 8GB")
+    ap.add_argument("--resume", action="store_true",
+                    help="continue an interrupted build (see above)")
     args = ap.parse_args()
 
     bbox = tuple(float(v) for v in args.bbox.split(",")) if args.bbox else None
     state = args.state.upper() if args.state else None
     if state and not bbox:
         bbox = STATE_BBOX.get(state)
-    release = args.release or latest_release()
-
     out = pathlib.Path(args.out) / args.name
+    work = out.parent / f"_{args.name}_work"
+    resume = args.resume and work.exists()
+    if work.exists() and not resume:
+        shutil.rmtree(work)
+    work.mkdir(parents=True, exist_ok=True)
+    pinned = work / "release.txt"
+    if resume and pinned.exists():
+        release = pinned.read_text().strip()
+    else:
+        release = args.release or latest_release()
+        pinned.write_text(release + "\n")
     if out.exists():
         shutil.rmtree(out)
-    work = out.parent / f"_{args.name}_work"
-    if work.exists():
-        shutil.rmtree(work)
-    work.mkdir(parents=True)
     out.mkdir(parents=True)
 
     t0 = time.time()
@@ -392,7 +436,14 @@ def main():
           f"{'bbox ' + str(bbox) if bbox else 'all US'}"
           f"{', state ' + state if state else ''}", flush=True)
     con = connect(work / "work.duckdb", args.threads, args.memory)
-    stats = extract(con, release, bbox, state)
+    done = work / "extract.json"
+    if resume and done.exists() and has_table(con, "pts"):
+        stats = json.loads(done.read_text())
+        print("  reusing the finished extract (--resume)", flush=True)
+    else:
+        stats = extract(con, release, bbox, state,
+                        reuse_raw=resume and has_table(con, "raw"))
+        done.write_text(json.dumps(stats) + "\n")
     t1 = time.time()
     print(f"  extracted {stats['points']:,} points in {t1 - t0:.0f}s",
           flush=True)

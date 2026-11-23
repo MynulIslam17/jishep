@@ -163,6 +163,7 @@ class ProfileScreen extends GetView<ProfileController> {
                     return ProfileImpactCard(
                       homesPrayed: user?.homesPrayed ?? 0,
                       visitsMade: user?.visitsMade ?? 0,
+                      prayersOffered: controller.prayersOffered.value,
                     );
                   }),
 

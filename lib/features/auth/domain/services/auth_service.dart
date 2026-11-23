@@ -209,15 +209,19 @@ class AuthService {
     required double longitude,
     required double searchRadiusKm,
     required int dailyPrayerTarget,
+    String? prayerIntention,
   }) {
     final user = _authRepository.currentUser;
     if (user == null) throw const AppException('You are not signed in.');
+    final intention = UserModel.cleanIntention(prayerIntention);
     return _userRepository.updateFields(user.uid, {
       'address': address,
       'latitude': latitude,
       'longitude': longitude,
       'searchRadiusKm': searchRadiusKm,
       'dailyPrayerTarget': dailyPrayerTarget,
+      // Only when chosen (needs the rules that allow `prayerIntention`).
+      'prayerIntention': ?intention,
     });
   }
 

@@ -222,8 +222,7 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
 
   Marker _householdMarker(HouseholdModel household) {
     final size = _pinSize;
-    final pin = Icon(
-      Icons.location_on,
+    final pin = HouseMarker(
       size: size,
       color: household.isPrayed ? prayedGreen : AppColors.primaryNavy,
     );
@@ -233,7 +232,8 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
       point: LatLng(household.latitude, household.longitude),
       width: size,
       height: size,
-      alignment: Alignment.topCenter,
+      // The house sits on the home's point.
+      alignment: Alignment.center,
       child: onTap == null
           ? pin
           : GestureDetector(onTap: () => onTap(household), child: pin),
@@ -329,6 +329,37 @@ class _HouseholdOsmMapState extends State<HouseholdOsmMap> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A household on the map: a small rounded square with a white house
+/// (navy to pray, green when prayed). The user's own home is the larger red
+/// house.
+class HouseMarker extends StatelessWidget {
+  const HouseMarker({required this.size, required this.color, super.key});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(size * 0.28),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 3,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Icon(Icons.home_rounded, size: size * 0.66, color: Colors.white),
     );
   }
 }

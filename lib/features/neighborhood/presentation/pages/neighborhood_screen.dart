@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
@@ -48,12 +50,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         onRefresh: controller.loadHouseholds,
         pinnedHeight: 60.h,
         pinned: _buildPinnedStrip(),
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
-            sliver: Obx(() => _buildBody(context)),
-          ),
-        ],
+        slivers: [Obx(() => _buildBody(context))],
       ),
     );
   }
@@ -84,7 +81,10 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
                     ),
                   ),
                   Text(
-                    'Nearest first',
+                    controller.areaSourceNote.value ?? 'Nearest first',
+                    key: const ValueKey('area-source-note'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.body(
                       color: AppColors.textSecondary,
                       fontSize: 12.sp,
@@ -117,9 +117,41 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
     );
   }
 
+  /// Padding around the list, loading and empty states (the map is full
+  /// width, edge to edge).
+  static EdgeInsets get _pad => EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h);
+
   Widget _buildBody(BuildContext context) {
     final homes = controller.households.toList();
     final banner = controller.isTemporary.value ? _buildViewingBanner() : null;
+
+    if (!(controller.isLoading.value && homes.isEmpty) &&
+        homes.isNotEmpty &&
+        controller.viewMode.value == NeighborhoodViewMode.map) {
+      // Map view: the map fills everything from below the Map | List strip
+      // down to the bottom navigation bar.
+      return SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final height = math.max(constraints.remainingPaintExtent, 320.h);
+          return SliverToBoxAdapter(
+            child: SizedBox(
+              height: height,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (banner != null)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
+                      child: banner,
+                    ),
+                  Expanded(child: _buildMap(context, homes)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
 
     final Widget content;
     if (controller.isLoading.value && homes.isEmpty) {
@@ -129,39 +161,36 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
       );
     } else if (homes.isEmpty) {
       content = _buildEmpty();
-    } else if (controller.viewMode.value == NeighborhoodViewMode.map) {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildMapCard(context, homes),
-          SizedBox(height: 10.h),
-          _buildLegend(),
-        ],
-      );
     } else {
-      return SliverMainAxisGroup(
-        slivers: [
-          if (banner != null)
-            SliverPadding(
-              padding: EdgeInsets.only(bottom: 12.h),
-              sliver: SliverToBoxAdapter(child: banner),
+      return SliverPadding(
+        padding: _pad,
+        sliver: SliverMainAxisGroup(
+          slivers: [
+            if (banner != null)
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: 12.h),
+                sliver: SliverToBoxAdapter(child: banner),
+              ),
+            SliverList.separated(
+              key: const ValueKey('neighborhood-list'),
+              itemCount: homes.length,
+              separatorBuilder: (context, _) => SizedBox(height: 10.h),
+              itemBuilder: (context, i) => _row(context, homes[i], i + 1),
             ),
-          SliverList.separated(
-            key: const ValueKey('neighborhood-list'),
-            itemCount: homes.length,
-            separatorBuilder: (context, _) => SizedBox(height: 10.h),
-            itemBuilder: (context, i) => _row(context, homes[i], i + 1),
-          ),
-        ],
+          ],
+        ),
       );
     }
-    return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (banner != null) ...[banner, SizedBox(height: 12.h)],
-          content,
-        ],
+    return SliverPadding(
+      padding: _pad,
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (banner != null) ...[banner, SizedBox(height: 12.h)],
+            content,
+          ],
+        ),
       ),
     );
   }
@@ -244,7 +273,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
     Widget item(Color color, String text) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.location_on, size: 16.r, color: color),
+        HouseMarker(size: 15.r, color: color),
         SizedBox(width: 3.w),
         Text(
           text,
@@ -256,28 +285,34 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         ),
       ],
     );
-    return Wrap(
+    return Container(
       key: const ValueKey('map-legend'),
-      alignment: WrapAlignment.center,
-      spacing: 16.w,
-      runSpacing: 4.h,
-      children: [
-        item(AppColors.primaryNavy, '${controller.toPrayCount} to pray'),
-        item(prayedGreen, '${controller.prayedCount} prayed this round'),
-      ],
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
+        ],
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 16.w,
+        runSpacing: 4.h,
+        children: [
+          item(AppColors.primaryNavy, '${controller.toPrayCount} to pray'),
+          item(prayedGreen, '${controller.prayedCount} prayed this round'),
+        ],
+      ),
     );
   }
 
-  Widget _buildMapCard(BuildContext context, List<HouseholdModel> homes) {
+  /// Full-width map (no card), with the chip, zoom buttons and legend on top.
+  Widget _buildMap(BuildContext context, List<HouseholdModel> homes) {
     final center = _center;
     return Container(
-      height: 380.h,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(18.r),
-        border: Border.all(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
+      key: const ValueKey('neighborhood-map'),
+      color: const Color(0xFFF1F5F9),
       child: Stack(
         children: [
           if (center != null)
@@ -351,6 +386,12 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
                 ],
               ),
             ),
+          Positioned(
+            left: 12.w,
+            right: 12.w,
+            bottom: 36.h,
+            child: Center(child: _buildLegend()),
+          ),
         ],
       ),
     );

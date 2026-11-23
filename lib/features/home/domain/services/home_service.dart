@@ -12,6 +12,9 @@ class HomeService {
   /// "My neighborhood" around the saved home (the Prayer List's homes).
   RxList<HouseholdModel> get neighborhood => _store.homeHouseholds;
 
+  /// Where the neighborhood came from, or why it is empty (Melissa only).
+  RxnString get homeSourceNote => _store.homeSourceNote;
+
   RxBool get isLoading => _store.isLoading;
 
   /// No household data exists around the saved home.

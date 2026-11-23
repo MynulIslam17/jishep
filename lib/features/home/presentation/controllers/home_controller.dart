@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/utils/day_change.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller.dart';
@@ -26,6 +27,9 @@ class HomeController extends GetxController {
 
   /// No household data exists around the saved home (cells).
   final homeUnavailable = false.obs;
+
+  /// Where the neighborhood came from, or why it is empty (Melissa only).
+  final homeNote = RxnString();
   final isLoading = false.obs;
   final notificationCount = 0.obs;
 
@@ -39,12 +43,17 @@ class HomeController extends GetxController {
   final List<Worker> _workers = [];
   StreamSubscription<int>? _unreadSubscription;
 
+  /// Rebuilds today's list when a new prayer day begins (midnight, or the
+  /// app reopened on a later day), as the Prayer List does.
+  DayChangeWatcher? _dayWatcher;
+
   @override
   void onInit() {
     super.onInit();
     _rebuild();
     isLoading.value = _homeService.isLoading.value;
     homeUnavailable.value = _homeService.homeUnavailable.value;
+    homeNote.value = _homeService.homeSourceNote.value;
 
     _workers.addAll([
       ever(_homeService.neighborhood, (_) => _rebuild()),
@@ -54,12 +63,17 @@ class HomeController extends GetxController {
         _homeService.homeUnavailable,
         (bool unavailable) => homeUnavailable.value = unavailable,
       ),
+      ever(
+        _homeService.homeSourceNote,
+        (String? note) => homeNote.value = note,
+      ),
     ]);
 
     _unreadSubscription = _homeService.watchUnreadNotificationCount().listen(
       (count) => notificationCount.value = count,
       onError: (_) {},
     );
+    _dayWatcher = DayChangeWatcher(_rebuild);
   }
 
   void _rebuild() {
@@ -105,6 +119,7 @@ class HomeController extends GetxController {
       worker.dispose();
     }
     _unreadSubscription?.cancel();
+    _dayWatcher?.dispose();
     super.onClose();
   }
 }

@@ -3,14 +3,18 @@ import 'dart:math' as math;
 
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/constants/firestore_paths.dart';
 import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:gps_cielo/core/data/geo_record.dart';
+import 'package:gps_cielo/core/data/owner_discovery.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/core/models/prayer_round.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
+import 'package:gps_cielo/core/utils/geohash.dart';
 import 'package:gps_cielo/core/utils/search_range.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/features/notifications/data/models/notification_model.dart';
@@ -97,6 +101,12 @@ class HouseholdStore extends GetxService {
   final prayedCount = 0.obs;
   final visitedCount = 0.obs;
 
+  /// Lifetime prayers over every round (`prayer_log`, one event per home
+  /// per round). Never below [prayedCount]: prayers saved before the
+  /// history existed have no event but each was at least one prayer.
+  final prayersOffered = 0.obs;
+  int _prayerEvents = 0;
+
   /// Server-side totals of the user's statuses (`all`, `isPrayed`,
   /// `isVisited`, `isInvited`, `hasFollowUp`), kept current locally.
   final statusCounts = <String, int>{}.obs;
@@ -129,6 +139,12 @@ class HouseholdStore extends GetxService {
   /// Statuses known on this device, by household id.
   final Map<String, Map<String, dynamic>> _statuses = {};
 
+  /// Recorded owner names (Melissa address checks), by household id.
+  final Map<String, String> _owners = {};
+
+  /// Second recorded owners, by household id.
+  final Map<String, String> _secondOwners = {};
+
   /// Household ids whose status was already read (or found missing).
   final Set<String> _statusFetched = {};
   List<GeoRecord> _records = const [];
@@ -137,8 +153,16 @@ class HouseholdStore extends GetxService {
   /// only): screens show "This area isn't available yet".
   final areaUnavailable = false.obs;
 
+  /// Where the area's homes came from, when that matters to the user
+  /// (Melissa-first neighborhood): null for the plain Overture list.
+  final areaSourceNote = RxnString();
+
   /// The same, around the saved home (Prayer List).
   final homeUnavailable = false.obs;
+
+  /// Where "my neighborhood" came from, or why it is empty (Melissa-only
+  /// mode: "12 homes found so far", "…not available for this area yet").
+  final homeSourceNote = RxnString();
   StreamSubscription<Map<String, Map<String, dynamic>>>? _statusSubscription;
 
   /// The search on screen and the one around the saved home (the same
@@ -176,6 +200,23 @@ class HouseholdStore extends GetxService {
   List<GeoRecord> _homeRecords = const [];
   Set<String> _homeIds = const {};
   ({double latitude, double longitude, double rangeKm})? _homeKey;
+
+  /// The homes of the current prayer round, fixed when the round is first
+  /// shown (`prayer_rounds/{roundId}.members`). Null until known, or when
+  /// the round's document cannot be read (then the nearest homes are used,
+  /// as before rounds were recorded).
+  PrayerRound? _round;
+
+  /// The round [_round] belongs to, and whether its document was read.
+  String? _roundId;
+  bool _roundKnown = false;
+
+  /// Rounds recorded on this device, by id (a new round's homes are known
+  /// before its document is read back).
+  final Map<String, PrayerRound> _roundCache = {};
+
+  /// A saved home this far from the round's center is a new neighborhood.
+  static const double roundMoveMeters = 100;
 
   /// The "outside your neighborhood" note was shown this session.
   bool _toldOutsideNeighborhood = false;
@@ -216,6 +257,7 @@ class HouseholdStore extends GetxService {
           )
           .listen(_onStatusChanges, onError: (Object _) {});
       unawaited(refreshCounts());
+      unawaited(_loadOwnerNames(user.id));
     }
 
     _savedAddress = user.address;
@@ -231,7 +273,133 @@ class HouseholdStore extends GetxService {
     cycleStartedAt.value = user.prayerCycleStartedAt;
     _publishRadius();
     if (countChanged || cycleChanged) _rebuild();
+    unawaited(_loadRound());
+    if (countChanged) unawaited(_maybeFixRound());
     await _applyCenter(force: userChanged);
+    // The saved home may have moved: a new neighborhood for the round.
+    unawaited(_maybeFixRound());
+  }
+
+  /// Reads the homes of the current round (once per round).
+  Future<void> _loadRound() async {
+    final uid = _uid;
+    if (uid == null) return;
+    final id = FirestorePaths.roundId(cycleStartedAt.value);
+    if (id == _roundId) return;
+    _roundId = id;
+    _round = _roundCache[id];
+    _roundKnown = _round != null;
+    if (_roundKnown) {
+      _rebuild();
+      return;
+    }
+    try {
+      final round = await _repository.fetchRound(uid, id);
+      if (uid != _uid || id != _roundId) return;
+      _roundKnown = true;
+      if (round != null) {
+        _round = _roundCache[id] = round;
+        await _loadStatusesFor(round.ids);
+        if (uid != _uid || id != _roundId) return;
+        _rebuild();
+      }
+      await _maybeFixRound();
+    } catch (_) {
+      // Unreadable (rules without prayer_rounds, offline): the nearest
+      // homes are shown as before; nothing is fixed or written.
+    }
+  }
+
+  /// Fixes the current round's homes when they are not recorded yet, or
+  /// when the user changed what the round is made of (moved the saved
+  /// home, or changed the Settings count). Changed cache answers and
+  /// searches elsewhere never change a fixed round.
+  Future<void> _maybeFixRound() async {
+    final uid = _uid;
+    final id = _roundId;
+    final key = _homeKey;
+    final search = _homeSearch;
+    final lat = _savedLatitude;
+    final lon = _savedLongitude;
+    if (uid == null || id == null || !_roundKnown) return;
+    if (key == null || search == null || lat == null || lon == null) return;
+    if (key.latitude != lat || key.longitude != lon) return;
+    if (search is OwnerArea && !search.isSettled) return;
+    if (search.isUnavailable || _homeRecords.isEmpty || _savedRadius <= 0) {
+      return;
+    }
+
+    final current = _round;
+    List<GeoRecord> members;
+    if (current == null) {
+      members = _homeRecords.take(_savedRadius).toList();
+    } else if (current.centerLatitude != null &&
+        current.centerLongitude != null &&
+        haversineMeters(
+              lat,
+              lon,
+              current.centerLatitude!,
+              current.centerLongitude!,
+            ) >
+            roundMoveMeters) {
+      // A new saved home: its own nearest homes.
+      members = _homeRecords.take(_savedRadius).toList();
+    } else if (current.target != null && current.target != _savedRadius) {
+      // A new Settings count: keep the round's homes, then add the
+      // nearest others up to the new count.
+      members = current.members.take(_savedRadius).toList();
+      final have = {for (final m in members) m.id};
+      for (final r in _homeRecords) {
+        if (members.length >= _savedRadius) break;
+        if (have.add(r.id)) members.add(r);
+      }
+    } else {
+      return;
+    }
+
+    final next = PrayerRound(
+      members: members,
+      centerLatitude: lat,
+      centerLongitude: lon,
+      target: _savedRadius,
+    );
+    _round = _roundCache[id] = next;
+    _rebuild();
+    try {
+      await _repository.saveRoundMembers(uid, id, next);
+    } catch (_) {
+      // Rules without prayer_rounds: fixed on this device for the session.
+    }
+  }
+
+  /// The homes for the next round: exactly this round's homes (the same
+  /// neighborhood every round; nothing is looked up).
+  PrayerRound nextRound() {
+    final current = _round;
+    return PrayerRound(
+      members: current?.members ?? _homeList(),
+      centerLatitude: current?.centerLatitude ?? _savedLatitude,
+      centerLongitude: current?.centerLongitude ?? _savedLongitude,
+      target: current?.target ?? _savedRadius,
+    );
+  }
+
+  /// Makes [round] known for [roundId] before its document is read back.
+  void rememberRound(String roundId, PrayerRound round) {
+    _roundCache[roundId] = round;
+  }
+
+  /// The homes of "my neighborhood": the round's fixed homes (with fresher
+  /// details when loaded), otherwise the nearest homes around the saved
+  /// home.
+  List<GeoRecord> _homeList() {
+    final round = _round;
+    if (round == null) return _homeRecords.take(_savedRadius).toList();
+    final fresh = {
+      for (final r in _records) r.id: r,
+      for (final r in _homeRecords) r.id: r,
+    };
+    return [for (final m in round.members) fresh[m.id] ?? m];
   }
 
   /// Searches around [location] without changing the saved home address.
@@ -354,6 +522,7 @@ class HouseholdStore extends GetxService {
       await _loadStatusesFor(_homeRecords.map((r) => r.id));
       if (generation != _homeGeneration) return;
       _rebuild();
+      await _maybeFixRound();
     } catch (_) {
       // The Prayer List keeps its previous neighborhood; Home shows errors.
     }
@@ -365,8 +534,11 @@ class HouseholdStore extends GetxService {
   ) {
     _homeSearch = search;
     _homeRecords = search.records;
+    _rememberOwners(_homeRecords);
+    if (search is OwnerOverlayArea) _rememberOwners(search.owners.records);
     _homeIds = {for (final r in _homeRecords) r.id};
     homeUnavailable.value = search.isUnavailable;
+    homeSourceNote.value = search is OwnerArea ? search.sourceNote : null;
     _homeKey = key;
   }
 
@@ -375,7 +547,7 @@ class HouseholdStore extends GetxService {
   /// otherwise the `households` collection within [radiusKm].
   AreaSearch _search(double latitude, double longitude, double radiusKm) {
     if (FeatureFlags.useCellHouseholds) {
-      return _repository.cellArea(latitude: latitude, longitude: longitude);
+      return _repository.nearestArea(latitude: latitude, longitude: longitude);
     }
     return GeoSearchArea(
       _repository.geoSearch(
@@ -412,6 +584,7 @@ class HouseholdStore extends GetxService {
     _homeIds = const {};
     areaUnavailable.value = false;
     homeUnavailable.value = false;
+    homeSourceNote.value = null;
     _homeKey = null;
     _viewSearch = null;
     _homeSearch = null;
@@ -421,6 +594,8 @@ class HouseholdStore extends GetxService {
     rangeMeters.value = null;
     cycleStartedAt.value = null;
     _statuses.clear();
+    _owners.clear();
+    _secondOwners.clear();
     _statusFetched.clear();
     statusCounts.clear();
     _records = const [];
@@ -430,6 +605,12 @@ class HouseholdStore extends GetxService {
     trackedHouseholds.clear();
     prayedCount.value = 0;
     visitedCount.value = 0;
+    prayersOffered.value = 0;
+    _prayerEvents = 0;
+    _round = null;
+    _roundId = null;
+    _roundKnown = false;
+    _roundCache.clear();
   }
 
   Future<void> refreshHouseholds() async {
@@ -460,6 +641,7 @@ class HouseholdStore extends GetxService {
       await _loadStatusesFor(_records.map((r) => r.id));
       if (generation != _loadGeneration) return;
       _rebuild();
+      if (_viewIsHome) await _maybeFixRound();
     } catch (error) {
       if (generation != _loadGeneration) return;
       SnackbarService.showError(
@@ -471,8 +653,22 @@ class HouseholdStore extends GetxService {
     }
   }
 
+  /// Owners that came with the records (Melissa-first neighborhood), so
+  /// Prayer List and Follow-up keep the name for homes no longer on screen.
+  void _rememberOwners(List<GeoRecord> records) {
+    for (final r in records) {
+      final name = r.ownerName;
+      if (name != null) _owners.putIfAbsent(r.id, () => name);
+      final second = r.ownerSecondName;
+      if (second != null) _secondOwners.putIfAbsent(r.id, () => second);
+    }
+  }
+
   void _publishArea(AreaSearch search) {
     _records = search.records;
+    _rememberOwners(_records);
+    if (search is OwnerOverlayArea) _rememberOwners(search.owners.records);
+    areaSourceNote.value = search is OwnerArea ? search.sourceNote : null;
     areaComplete.value = search.isComplete;
     areaUnavailable.value = search.isUnavailable;
     // Cells have no fixed range: show how far the households found reach.
@@ -515,6 +711,8 @@ class HouseholdStore extends GetxService {
   /// neighborhood"): true or false when known, null when the home search
   /// has not read far enough to tell.
   bool? isNearHome(String id) {
+    final round = _round;
+    if (round != null) return round.contains(id);
     if (_homeIds.contains(id)) return true;
     final search = _homeSearch;
     if (search == null) return null;
@@ -541,6 +739,30 @@ class HouseholdStore extends GetxService {
       }
     });
     if (changed) _rebuild();
+  }
+
+  Future<void> _loadOwnerNames(String uid) async {
+    try {
+      final owners = await _repository.fetchOwnerNames(uid);
+      if (uid != _uid || owners.isEmpty) return;
+      owners.forEach((id, name) => _owners.putIfAbsent(id, () => name));
+      _rebuild();
+    } catch (_) {
+      // Names appear again when a home is checked.
+    }
+  }
+
+  /// The recorded owner of [householdId] from an address check just made
+  /// (null removes it); updates every list showing the home.
+  void setOwnerName(String householdId, String? name) {
+    final clean = HouseholdModel.cleanName(name);
+    if (_owners[householdId] == clean) return;
+    if (clean == null) {
+      _owners.remove(householdId);
+    } else {
+      _owners[householdId] = clean;
+    }
+    _rebuild();
   }
 
   /// Reads statuses of households not read yet, 30 per query.
@@ -571,11 +793,26 @@ class HouseholdStore extends GetxService {
     } catch (_) {
       // Keep the last known totals.
     }
+    try {
+      final events = await _repository.countPrayerEvents(uid);
+      if (uid != _uid) return;
+      _prayerEvents = events;
+      _publishCounts();
+    } catch (_) {
+      // Rules without prayer_log: homes prayed for stand in.
+    }
   }
 
   void _publishCounts() {
     prayedCount.value = statusCounts['isPrayed'] ?? 0;
     visitedCount.value = statusCounts['isVisited'] ?? 0;
+    prayersOffered.value = math.max(_prayerEvents, prayedCount.value);
+  }
+
+  /// Adds [delta] prayer events (a prayer saved or undone on this device).
+  void _countPrayerEvent(int delta) {
+    _prayerEvents = math.max(0, _prayerEvents + delta);
+    _publishCounts();
   }
 
   /// Adjusts the totals for a local change from [before] to [after].
@@ -687,7 +924,11 @@ class HouseholdStore extends GetxService {
     }
     next['updatedAt'] = DateTime.now();
     _statuses[updated.id] = next;
+    final eventDelta = becamePrayed
+        ? 1
+        : (!updated.isPrayed && wasPrayedInCycle ? -1 : 0);
     _countChange(previous, next);
+    if (eventDelta != 0) _countPrayerEvent(eventDelta);
     _rebuild();
 
     try {
@@ -696,6 +937,7 @@ class HouseholdStore extends GetxService {
         household: updated,
         wasPrayed: wasPrayedInCycle,
         nameChanged: nameChanged,
+        roundId: FirestorePaths.roundId(cycleStartedAt.value),
       );
       // A notification failing (even synchronously) must never undo a
       // prayer that is already being written.
@@ -706,6 +948,7 @@ class HouseholdStore extends GetxService {
       await write;
     } catch (error) {
       _countChange(next, previous);
+      if (eventDelta != 0) _countPrayerEvent(-eventDelta);
       if (previous == null) {
         _statuses.remove(updated.id);
       } else {
@@ -757,6 +1000,9 @@ class HouseholdStore extends GetxService {
           status: _statuses[records[i].id],
           number: i + 1,
           cycleStart: cycleStart,
+        ).copyWith(
+          ownerName: _owners[records[i].id],
+          ownerSecondName: _secondOwners[records[i].id],
         ),
     ];
   }
@@ -768,8 +1014,8 @@ class HouseholdStore extends GetxService {
     households.assignAll(area.take(_radiusHomes));
     areaHouseholds.assignAll(area);
 
-    final home = _fromRecords(_homeRecords);
-    homeHouseholds.assignAll(home.take(_savedRadius));
+    final home = _fromRecords(_homeList());
+    homeHouseholds.assignAll(home);
 
     // Tracked: prefer the full household (with location) when it is loaded.
     final loaded = {
@@ -785,6 +1031,9 @@ class HouseholdStore extends GetxService {
             status: entry.value,
             number: 0,
             cycleStart: cycleStart,
+          ).copyWith(
+            ownerName: _owners[entry.key],
+            ownerSecondName: _secondOwners[entry.key],
           );
       if (model.hasActivity) tracked.add(model);
     }

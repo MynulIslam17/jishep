@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
-import 'package:gps_cielo/shared/widgets/dialogs/resident_name_dialog.dart';
+import 'package:gps_cielo/shared/widgets/household/address_check_tile.dart';
 import 'package:gps_cielo/shared/widgets/household/household_row.dart';
 
 class HouseholdDetailBottomSheet extends StatefulWidget {
@@ -173,23 +174,6 @@ class _HouseholdDetailBottomSheetState
     }
   }
 
-  Future<void> _editName() async {
-    final result = await ResidentNameDialog.show(
-      context,
-      initialName: _currentHousehold.residentName,
-      addressLine: [
-        _currentHousehold.address,
-        if (_currentHousehold.cityStateZip.isNotEmpty)
-          _currentHousehold.cityStateZip,
-      ].join(' · '),
-    );
-    if (result == null || !mounted) return; // cancelled
-    if (result.name == _currentHousehold.residentName) return;
-    final updated = _currentHousehold.withName(result.name);
-    setState(() => _currentHousehold = updated);
-    widget.onUpdated?.call(updated);
-  }
-
   void _saveNotes() {
     _notesFocusNode.unfocus();
     final text = _notesController.text.trim();
@@ -216,7 +200,6 @@ class _HouseholdDetailBottomSheetState
     final item = _currentHousehold;
     final distance = _distanceText(item);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final canEdit = widget.onUpdated != null;
     final notes = item.notes?.trim() ?? '';
 
     return Padding(
@@ -311,6 +294,26 @@ class _HouseholdDetailBottomSheetState
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                        // The user's own name is the title: the recorded
+                        // owner stays visible (never called the resident).
+                        if (!item.showsOwnerName && item.ownerName != null)
+                          Text(
+                            'Owner: ${item.ownerName}',
+                            key: const ValueKey('household-owner-line'),
+                            style: AppTypography.body(
+                              color: AppColors.textSecondary,
+                              fontSize: 12.sp,
+                            ),
+                          ),
+                        if (item.ownerSecondName != null)
+                          Text(
+                            item.ownerSecondName!,
+                            key: const ValueKey('household-second-owner'),
+                            style: AppTypography.body(
+                              color: AppColors.textSecondary,
+                              fontSize: 12.sp,
+                            ),
+                          ),
                         SizedBox(height: 2.h),
                         Text(
                           item.address,
@@ -372,34 +375,6 @@ class _HouseholdDetailBottomSheetState
                 ],
               ),
 
-              // Add name (dashed) / Edit name
-              if (canEdit) ...[
-                SizedBox(height: 14.h),
-                if (item.residentName == null)
-                  _addNameButton()
-                else
-                  TextButton.icon(
-                    key: const ValueKey('household-edit-name'),
-                    onPressed: _editName,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primaryNavy,
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size(0, 32.h),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    icon: Icon(Icons.edit_outlined, size: 16.r),
-                    label: Text(
-                      'Edit name',
-                      style: AppTypography.body(
-                        color: AppColors.primaryNavy,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-
               // Saved notes (read-only) while the editor is closed
               if (notes.isNotEmpty && !_isFollowUpOpen) ...[
                 SizedBox(height: 10.h),
@@ -440,6 +415,21 @@ class _HouseholdDetailBottomSheetState
               if (_isFollowUpOpen) ...[
                 SizedBox(height: 14.h),
                 _notesEditor(item),
+              ],
+
+              if (FeatureFlags.addressChecks) ...[
+                SizedBox(height: 14.h),
+                AddressCheckTile(
+                  household: item,
+                  onOwner: (name) {
+                    if (!mounted || name == null) return;
+                    setState(() {
+                      _currentHousehold = _currentHousehold.copyWith(
+                        ownerName: name,
+                      );
+                    });
+                  },
+                ),
               ],
 
               SizedBox(height: 16.h),
@@ -523,61 +513,6 @@ class _HouseholdDetailBottomSheetState
                 ],
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Figma 4.1: dashed "+ Add name — who lives here?".
-  Widget _addNameButton() {
-    return Semantics(
-      button: true,
-      child: InkWell(
-        key: const ValueKey('household-edit-name'),
-        onTap: _editName,
-        borderRadius: BorderRadius.circular(12.r),
-        child: CustomPaint(
-          painter: _DashedBorderPainter(
-            color: AppColors.primaryNavy.withValues(alpha: 0.45),
-            radius: 12.r,
-          ),
-          child: Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 12.w),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5FB),
-              borderRadius: BorderRadius.circular(12.r),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.add_rounded,
-                  size: 18.r,
-                  color: AppColors.primaryNavy,
-                ),
-                SizedBox(width: 6.w),
-                Text(
-                  'Add name',
-                  style: AppTypography.body(
-                    color: AppColors.primaryNavy,
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Flexible(
-                  child: Text(
-                    ' — who lives here?',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.body(
-                      color: AppColors.textSecondary,
-                      fontSize: 13.sp,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -771,33 +706,4 @@ class _HouseholdDetailBottomSheetState
       ),
     );
   }
-}
-
-/// A rounded rectangle drawn with dashes.
-class _DashedBorderPainter extends CustomPainter {
-  _DashedBorderPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
-      );
-    for (final metric in path.computeMetrics()) {
-      for (var d = 0.0; d < metric.length; d += 9) {
-        canvas.drawPath(metric.extractPath(d, d + 5), paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedBorderPainter old) =>
-      old.color != color || old.radius != radius;
 }

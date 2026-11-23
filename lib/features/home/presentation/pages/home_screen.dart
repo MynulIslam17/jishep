@@ -173,7 +173,10 @@ class HomeScreen extends GetView<HomeController> {
         ),
       );
     } else if (homes.isEmpty && controller.homeUnavailable.value) {
-      content = _AreaUnavailableCard(key: const ValueKey('home-unavailable'));
+      content = _AreaUnavailableCard(
+        key: const ValueKey('home-unavailable'),
+        reason: controller.homeNote.value,
+      );
     } else if (homes.isEmpty) {
       content = AppNoticeCard(
         icon: Icons.travel_explore_rounded,
@@ -347,6 +350,17 @@ class HomeScreen extends GetView<HomeController> {
                           fontSize: 11.5.sp,
                         ),
                       ),
+                      if (controller.homeNote.value case final note?)
+                        Text(
+                          note,
+                          key: const ValueKey('home-source-note'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.body(
+                            color: AppColors.textSecondary,
+                            fontSize: 10.5.sp,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -432,7 +446,10 @@ class _MapChip extends StatelessWidget {
 
 /// Figma 4.5: the saved home is outside the loaded states.
 class _AreaUnavailableCard extends StatelessWidget {
-  const _AreaUnavailableCard({super.key});
+  const _AreaUnavailableCard({super.key, this.reason});
+
+  /// Why the area is empty (Melissa only), instead of the general text.
+  final String? reason;
 
   @override
   Widget build(BuildContext context) {
@@ -470,8 +487,9 @@ class _AreaUnavailableCard extends StatelessWidget {
           ),
           SizedBox(height: 6.h),
           Text(
-            "We don't have household data around your home yet. "
-            '${AppStrings.areaComingSoon}',
+            reason ??
+                "We don't have household data around your home yet. "
+                    '${AppStrings.areaComingSoon}',
             textAlign: TextAlign.center,
             style: AppTypography.body(
               color: AppColors.textSecondary,
@@ -479,22 +497,25 @@ class _AreaUnavailableCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
-          SizedBox(height: 10.h),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            decoration: BoxDecoration(
-              color: prayedGreenLight,
-              borderRadius: BorderRadius.circular(20.r),
-            ),
-            child: Text(
-              AppStrings.areasAvailable,
-              style: AppTypography.label(
-                color: prayedGreen,
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
+          // The Overture coverage pill does not apply to owner records.
+          if (reason == null) ...[
+            SizedBox(height: 10.h),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+              decoration: BoxDecoration(
+                color: prayedGreenLight,
+                borderRadius: BorderRadius.circular(20.r),
+              ),
+              child: Text(
+                AppStrings.areasAvailable,
+                style: AppTypography.label(
+                  color: prayedGreen,
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
+          ],
           SizedBox(height: 14.h),
           ChangeHomeAddress.button(),
         ],

@@ -28,6 +28,8 @@ class _Home implements HomeService {
   final isLoading = false.obs;
   @override
   final homeUnavailable = false.obs;
+  @override
+  final homeSourceNote = RxnString();
   final prayed = <String>[];
 
   @override
@@ -84,6 +86,15 @@ void main() {
 
   setUp(() => service = _Home());
 
+  // Home rebuilds at midnight (a timer): close the controller before the
+  // test ends so no timer is left pending.
+  void homeTest(String name, Future<void> Function(WidgetTester) body) {
+    testWidgets(name, (tester) async {
+      await body(tester);
+      await Get.delete<HomeController>(force: true);
+    });
+  }
+
   test('greeting follows the time of day', () {
     expect(HomeController.greeting(DateTime(2026, 1, 1, 8)), 'Good morning');
     expect(HomeController.greeting(DateTime(2026, 1, 1, 13)), 'Good afternoon');
@@ -92,7 +103,7 @@ void main() {
     expect(HomeController.firstNameOf(''), '');
   });
 
-  testWidgets('greets, shows today, the map card and today\'s homes', (
+  homeTest('greets, shows today, the map card and today\'s homes', (
     tester,
   ) async {
     final now = DateTime.now();
@@ -128,14 +139,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('no search card or size slider on Home', (tester) async {
+  homeTest('no search card or size slider on Home', (tester) async {
     service.neighborhood.assignAll([for (var i = 1; i <= 10; i++) home(i)]);
     await pump(tester);
     expect(find.byType(TextField), findsNothing);
     expect(find.byType(Slider), findsNothing);
   });
 
-  testWidgets('area not available: message, states and change address', (
+  homeTest('area not available: message, states and change address', (
     tester,
   ) async {
     service.homeUnavailable.value = true;
@@ -146,12 +157,26 @@ void main() {
     expect(find.text('Change home address'), findsOneWidget);
   });
 
-  testWidgets('without a home address it asks for one', (tester) async {
+  homeTest('Melissa only: an area with no stored owners shows why', (
+    tester,
+  ) async {
+    service.homeUnavailable.value = true;
+    service.homeSourceNote.value =
+        'Property owner records are not available for this area yet.';
+    await pump(tester);
+    expect(find.byKey(const ValueKey('home-unavailable')), findsOneWidget);
+    expect(
+      find.text('Property owner records are not available for this area yet.'),
+      findsOneWidget,
+    );
+  });
+
+  homeTest('without a home address it asks for one', (tester) async {
     await pump(tester, profile: user(located: false));
     expect(find.text('Set your home address'), findsOneWidget);
   });
 
-  testWidgets('a finished round says so instead of rows', (tester) async {
+  homeTest('a finished round says so instead of rows', (tester) async {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     service.neighborhood.assignAll([
       for (var i = 1; i <= 5; i++) home(i, prayedAt: yesterday),

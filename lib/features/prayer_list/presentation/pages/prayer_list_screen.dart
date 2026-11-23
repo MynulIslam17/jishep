@@ -81,9 +81,10 @@ class PrayerListScreen extends GetView<PrayerListController> {
           icon: Icons.travel_explore_rounded,
           title: AppStrings.areaUnavailable,
           message:
+              controller.homeNote.value ??
               'Household data for the area around '
-              '${controller.homeLabel.value} has not been added yet. '
-              '${AppStrings.areaComingSoon}',
+                  '${controller.homeLabel.value} has not been added yet. '
+                  '${AppStrings.areaComingSoon}',
           actions: [ChangeHomeAddress.button()],
         ),
       );

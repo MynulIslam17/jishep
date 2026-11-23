@@ -8,6 +8,21 @@ class HouseholdModel {
   /// The name the user gave this household (private to them, stored in
   /// their `household_status/{id}`), or null when none was set.
   final String? residentName;
+
+  /// The recorded property owner from Melissa Property (public record),
+  /// known after an address check of this home. Not necessarily who lives
+  /// there. Never stored in the user's status document.
+  final String? ownerName;
+
+  /// A second recorded owner (public record), shown in the details only.
+  final String? ownerSecondName;
+
+  /// True when the recorded owner is a company or trust (public record).
+  final bool ownerIsEntity;
+
+  /// Melissa property use, e.g. "Single Family Residential" (null when not
+  /// known).
+  final String? propertyClass;
   final String address;
   final String cityStateZip;
   final bool isPrayed;
@@ -26,6 +41,10 @@ class HouseholdModel {
     required this.id,
     required this.number,
     String? residentName,
+    String? ownerName,
+    String? ownerSecondName,
+    this.ownerIsEntity = false,
+    this.propertyClass,
     required this.address,
     this.cityStateZip = '',
     this.isPrayed = false,
@@ -39,13 +58,16 @@ class HouseholdModel {
     this.longitude = 0,
     this.prayedAt,
     this.updatedAt,
-  }) : residentName = cleanName(residentName);
+  }) : residentName = cleanName(residentName),
+       ownerName = cleanName(ownerName),
+       ownerSecondName = cleanName(ownerSecondName);
 
   /// Longest resident name stored (Firestore rules allow 120).
   static const int maxNameLength = 120;
 
-  /// Shown when the user has not named the household.
-  static const String unnamed = 'Neighbor';
+  /// The title when a household has no resident name and no recorded
+  /// owner (the street address is always shown under the title).
+  static const String unnamed = 'Unknown Resident';
 
   static final RegExp _placeholder = RegExp(
     r'^(resident|neighbor|demo household \d{3})$',
@@ -63,8 +85,19 @@ class HouseholdModel {
         : name;
   }
 
-  /// The title shown for the household: its name, or "Neighbor".
-  String get displayName => residentName ?? unnamed;
+  /// The title shown for the household, everywhere (never empty):
+  ///   1. the resident name the user gave it (private to them),
+  ///   2. the recorded property owner (Melissa, from the shared cache),
+  ///   3. "Unknown Resident".
+  /// The street address is always shown under it.
+  String get displayName => residentName ?? ownerName ?? unnamed;
+
+  /// True when the title is the recorded owner (label it as such).
+  bool get showsOwnerName => residentName == null && ownerName != null;
+
+  /// How a recorded owner is labelled everywhere. Never "resident": the
+  /// owner may not live there.
+  static const String ownerLabel = 'Property Owner (Public Record)';
 
   /// A copy with [name] as the resident name (null or empty removes it).
   HouseholdModel withName(String? name) {
@@ -72,6 +105,10 @@ class HouseholdModel {
       id: id,
       number: number,
       residentName: name,
+      ownerName: ownerName,
+      ownerSecondName: ownerSecondName,
+      ownerIsEntity: ownerIsEntity,
+      propertyClass: propertyClass,
       address: address,
       cityStateZip: cityStateZip,
       isPrayed: isPrayed,
@@ -193,6 +230,10 @@ class HouseholdModel {
       id: record.id,
       number: number,
       residentName: status?['residentName']?.toString(),
+      ownerName: record.ownerName,
+      ownerSecondName: record.ownerSecondName,
+      ownerIsEntity: record.ownerIsEntity,
+      propertyClass: record.propertyClass,
       address: record.address,
       cityStateZip: record.cityStateZip,
       latitude: record.latitude,
@@ -278,6 +319,10 @@ class HouseholdModel {
     String? id,
     int? number,
     String? residentName,
+    String? ownerName,
+    String? ownerSecondName,
+    bool? ownerIsEntity,
+    String? propertyClass,
     String? address,
     String? cityStateZip,
     bool? isPrayed,
@@ -296,6 +341,10 @@ class HouseholdModel {
       id: id ?? this.id,
       number: number ?? this.number,
       residentName: residentName ?? this.residentName,
+      ownerName: ownerName ?? this.ownerName,
+      ownerSecondName: ownerSecondName ?? this.ownerSecondName,
+      ownerIsEntity: ownerIsEntity ?? this.ownerIsEntity,
+      propertyClass: propertyClass ?? this.propertyClass,
       address: address ?? this.address,
       cityStateZip: cityStateZip ?? this.cityStateZip,
       isPrayed: isPrayed ?? this.isPrayed,

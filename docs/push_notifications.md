@@ -80,15 +80,15 @@ Product decisions still open: which reminders to send, at what time, and whether
 - [x] Foreground banners: `setForegroundNotificationPresentationOptions`
 - [x] Waits for the APNs token before asking FCM for a token
 - [ ] Apple Developer → Identifiers → `org.gaccchurch.gpsceilo` → **Push Notifications** enabled, and the App Store profile regenerated afterwards (Codemagic checks this)
-- [ ] Firebase Console → gps-cielo → Project settings → **Cloud Messaging** → Apple app: upload an **APNs Authentication Key** (.p8, with Key ID and Team ID). Without it no iOS device receives anything.
+- [ ] Firebase Console → gps-para-el-cielo → Project settings → **Cloud Messaging** → Apple app: upload an **APNs Authentication Key** (.p8, with Key ID and Team ID). Without it no iOS device receives anything.
 - Push does not work on the iOS Simulator for FCM; use a real iPhone.
 
 ### Android
-- [x] `google-services.json` (gps-cielo, `org.gaccchurch.gpsceilo`) and the Google Services Gradle plugin
+- [x] `google-services.json` (gps-para-el-cielo, `org.gaccchurch.gpsceilo`) and the Google Services Gradle plugin
 - [x] `POST_NOTIFICATIONS` permission (Android 13+), asked by `requestPermission`
 - [x] Channel `gps_cielo_general` (high importance) created in `MainActivity`, set as the FCM default
 - [x] Monochrome status-bar icon `@drawable/ic_stat_notification`, tinted `@color/notification_color`
 - [x] Foreground: in-app banner (Android shows nothing on its own while the app is open)
 
 ### Both
-- [ ] Deploy the Firestore rules (`firebase deploy --only firestore:rules --project gps-cielo`). The rules live before 2026-11-11 have no `users/{uid}/devices` rule, so saving the device token is denied and no device can be targeted.
+- [ ] Deploy the Firestore rules (`firebase deploy --only firestore:rules --project gps-para-el-cielo`). The rules live before 2026-11-11 have no `users/{uid}/devices` rule, so saving the device token is denied and no device can be targeted.

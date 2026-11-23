@@ -36,6 +36,9 @@ class NeighborhoodController extends GetxController {
 
   /// No household data exists around the current center (cells).
   final areaUnavailable = false.obs;
+
+  /// Where the homes came from (Melissa-first), or null.
+  final areaSourceNote = RxnString();
   final isLoading = false.obs;
 
   /// True while showing a searched place instead of the saved home.
@@ -72,6 +75,7 @@ class NeighborhoodController extends GetxController {
     super.onInit();
     households.assignAll(_service.households);
     areaUnavailable.value = _service.areaUnavailable.value;
+    areaSourceNote.value = _service.areaSourceNote.value;
     isLoading.value = _service.isLoading.value;
     _applyCenter(_service.center.value);
 
@@ -79,6 +83,7 @@ class NeighborhoodController extends GetxController {
       ever(_service.center, _applyCenter),
       ever(_service.households, households.assignAll),
       ever(_service.areaUnavailable, (bool u) => areaUnavailable.value = u),
+      ever(_service.areaSourceNote, (String? n) => areaSourceNote.value = n),
       ever(_service.isLoading, (bool loading) => isLoading.value = loading),
     ]);
   }

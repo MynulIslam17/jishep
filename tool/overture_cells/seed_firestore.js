@@ -10,7 +10,9 @@
  *
  * Safety:
  *   - Dry-run is the default; nothing is written without --write.
- *   - Production is project `gps-cielo` only; `cielo-63925` is refused.
+ *   - Production is `gps-cielo` (default) or, with --project, the client
+ *     project `gps-para-el-cielo`. Any other project, and `cielo-63925`,
+ *     is refused.
  *   - Only the `cells` collection is written. Nothing is ever deleted (the
  *     Bangladesh `households` test data is left alone).
  *   - --max-writes (default 18000) keeps a run under the Spark plan's 20k
@@ -31,6 +33,10 @@
  *   node seed_firestore.js out/california --write --max-writes 18000
  *   node seed_firestore.js out/new_jersey --write --rewrite   # rewrite docs even
  *       if v/n match (content changed but the progress file was lost)
+ *   node seed_firestore.js out/usa --project gps-para-el-cielo                 # dry-run
+ *   node seed_firestore.js out/usa --project gps-para-el-cielo --prefixes 9q,9r --write
+ *       (only cells under those geohash prefixes: import region by region)
+ *   node seed_firestore.js out/usa --project gps-para-el-cielo --write --max-writes 100000
  */
 const fs = require('fs');
 const path = require('path');
@@ -38,7 +44,8 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-const PROJECT_ID = 'gps-cielo';
+const ALLOWED_PROJECTS = ['gps-cielo', 'gps-para-el-cielo'];
+let PROJECT_ID = 'gps-cielo';
 const FORBIDDEN_PROJECTS = ['cielo-63925'];
 const COLLECTION = 'cells';
 const BATCH = 400;
@@ -57,6 +64,10 @@ function parseArgs(argv) {
     else if (a === '--emulator') args.emulator = true;
     else if (a === '--rewrite') args.rewrite = true;
     else if (a === '--dry-run') args.write = false;
+    else if (a === '--prefixes') args.prefixes = argv[++i];
+    else if (a.startsWith('--prefixes=')) args.prefixes = a.split('=')[1];
+    else if (a === '--project') args.project = argv[++i];
+    else if (a.startsWith('--project=')) args.project = a.split('=')[1];
     else if (a === '--max-writes') args.maxWrites = Number(argv[++i]);
     else if (a.startsWith('--max-writes=')) args.maxWrites = Number(a.split('=')[1]);
     else if (a === '-h' || a === '--help') {
@@ -68,6 +79,18 @@ function parseArgs(argv) {
   }
   if (!args.dir) fail('Usage: node seed_firestore.js <out/area> [--emulator] [--write] [--max-writes N]');
   if (!Number.isInteger(args.maxWrites) || args.maxWrites <= 0) fail('--max-writes must be a positive integer');
+  if (args.prefixes !== undefined) {
+    args.prefixes = String(args.prefixes).split(',').map((x) => x.trim()).filter(Boolean);
+    if (!args.prefixes.length || args.prefixes.some((x) => !/^[0-9bcdefghjkmnpqrstuvwxyz]{1,5}$/.test(x))) {
+      fail('--prefixes takes geohash prefixes of 1-5 characters, e.g. 9q,9r');
+    }
+  }
+  if (args.project !== undefined) {
+    if (!ALLOWED_PROJECTS.includes(args.project)) {
+      fail(`--project must be one of ${ALLOWED_PROJECTS.join(', ')}`);
+    }
+    PROJECT_ID = args.project;
+  }
   return args;
 }
 
@@ -97,7 +120,7 @@ function target(args) {
   }
   let cached;
   return {
-    name: 'production',
+    name: PROJECT_ID === 'gps-cielo' ? 'production' : PROJECT_ID,
     label: `PRODUCTION project ${PROJECT_ID}`,
     api: 'https://firestore.googleapis.com/v1',
     token: () => {
@@ -138,7 +161,7 @@ async function api(t, method, url, body) {
 }
 
 /** Every cell file in <dir>/cells, as the document it becomes. */
-function loadCells(dir) {
+function loadCells(dir, prefixes) {
   const cellsDir = path.join(dir, 'cells');
   if (!fs.existsSync(cellsDir)) fail(`No cells folder in ${dir}`);
   const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
@@ -147,6 +170,8 @@ function loadCells(dir) {
     if (!file.endsWith('.json.gz')) continue;
     const prefix = file.slice(0, -'.json.gz'.length);
     if (!/^[0-9bcdefghjkmnpqrstuvwxyz]{5,9}$/.test(prefix)) fail(`Bad cell name ${file}`);
+    // A split cell's children share its prefix, so they stay together.
+    if (prefixes && !prefixes.some((p) => prefix.startsWith(p))) continue;
     const gz = fs.readFileSync(path.join(cellsDir, file));
     if (gz.length > MAX_DOC_BYTES) fail(`${file} is ${gz.length} bytes (> 900 KB)`);
     const body = JSON.parse(zlib.gunzipSync(gz).toString('utf8'));
@@ -229,7 +254,8 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const t = target(args);
   const dir = path.resolve(args.dir);
-  const { meta, cells } = loadCells(dir);
+  const { meta, cells } = loadCells(dir, args.prefixes);
+  if (args.prefixes) console.log(`Only cells under: ${args.prefixes.join(', ')}`);
 
   // Kept outside out/<area>/, which a rebuild deletes.
   const progressDir = path.join(path.dirname(dir), '.seed_progress');

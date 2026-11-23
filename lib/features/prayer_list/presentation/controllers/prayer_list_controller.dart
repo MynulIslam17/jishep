@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/utils/day_change.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
@@ -27,13 +28,16 @@ class PrayerListController extends GetxController {
   /// No household data exists around the saved home (cells).
   final homeUnavailable = false.obs;
 
+  /// Why the neighborhood is empty (Melissa only), or null.
+  final homeNote = RxnString();
+
   /// The saved home address, for messages ("within 5 km of Demra").
   final homeLabel = 'your home'.obs;
 
   final List<Worker> _workers = [];
 
   /// Rebuilds the plan at midnight, when a new prayer day begins.
-  Timer? _midnightTimer;
+  DayChangeWatcher? _dayWatcher;
 
   /// The day an automatic new round was last tried, so a failed write
   /// (e.g. no permission) is not retried on every rebuild.
@@ -69,26 +73,13 @@ class PrayerListController extends GetxController {
       ever(_authController.currentUser, (_) => _rebuild()),
       ever(_service.rangeMeters, (_) => _rebuild()),
       ever(_service.homeUnavailable, (_) => _rebuild()),
+      ever(_service.homeSourceNote, (_) => _rebuild()),
       ever(_service.isLoading, (bool loading) {
         isLoading.value = loading;
         if (!loading) _maybeStartNewRound();
       }),
     ]);
-    _scheduleMidnight();
-  }
-
-  void _scheduleMidnight() {
-    _midnightTimer?.cancel();
-    final now = DateTime.now();
-    final midnight = DateTime(now.year, now.month, now.day + 1);
-    // A second late, so "today" is surely the new day.
-    _midnightTimer = Timer(
-      midnight.difference(now) + const Duration(seconds: 1),
-      () {
-        _rebuild();
-        _scheduleMidnight();
-      },
-    );
+    _dayWatcher = DayChangeWatcher(_rebuild);
   }
 
   /// Starts the next round on its own the first day after a round was
@@ -110,6 +101,7 @@ class PrayerListController extends GetxController {
     homeLabel.value = address.isEmpty ? 'your home' : address;
     rangeMeters.value = _service.rangeMeters.value;
     homeUnavailable.value = _service.homeUnavailable.value;
+    homeNote.value = _service.homeSourceNote.value;
     plan.value = PrayerListService.buildPlan(
       _service.neighborhood,
       user?.dailyPrayerTarget ?? 5,
@@ -155,7 +147,7 @@ class PrayerListController extends GetxController {
 
   @override
   void onClose() {
-    _midnightTimer?.cancel();
+    _dayWatcher?.dispose();
     for (final worker in _workers) {
       worker.dispose();
     }

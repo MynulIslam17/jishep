@@ -10,6 +10,10 @@ class GeoRecord {
     required this.geohash,
     required this.address,
     this.cityStateZip = '',
+    this.ownerName,
+    this.ownerSecondName,
+    this.ownerIsEntity = false,
+    this.propertyClass,
   });
 
   final String id;
@@ -24,6 +28,19 @@ class GeoRecord {
 
   /// e.g. "SPRING VALLEY, CA 91977" (may be empty).
   final String cityStateZip;
+
+  /// Recorded property owner (Melissa Property, public record), only for
+  /// homes from the Melissa-first neighborhood (`discoverOwners`).
+  final String? ownerName;
+
+  /// A second recorded owner (public record), when Melissa has one.
+  final String? ownerSecondName;
+
+  /// The recorded owner is a company or trust.
+  final bool ownerIsEntity;
+
+  /// Melissa property use, e.g. "Single Family Residential".
+  final String? propertyClass;
 
   /// A `households/{id}` document (`geo.geopoint`, `geo.geohash`, `address`,
   /// `cityStateZip`). Its `residentName` is a placeholder and is ignored:

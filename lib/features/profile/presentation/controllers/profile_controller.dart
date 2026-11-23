@@ -29,6 +29,9 @@ class ProfileController extends GetxController {
   final isSendingPhoneCode = false.obs;
   final selectedPrayerTarget = 5.obs;
 
+  /// Lifetime prayers over every round, for "My impact".
+  final prayersOffered = 0.obs;
+
   final List<Worker> _workers = [];
 
   @override
@@ -39,6 +42,7 @@ class ProfileController extends GetxController {
       ever(_authController.currentUser, (_) => loadProfile()),
       ever(_service.homesPrayed, (_) => loadProfile()),
       ever(_service.visitsMade, (_) => loadProfile()),
+      ever(_service.prayersOffered, (_) => loadProfile()),
     ]);
   }
 
@@ -49,6 +53,7 @@ class ProfileController extends GetxController {
       user.value = null;
       return;
     }
+    prayersOffered.value = _service.prayersOffered.value;
     user.value = current.copyWith(
       homesPrayed: _service.homesPrayed.value,
       visitsMade: _service.visitsMade.value,

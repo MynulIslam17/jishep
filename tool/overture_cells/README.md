@@ -21,6 +21,26 @@ python3 -m venv .venv
 .venv/bin/python build_cells.py --name usa
 ```
 
+Whole US: `build_cells.py --name usa --memory 9GB --threads 6` (16 GB Mac;
+large steps spill to disk under `out/_usa_work/tmp`). If it stops, run the
+same command with `--resume`. That reuses the finished S3 download (and a
+finished extract), and the release is pinned in `out/_usa_work/release.txt`.
+
+Check a build before importing it:
+
+```sh
+.venv/bin/python validate_cells.py out/usa [--counts states.json]
+```
+
+The validator checks:
+- the 900 KB file limit and the 1 MiB Firestore document limit;
+- `p` and `v` in every file;
+- homes inside their cell;
+- the stub/child structure;
+- duplicate ids and labels.
+
+It also reports per-state counts, and writes `out/usa/validation.json`.
+
 The output goes to `out/<name>/`: `cells/<prefix>.json.gz`, `meta.json` and
 `report.json`. The `out/` folder is git-ignored.
 
@@ -87,3 +107,18 @@ node seed_firestore.js out/california --write              # production, at most
   because Firestore limits a request to 10 MiB.
 - The emulator needs Java 21. One way to run it:
   `PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" firebase emulators:start --only firestore --project gps-cielo`
+
+## Client project and region-by-region import
+
+```sh
+node seed_firestore.js out/usa --project gps-para-el-cielo                     # dry-run
+node seed_firestore.js out/usa --project gps-para-el-cielo --prefixes 9q,9r --write --max-writes 100000
+```
+
+- `--project` accepts only `gps-cielo` (default) and `gps-para-el-cielo`.
+  The progress file is per project
+  (`.seed_progress/<area>.gps-para-el-cielo.json`).
+- `--prefixes` limits a run to cells under those geohash prefixes, so one
+  national build can be imported wave by wave. A split cell's children
+  share its prefix and always go with it.
+- Sizes, waves and costs: `docs/NATIONWIDE_CELLS.md`.

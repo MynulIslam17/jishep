@@ -90,4 +90,65 @@ void main() {
 
     tester.view.resetViewInsets();
   });
+
+  group('recorded owners (Melissa) in the details', () {
+    final owned = HouseholdModel(
+      id: 'mel:5726833057',
+      number: 1,
+      ownerName: 'OWNER TEST ONE',
+      ownerSecondName: 'OWNER TEST TWO',
+      propertyClass: 'Single Family Residential',
+      address: '701 TEST AVE',
+      cityStateZip: 'CHULA VISTA, CA 91910',
+    );
+
+    Future<void> show(WidgetTester tester, HouseholdModel h) async {
+      await tester.pumpWidget(
+        createTestWidget(child: HouseholdDetailBottomSheet(household: h)),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('owner is the title, the second owner and address below', (
+      tester,
+    ) async {
+      await show(tester, owned);
+      expect(find.text('OWNER TEST ONE'), findsOneWidget);
+      expect(find.text('OWNER TEST TWO'), findsOneWidget);
+      expect(find.text('701 TEST AVE'), findsOneWidget);
+      expect(find.text('CHULA VISTA, CA 91910'), findsOneWidget);
+      // Clean: no labels, disclaimers, source or classification text.
+      for (final t in [
+        'Public Record',
+        'may not live',
+        'Melissa',
+        'verified',
+        'resident',
+        'Single Family',
+      ]) {
+        expect(find.textContaining(t), findsNothing, reason: t);
+      }
+    });
+
+    testWidgets(
+      'a name the user typed is the title; the owner stays separate',
+      (tester) async {
+        await show(tester, owned.withName('Maria'));
+        expect(find.text('Maria'), findsOneWidget);
+        expect(find.text('Owner: OWNER TEST ONE'), findsOneWidget);
+        expect(find.text('OWNER TEST TWO'), findsOneWidget);
+      },
+    );
+
+    testWidgets('no recorded owner: the street address is the title', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        HouseholdModel(id: 'x', number: 1, address: '9 PLAIN ST'),
+      );
+      expect(find.text('9 PLAIN ST'), findsOneWidget);
+      expect(find.textContaining('Owner'), findsNothing);
+    });
+  });
 }

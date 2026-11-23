@@ -8,7 +8,7 @@
 #   App Store provisioning profile: gps_cielo_appstore_push ("GPS Cielo AppStore
 #   AppleSignIn" regenerated 2026-11-11 with Push Notifications; expires 2027-10-12)
 # Apple Developer Team ID: T83PP9TMXS
-# Firebase project: gps-cielo (ios/Runner/GoogleService-Info.plist is committed)
+# Firebase project: gps-para-el-cielo (ios/Runner/GoogleService-Info.plist is committed)
 # Push notifications: Release signs with ios/Runner/RunnerRelease.entitlements
 #   (aps-environment; App Store export sets it to production from the profile).
 #   The App Store profile must be created after Push Notifications was enabled.
@@ -127,7 +127,7 @@ workflows:
         script: |
           set -e
           plutil -lint ios/Runner/GoogleService-Info.plist ios/Runner/Info.plist ios/Runner/Runner.entitlements
-          /usr/libexec/PlistBuddy -c "Print :PROJECT_ID" ios/Runner/GoogleService-Info.plist | grep -qx "gps-cielo"
+          /usr/libexec/PlistBuddy -c "Print :PROJECT_ID" ios/Runner/GoogleService-Info.plist | grep -qx "gps-para-el-cielo"
           /usr/libexec/PlistBuddy -c "Print :BUNDLE_ID" ios/Runner/GoogleService-Info.plist | grep -qx "$BUNDLE_ID"
           grep -q "com.apple.developer.applesignin" ios/Runner/Runner.entitlements
       - name: Install Flutter dependencies

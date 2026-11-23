@@ -47,13 +47,24 @@ void main() {
       expect(name.length, HouseholdModel.maxNameLength);
     });
 
-    test('title is the name, or "Neighbor"', () {
-      expect(_home().displayName, 'Neighbor');
+    test('title: the name, else the owner, else "Unknown Resident"', () {
+      expect(_home().displayName, 'Unknown Resident');
+      expect(
+        HouseholdModel(id: 'x', number: 1, address: ' ').displayName,
+        'Unknown Resident',
+      );
+      expect(
+        _home().copyWith(ownerName: 'OWNER TEST').displayName,
+        'OWNER TEST',
+      );
       expect(
         _home(name: 'Martha and Odalis Cordova').displayName,
         'Martha and Odalis Cordova',
       );
-      expect(_home(name: 'Suzanne').withName(null).displayName, 'Neighbor');
+      expect(
+        _home(name: 'Suzanne').withName(null).displayName,
+        'Unknown Resident',
+      );
       expect(_home().withName('Suzanne').residentName, 'Suzanne');
     });
 
@@ -65,7 +76,7 @@ void main() {
           number: 1,
         );
         expect(h.residentName, isNull);
-        expect(h.displayName, 'Neighbor');
+        expect(h.displayName, 'Unknown Resident');
       }
     });
 
@@ -167,10 +178,10 @@ void main() {
     HouseholdModel byId(List<HouseholdModel> list, String id) =>
         list.firstWhere((h) => h.id == id);
 
-    test('unnamed households show "Neighbor" + the address', () async {
+    test('unnamed households are titled "Unknown Resident"', () async {
       await store.bindUser(user('alice'));
       final h = store.households.first;
-      expect(h.displayName, 'Neighbor');
+      expect(h.displayName, 'Unknown Resident');
       expect(h.address, 'H0 HELIX ST');
     });
 
@@ -193,7 +204,7 @@ void main() {
 
       await store.saveHousehold(byId(store.households, 'h3').withName(null));
       expect(repository.savedNames.last, (id: 'h3', name: null));
-      expect(byId(store.households, 'h3').displayName, 'Neighbor');
+      expect(byId(store.households, 'h3').displayName, 'Unknown Resident');
     });
 
     test('a pray/follow-up change does not write the name', () async {
@@ -220,7 +231,7 @@ void main() {
         'h4': {'residentName': 'Suzanne'},
       };
       await store.bindUser(user('bob'));
-      expect(byId(store.households, 'h4').displayName, 'Neighbor');
+      expect(byId(store.households, 'h4').displayName, 'Unknown Resident');
       expect(repository.statusReads, isNotEmpty);
     });
 
@@ -231,11 +242,11 @@ void main() {
         code: 'permission-denied',
       );
       await store.saveHousehold(byId(store.households, 'h5').withName('Ann'));
-      expect(byId(store.households, 'h5').displayName, 'Neighbor');
+      expect(byId(store.households, 'h5').displayName, 'Unknown Resident');
     });
   });
 
-  group('Household sheet: Add / Edit name', () {
+  group('Household sheet', () {
     Widget app(
       HouseholdModel h,
       ValueChanged<HouseholdModel> onUpdated, {
@@ -253,7 +264,7 @@ void main() {
       ),
     );
 
-    testWidgets('name or "Neighbor", address, city line, distance', (
+    testWidgets('title over the street, city line, distance; no name option', (
       tester,
     ) async {
       final h = _home().copyWith(latitude: 32.7457, longitude: -116.9989);
@@ -261,101 +272,28 @@ void main() {
         app(h, (_) {}, from: (latitude: 32.7448, longitude: -116.9989)),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Neighbor'), findsWidgets);
-      expect(find.text('3510 HELIX ST'), findsOneWidget);
+      expect(find.text('Unknown Resident'), findsOneWidget);
+      expect(find.text('3510 HELIX ST'), findsWidgets);
       expect(find.text('SPRING VALLEY, CA 91977'), findsOneWidget);
       expect(find.text('100 m from home'), findsOneWidget);
-      expect(find.text('Add name'), findsOneWidget);
+      expect(find.text('Add name'), findsNothing);
+      expect(find.textContaining('who lives here'), findsNothing);
+      expect(find.byKey(const ValueKey('household-edit-name')), findsNothing);
+    });
+
+    testWidgets('a saved name is still the title, with no Edit name', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app(_home(name: 'Suzanne'), (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.text('Suzanne'), findsWidgets);
+      expect(find.text('Edit name'), findsNothing);
     });
 
     testWidgets('no home location: no distance', (tester) async {
       await tester.pumpWidget(app(_home(), (_) {}));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('household-distance')), findsNothing);
-    });
-
-    testWidgets('unnamed: "Neighbor", Add name → Save', (tester) async {
-      HouseholdModel? saved;
-      await tester.pumpWidget(app(_home(), (h) => saved = h));
-      await tester.pumpAndSettle();
-      expect(find.text('Neighbor'), findsWidgets);
-      expect(find.text('3510 HELIX ST'), findsOneWidget);
-
-      await tester.tap(find.text('Add name'));
-      await tester.pumpAndSettle();
-      expect(find.text('Remove name'), findsNothing);
-      await tester.enterText(
-        find.byKey(const ValueKey('resident-name-field')),
-        '  Martha and Odalis Cordova ',
-      );
-      await tester.tap(find.byKey(const ValueKey('resident-name-save')));
-      await tester.pumpAndSettle();
-
-      expect(saved!.residentName, 'Martha and Odalis Cordova');
-      expect(find.text('Martha and Odalis Cordova'), findsWidgets);
-      expect(find.text('Edit name'), findsOneWidget);
-    });
-
-    testWidgets('named: Edit name → Remove name', (tester) async {
-      HouseholdModel? saved;
-      await tester.pumpWidget(app(_home(name: 'Suzanne'), (h) => saved = h));
-      await tester.pumpAndSettle();
-      expect(find.text('Suzanne'), findsWidgets);
-
-      await tester.tap(find.text('Edit name'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('resident-name-remove')));
-      await tester.pumpAndSettle();
-
-      expect(saved, isNotNull);
-      expect(saved!.residentName, isNull);
-      expect(find.text('Neighbor'), findsWidgets);
-    });
-
-    testWidgets('saving an empty name removes it', (tester) async {
-      HouseholdModel? saved;
-      await tester.pumpWidget(app(_home(name: 'Suzanne'), (h) => saved = h));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit name'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('resident-name-field')),
-        '   ',
-      );
-      await tester.tap(find.byKey(const ValueKey('resident-name-save')));
-      await tester.pumpAndSettle();
-      expect(saved!.residentName, isNull);
-    });
-
-    testWidgets('cancel changes nothing', (tester) async {
-      HouseholdModel? saved;
-      await tester.pumpWidget(app(_home(), (h) => saved = h));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Add name'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('resident-name-field')),
-        'Ann',
-      );
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(saved, isNull);
-      expect(find.text('Add name'), findsOneWidget);
-    });
-
-    testWidgets('the field stops at 120 characters', (tester) async {
-      await tester.pumpWidget(app(_home(), (_) {}));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Add name'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('resident-name-field')),
-        'x' * 150,
-      );
-      final field = tester.widget<TextField>(
-        find.byKey(const ValueKey('resident-name-field')),
-      );
-      expect(field.controller!.text.length, 120);
     });
   });
 }

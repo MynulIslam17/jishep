@@ -1,3 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -37,14 +40,57 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (_) {}
 }
 
+/// Debug builds only (release builds ignore both):
+/// - `--dart-define=FIREBASE_EMULATOR_HOST=10.0.2.2` (Android emulator) or
+///   `localhost` (iOS simulator): Auth, Firestore and Cloud Functions all
+///   use the local Firebase emulators. Nothing touches production.
+/// - `--dart-define=FUNCTIONS_EMULATOR_HOST=<mac>.local`: only Cloud
+///   Function calls (Melissa address checks) go to the Mac's emulator.
+Future<void> _useLocalFunctionsIfAsked() async {
+  if (!kDebugMode) return;
+  const all = String.fromEnvironment('FIREBASE_EMULATOR_HOST');
+  const functionsOnly = String.fromEnvironment('FUNCTIONS_EMULATOR_HOST');
+  if (all.isNotEmpty) {
+    // Never mix production into a local run: the on-disk Firestore cache
+    // and a saved sign-in survive from earlier production runs on the same
+    // simulator. No disk cache here, and a session the local Auth emulator
+    // does not know is signed out (sign in with a local test account).
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: false,
+    );
+    await FirebaseAuth.instance.useAuthEmulator(all, 9099);
+    FirebaseFirestore.instance.useFirestoreEmulator(all, 8080);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await user.reload();
+      } catch (_) {
+        await FirebaseAuth.instance.signOut();
+      }
+    }
+  }
+  final functionsHost = all.isNotEmpty ? all : functionsOnly;
+  if (functionsHost.isEmpty) return;
+  FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  ).useFunctionsEmulator(functionsHost, 5001);
+}
+
 void main() async {
+  await bootstrap();
+  runApp(const GpsCieloApp());
+}
+
+/// Everything [main] does before `runApp` (also used by the integration
+/// tests, which sign in to the local emulator in between).
+Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _useLocalFunctionsIfAsked();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await SystemUiConfig.init();
   // The layout is designed for phones held upright.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(const GpsCieloApp());
 }
 
 class GpsCieloApp extends StatelessWidget {

@@ -1,8 +1,15 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:gps_cielo/core/config/feature_flags.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:gps_cielo/core/data/cell_source.dart';
+import 'package:gps_cielo/core/data/gap_fill.dart';
 import 'package:gps_cielo/core/data/geo_search.dart';
+import 'package:gps_cielo/core/data/owner_discovery.dart';
 import 'package:gps_cielo/core/constants/firestore_paths.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
+import 'package:gps_cielo/core/models/prayer_round.dart';
 
 typedef HouseholdSnapshot = DocumentSnapshot<Map<String, dynamic>>;
 
@@ -41,6 +48,47 @@ class HouseholdRepository {
   /// (used when `FeatureFlags.useCellHouseholds` is on).
   CellArea cellArea({required double latitude, required double longitude}) =>
       cellSource.area(latitude: latitude, longitude: longitude);
+
+  /// The nearest 50 homes around a point.
+  ///
+  /// - Overture cells, topped up with Melissa addresses when
+  ///   `FeatureFlags.melissaGapFill` is on and Overture has fewer than 50;
+  /// - with `FeatureFlags.melissaOwners` (default on), each home that has a
+  ///   stored owner record at the same address shows its recorded owner
+  ///   ([OwnerOverlayArea]); other homes keep their address.
+  ///
+  /// [preview] (location setup, pin dragging): Overture only, never the
+  /// Melissa-first lookup, so trying out spots can never cost credits.
+  AreaSearch nearestArea({
+    required double latitude,
+    required double longitude,
+    bool preview = false,
+  }) {
+    final cells = cellArea(latitude: latitude, longitude: longitude);
+    final AreaSearch overture = FeatureFlags.melissaGapFill && !preview
+        ? GapFilledArea(
+            inner: cells,
+            service: gapFillService,
+            latitude: latitude,
+            longitude: longitude,
+          )
+        : cells;
+    if (!FeatureFlags.melissaOwners || preview) return overture;
+    return OwnerOverlayArea(
+      inner: overture,
+      owners: OwnerArea(
+        service: ownerService,
+        latitude: latitude,
+        longitude: longitude,
+      ),
+    );
+  }
+
+  /// The Melissa-first owner discovery client; replaced in tests.
+  OwnerDiscoveryService ownerService = OwnerDiscoveryService();
+
+  /// The gap-filler client; replaced in tests.
+  GapFillService gapFillService = GapFillService();
 
   CollectionReference<Map<String, dynamic>> get _households =>
       _db.collection(FirestorePaths.households);
@@ -99,6 +147,33 @@ class HouseholdRepository {
       for (final snapshot in snapshots)
         for (final doc in snapshot.docs) doc.id: doc.data(),
     };
+  }
+
+  /// Recorded owner names from the user's cached Melissa address checks
+  /// (`users/{uid}/enrichment/{householdId}`), by household id.
+  Future<Map<String, String>> fetchOwnerNames(String uid) async {
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('enrichment')
+        .limit(1000)
+        .get();
+    final out = <String, String>{};
+    for (final doc in snap.docs) {
+      final name = ownerNameOf(doc.data());
+      if (name != null) out[doc.id] = name;
+    }
+    return out;
+  }
+
+  /// The owner name in an enrichment document or callable response.
+  static String? ownerNameOf(Map<Object?, Object?> data) {
+    final property = data['property'];
+    if (property is! Map) return null;
+    final owner = property['owner'];
+    if (owner is! Map) return null;
+    final name = owner['name']?.toString().trim() ?? '';
+    return name.isEmpty ? null : name;
   }
 
   /// Live status changes made after [since] (on this or another device).
@@ -222,7 +297,8 @@ class HouseholdRepository {
     required HouseholdModel household,
     required bool wasPrayed,
     bool nameChanged = false,
-  }) {
+    String? roundId,
+  }) async {
     final data = <String, dynamic>{
       ...household.toStatusFirestore(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -230,16 +306,84 @@ class HouseholdRepository {
     if (nameChanged) {
       data['residentName'] = household.residentName ?? FieldValue.delete();
     }
+    final event = roundId == null
+        ? null
+        : _db
+              .collection(FirestorePaths.userPrayerLog(uid))
+              .doc(FirestorePaths.prayerEventId(roundId, household.id));
+    Future<void> Function()? history;
     if (household.isPrayed && !wasPrayed) {
       // Client time so "prayed today" is correct before the write syncs.
-      data['prayedAt'] = Timestamp.now();
+      final now = Timestamp.now();
+      data['prayedAt'] = now;
+      // History: one event per home per round, never overwritten by a
+      // later round (the status keeps only the latest prayedAt).
+      if (event != null) {
+        history = () => event.set({
+          'householdId': household.id,
+          'roundId': roundId,
+          'prayedAt': now,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
     } else if (!household.isPrayed) {
       data['prayedAt'] = FieldValue.delete();
+      // Un-praying corrects this round's event; earlier rounds are kept.
+      if (wasPrayed && event != null) history = event.delete;
     }
 
-    return _db
+    final status = _db
         .collection(FirestorePaths.userHouseholdStatus(uid))
         .doc(household.id)
         .set(data, SetOptions(merge: true));
+    // The history is written separately and its failure never fails the
+    // prayer: rules deployed before `prayer_log` existed deny it, and the
+    // status (what every screen reads) must still be saved.
+    final logged = history?.call().catchError((Object _) {});
+    await status;
+    await logged;
+  }
+
+  /// The membership of a prayer round, or null when none is recorded.
+  Future<PrayerRound?> fetchRound(String uid, String roundId) async {
+    final doc = await _db
+        .collection(FirestorePaths.userPrayerRounds(uid))
+        .doc(roundId)
+        .get();
+    return PrayerRound.fromFirestore(doc.data());
+  }
+
+  /// Records (or replaces) the homes of a round.
+  Future<void> saveRoundMembers(String uid, String roundId, PrayerRound round) {
+    return _db
+        .collection(FirestorePaths.userPrayerRounds(uid))
+        .doc(roundId)
+        .set({
+          ...round.toFirestore(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  /// Lifetime prayers from the history (every round), counted on the
+  /// server.
+  Future<int> countPrayerEvents(String uid) async {
+    final result = await _db
+        .collection(FirestorePaths.userPrayerLog(uid))
+        .count()
+        .get();
+    return result.count ?? 0;
+  }
+
+  /// Prayer events of one round (or all rounds when [roundId] is null).
+  Future<List<Map<String, dynamic>>> fetchPrayerEvents(
+    String uid, {
+    String? roundId,
+  }) async {
+    Query<Map<String, dynamic>> q = _db.collection(
+      FirestorePaths.userPrayerLog(uid),
+    );
+    if (roundId != null) q = q.where('roundId', isEqualTo: roundId);
+    final snap = await q.get();
+    return [for (final d in snap.docs) d.data()];
   }
 }

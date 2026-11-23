@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/firestore_paths.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
@@ -104,6 +104,9 @@ class PrayerListService {
   /// No household data exists around the saved home.
   RxBool get homeUnavailable => _store.homeUnavailable;
 
+  /// Where the neighborhood came from, or why it is empty (Melissa only).
+  RxnString get homeSourceNote => _store.homeSourceNote;
+
   /// Reloads "my neighborhood" (around the saved home).
   Future<void> refreshHouseholds() => _store.refreshHome();
 
@@ -156,11 +159,22 @@ class PrayerListService {
   /// Starts a new round: every neighbor can be prayed for again. Earlier
   /// prayers stay in the lifetime totals; visits, invitations, follow-ups and
   /// notes are not touched.
+  ///
+  /// The new round has the SAME homes (the saved neighborhood, recorded in
+  /// `prayer_rounds`); no property lookup is made. Prayer history
+  /// (`prayer_log`) keeps every earlier round.
   Future<void> startNewCycle(String uid) {
-    return _users.updateFields(uid, {
-      // Client time: the new cycle applies immediately, even offline.
-      'prayerCycleStartedAt': Timestamp.now(),
-    });
+    final at = DateTime.now();
+    final round = _store.nextRound();
+    // Known on this device before the profile change comes back, so the
+    // new round shows the same homes at once.
+    _store.rememberRound(FirestorePaths.roundId(at), round);
+    return _users.startPrayerRound(
+      uid,
+      previousStart: _store.cycleStartedAt.value,
+      round: round,
+      at: at,
+    );
   }
 
   Future<void> togglePray(String householdId) {

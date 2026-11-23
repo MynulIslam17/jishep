@@ -37,9 +37,12 @@ dependencies:
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   firebase_messaging: 16.7.0
+  cloud_functions: ^6.5.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   fake_cloud_firestore: ^4.4.0

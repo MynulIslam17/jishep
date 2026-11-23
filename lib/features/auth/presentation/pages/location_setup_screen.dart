@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -221,17 +222,17 @@ Widget _secondaryButton(String label, VoidCallback onPressed, {Key? key}) {
   );
 }
 
-/// 1.1 Where is your home?
+/// 1.1 Where do you want to pray? Home or any US area.
 class _AddressStep extends GetView<LocationSetupController> {
   const _AddressStep();
 
   @override
   Widget build(BuildContext context) {
     return _StepLayout(
-      title: 'Where is your home?',
+      title: 'Where do you want to pray?',
       subtitle:
-          'Your neighbors are the homes nearest it. Only you see your '
-          'address.',
+          'Your home or any US neighborhood. Search a city, state, ZIP or '
+          'address. Only you see it.',
       body: [
         Obx(() {
           final near = controller.selectedLocation.value;
@@ -329,7 +330,7 @@ class _AddressStep extends GetView<LocationSetupController> {
   }
 }
 
-/// 1.2 Is this your home? The map moves under a fixed pin.
+/// 1.2 Is this the right spot? The map moves under a fixed pin.
 class _ConfirmPinStep extends GetView<LocationSetupController> {
   const _ConfirmPinStep();
 
@@ -337,8 +338,8 @@ class _ConfirmPinStep extends GetView<LocationSetupController> {
   Widget build(BuildContext context) {
     final location = controller.selectedLocation.value;
     return _StepLayout(
-      title: 'Is this your home?',
-      subtitle: 'Drag the map so the pin sits on your house.',
+      title: 'Is this the right spot?',
+      subtitle: 'Drag the map so the pin sits where you want to pray.',
       scroll: false,
       body: [
         Expanded(
@@ -387,7 +388,7 @@ class _ConfirmPinStep extends GetView<LocationSetupController> {
       actions: [
         AppPrimaryButton(
           key: const ValueKey('confirm-pin'),
-          label: 'Yes, this is my home',
+          label: 'Yes, pray here',
           onPressed: () => controller.goToStep(2),
         ),
         _secondaryButton(
@@ -580,12 +581,72 @@ class _GoalStep extends GetView<LocationSetupController> {
             fontSize: 12.sp,
           ),
         ),
+        SizedBox(height: 24.h),
+        const _IntentionPicker(),
       ],
       actions: [
         AppPrimaryButton(
           key: const ValueKey('setup-continue'),
           label: 'Continue',
           onPressed: () => controller.goToStep(3),
+        ),
+      ],
+    );
+  }
+}
+
+/// Optional prayer focus: suggested chips or the user's own words.
+class _IntentionPicker extends GetView<LocationSetupController> {
+  const _IntentionPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'What will you pray for? (optional)',
+          style: AppTypography.heading(
+            color: AppColors.textPrimary,
+            fontSize: 15.sp,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        SizedBox(height: 8.h),
+        Obx(() {
+          final chosen = controller.prayerIntention.value;
+          return Wrap(
+            spacing: 8.w,
+            runSpacing: 8.h,
+            children: [
+              for (final option in LocationSetupController.intentionOptions)
+                ChoiceChip(
+                  key: ValueKey('intention-$option'),
+                  label: Text(option),
+                  selected: chosen == option,
+                  showCheckmark: false,
+                  selectedColor: AppColors.primaryNavy,
+                  labelStyle: TextStyle(
+                    color: chosen == option
+                        ? Colors.white
+                        : AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onSelected: (_) => controller.toggleIntention(option),
+                ),
+            ],
+          );
+        }),
+        SizedBox(height: 10.h),
+        TextField(
+          key: const ValueKey('intention-custom'),
+          maxLength: UserModel.maxIntentionLength,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            hintText: 'Or write your own',
+            isDense: true,
+          ),
+          onChanged: controller.setCustomIntention,
         ),
       ],
     );

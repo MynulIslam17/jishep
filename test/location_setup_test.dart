@@ -1,3 +1,5 @@
+import 'package:gps_cielo/core/data/gap_fill.dart';
+import 'package:gps_cielo/core/data/area_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +62,34 @@ class _Households implements HouseholdRepository {
       ).area(latitude: latitude, longitude: longitude);
 
   @override
+  GapFillService gapFillService = GapFillService(call: (_) async => {});
+
+  /// Every nearestArea request (preview = location setup).
+  final nearestAreaCalls =
+      <({double latitude, double longitude, bool preview})>[];
+
+  @override
+  AreaSearch nearestArea({
+    required double latitude,
+    required double longitude,
+    bool preview = false,
+  }) {
+    nearestAreaCalls.add((
+      latitude: latitude,
+      longitude: longitude,
+      preview: preview,
+    ));
+    final cells = cellArea(latitude: latitude, longitude: longitude);
+    if (preview || !FeatureFlags.melissaGapFill) return cells;
+    return GapFilledArea(
+      inner: cells,
+      service: gapFillService,
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -91,6 +121,7 @@ class _Service implements AuthService {
     required double longitude,
     required double searchRadiusKm,
     required int dailyPrayerTarget,
+    String? prayerIntention,
   }) async {
     saved = {
       'address': address,
@@ -98,6 +129,7 @@ class _Service implements AuthService {
       'longitude': longitude,
       'searchRadiusKm': searchRadiusKm,
       'dailyPrayerTarget': dailyPrayerTarget,
+      'prayerIntention': ?prayerIntention,
     };
   }
 
@@ -174,6 +206,28 @@ void main() {
       expect(c.previewSummary, '40 neighbors within 5 km');
       expect(c.cycleDays, 8); // 40 / 5 a day
     });
+
+    test(
+      'trying spots never asks for property owners (no Melissa credits)',
+      () async {
+        await make();
+        FeatureFlags.useCellHouseholds = true;
+        final dense = _Households(1000, spacing: 0.0000899);
+        final d = LocationSetupController(
+          service,
+          auth,
+          location,
+          dense,
+          previewDebounce: Duration.zero,
+        )..onInit();
+        d.selectSuggestion(demra);
+        await settle();
+        d.setRange(1);
+        await settle();
+        expect(dense.nearestAreaCalls, isNotEmpty);
+        expect(dense.nearestAreaCalls.every((c) => c.preview), isTrue);
+      },
+    );
 
     test('changing the range refreshes the preview', () async {
       final c = await make();
@@ -296,6 +350,28 @@ void main() {
       expect(auth.currentUser.value?.dailyPrayerTarget, 10);
     });
 
+    test(
+      'a prayer focus is saved only when chosen; tapping again clears it',
+      () async {
+        final c = await make();
+        c.addressController.text = demra.fullAddress;
+        c.selectSuggestion(demra);
+        c.toggleIntention('Healing');
+        expect(c.prayerIntention.value, 'Healing');
+        c.toggleIntention('Healing');
+        expect(c.prayerIntention.value, isNull);
+        c.setCustomIntention('  Our street and its schools  ');
+        await c.confirmLocation();
+        expect(service.saved?['prayerIntention'], 'Our street and its schools');
+        expect(
+          auth.currentUser.value?.prayerIntention,
+          'Our street and its schools',
+        );
+        expect(UserModel.cleanIntention('x' * 200)!.length, 120);
+        expect(UserModel.cleanIntention('   '), isNull);
+      },
+    );
+
     test('a typed address without a pick is looked up on save', () async {
       final c = await make();
       c.addressController.text = 'Road 5, Demra';
@@ -389,7 +465,7 @@ void main() {
       final c = await tester.runAsync(make);
       await pump(tester, c!);
       expect(find.text('Step 1 of 4'), findsOneWidget);
-      expect(find.text('Where is your home?'), findsOneWidget);
+      expect(find.text('Where do you want to pray?'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('use-current-location')),
         findsOneWidget,
@@ -410,7 +486,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('setup-continue')));
       await frames(tester);
       expect(find.text('Step 2 of 4'), findsOneWidget);
-      expect(find.text('Is this your home?'), findsOneWidget);
+      expect(find.text('Is this the right spot?'), findsOneWidget);
       expect(find.byKey(const ValueKey('pin-map')), findsOneWidget);
       expect(find.byKey(const ValueKey('center-pin')), findsOneWidget);
       expect(find.text('Demra, Dhaka, Bangladesh'), findsOneWidget);
@@ -458,7 +534,7 @@ void main() {
       await pump(tester, c);
       await tester.tap(find.byKey(const ValueKey('change-address')));
       await frames(tester);
-      expect(find.text('Where is your home?'), findsOneWidget);
+      expect(find.text('Where do you want to pray?'), findsOneWidget);
     });
 
     group('nearest-N neighborhood (the default)', () {

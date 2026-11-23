@@ -76,6 +76,7 @@ class PhotonAddressProvider implements AddressSearchProvider {
     Uri? baseUri,
     this.language = 'en',
     this.timeout = const Duration(seconds: 8),
+    this.usOnly = true,
   }) : _client = client ?? http.Client(),
        _baseUri = baseUri ?? publicEndpoint;
 
@@ -91,6 +92,15 @@ class PhotonAddressProvider implements AddressSearchProvider {
   final Uri _baseUri;
   final String language;
   final Duration timeout;
+
+  /// Limits search to the United States (50 states, DC, Puerto Rico):
+  /// prayer areas are US-only. Reverse lookups are not limited.
+  final bool usOnly;
+
+  /// `minLon,minLat,maxLon,maxLat` around the US, Alaska, Hawaii and Puerto
+  /// Rico. Results outside the US inside the box are dropped by
+  /// [parse] (`countrycode`).
+  static const String usBbox = '-179.9,17.8,-64.5,71.6';
 
   @override
   String get attribution => '© OpenStreetMap contributors · Search by Photon';
@@ -111,18 +121,22 @@ class PhotonAddressProvider implements AddressSearchProvider {
         'lat=$nearLatitude',
         'lon=$nearLongitude',
       ],
-      // Photon expects `layer` repeated.
+      if (usOnly) 'bbox=$usBbox',
+      // Photon expects `layer` repeated. `other` holds ZIP codes.
       for (final layer in const [
         'house',
         'street',
         'locality',
         'district',
         'city',
+        'county',
+        'state',
+        'other',
       ])
         'layer=$layer',
     ];
     final json = await _get('api/', params);
-    return parse(json, query: query, limit: limit);
+    return parse(json, query: query, limit: limit, usOnly: usOnly);
   }
 
   @override
@@ -187,6 +201,7 @@ class PhotonAddressProvider implements AddressSearchProvider {
     required String query,
     int limit = 5,
     bool reverse = false,
+    bool usOnly = false,
   }) {
     if (json is! Map || json['features'] is! List) return const [];
 
@@ -214,8 +229,20 @@ class PhotonAddressProvider implements AddressSearchProvider {
         return value == null || value.isEmpty ? null : value;
       }
 
+      if (usOnly) {
+        final country = prop('countrycode')?.toUpperCase();
+        if (country != null && country != 'US' && country != 'PR') continue;
+      }
+
       final type = prop('type');
-      final name = prop('name');
+      final rawName = prop('name');
+      // "Los Angeles" the county must not look like the city.
+      final name =
+          type == 'county' &&
+              rawName != null &&
+              !rawName.toLowerCase().contains('county')
+          ? '$rawName County'
+          : rawName;
       final street = prop('street') ?? (type == 'street' ? name : null);
       final houseNumber =
           prop('housenumber') ?? (street != null ? typedNumber : null);

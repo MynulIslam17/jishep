@@ -31,8 +31,9 @@ String? homeDistanceLabel(
   return meters == null ? null : SearchRange.formatHomeDistance(meters);
 }
 
-/// One home in a list (Figma "Household row"): number, house icon, name or
-/// "Neighbor", street, "CITY, ST ZIP · 18 m", then a Pray / Prayed chip and a
+/// One home in a list (Figma "Household row"): number, house icon, the
+/// user's name for it / recorded owner / street, then street (unless it is
+/// the title), "CITY, ST ZIP · 18 m", a Pray / Prayed chip and a
 /// chevron. Tapping the row opens the household; the chip prays.
 class HouseholdRow extends StatelessWidget {
   const HouseholdRow({

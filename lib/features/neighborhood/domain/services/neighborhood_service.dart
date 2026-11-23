@@ -20,6 +20,9 @@ class NeighborhoodService {
   /// No household data exists around the current center.
   RxBool get areaUnavailable => _store.areaUnavailable;
 
+  /// Where the homes came from (Melissa-first), or null.
+  RxnString get areaSourceNote => _store.areaSourceNote;
+
   RxBool get isLoading => _store.isLoading;
 
   Future<void> refreshHouseholds() => _store.refreshHouseholds();

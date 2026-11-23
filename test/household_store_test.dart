@@ -114,6 +114,24 @@ void main() {
     expect(store.center.value?.label, 'Dhanmondi, Dhaka');
   });
 
+  test('owner names from address checks become the household titles', () async {
+    repository.available = 3;
+    await store.bindUser(user());
+    final first = store.households.first;
+    expect(first.displayName, 'Unknown Resident');
+
+    store.setOwnerName(first.id, 'MARIA LOPEZ');
+    expect(store.households.first.displayName, 'MARIA LOPEZ');
+    expect(store.households.first.showsOwnerName, isTrue);
+
+    // Cached checks are loaded when the account is bound.
+    final other = HouseholdStore(repository, FakeNotificationRepository());
+    repository.ownerNames['bob'] = {first.id: 'JOHN SMITH'};
+    await other.bindUser(user(id: 'bob'));
+    await Future<void>.delayed(Duration.zero);
+    expect(other.households.first.displayName, 'JOHN SMITH');
+  });
+
   test('no location means no query', () async {
     await store.bindUser(user(latitude: null, longitude: null));
     expect(repository.fetches, isEmpty);

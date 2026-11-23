@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
@@ -18,8 +19,9 @@ import 'package:gps_cielo/features/auth/presentation/controllers/auth_controller
 import 'package:gps_cielo/routes/app_routes.dart';
 
 /// First-run setup, a 4-step wizard (Figma 1.1–1.5):
-///  0. Where is your home? (address search or GPS)
-///  1. Is this your home? (drag the map under a fixed pin to adjust)
+///  0. Where do you want to pray? (any US city, state, ZIP, address or GPS;
+///     it does not have to be where the user lives)
+///  1. Is this the right spot? (drag the map under a fixed pin to adjust)
 ///  2. How many neighbors a day? (and the km range, only when
 ///     [SearchRange.userChoosesRange])
 ///  3. Meet your N neighbors: a preview of "my neighborhood", the nearest
@@ -42,6 +44,19 @@ class LocationSetupController extends GetxController {
 
   /// Daily prayer goals offered (same as Profile › Prayer preferences).
   static const List<int> dailyGoals = [3, 5, 10, 15];
+
+  /// Suggested prayer focuses for the chosen area (setup step 3). The user
+  /// may also type their own, or choose none.
+  static const List<String> intentionOptions = [
+    'Salvation',
+    'Peace and safety',
+    'Healing',
+    'Families and children',
+    'Provision',
+  ];
+
+  /// The chosen or typed prayer focus; null = none.
+  final prayerIntention = RxnString();
 
   final addressController = TextEditingController();
 
@@ -142,6 +157,7 @@ class LocationSetupController extends GetxController {
       dailyGoal.value = dailyGoals.contains(user.dailyPrayerTarget)
           ? user.dailyPrayerTarget
           : 5;
+      prayerIntention.value = user.prayerIntention;
       // Coming back to setup: start from what is already saved.
       final lat = user.latitude;
       final lng = user.longitude;
@@ -237,6 +253,16 @@ class LocationSetupController extends GetxController {
 
   void setDailyGoal(int goal) => dailyGoal.value = goal;
 
+  /// Chooses (or, when [value] is already chosen, clears) the prayer focus.
+  void toggleIntention(String value) {
+    final clean = UserModel.cleanIntention(value);
+    prayerIntention.value = prayerIntention.value == clean ? null : clean;
+  }
+
+  /// A focus the user typed; empty clears it.
+  void setCustomIntention(String value) =>
+      prayerIntention.value = UserModel.cleanIntention(value);
+
   /// Fills the field from the device GPS. Nothing is saved until the user
   /// confirms.
   Future<void> useCurrentLocation() async {
@@ -303,9 +329,11 @@ class LocationSetupController extends GetxController {
     try {
       // Nearest first, reading only as far as the neighborhood needs.
       final AreaSearch search = FeatureFlags.useCellHouseholds
-          ? _households.cellArea(
+          ? _households.nearestArea(
               latitude: location.latitude,
               longitude: location.longitude,
+              // Never Melissa while choosing a spot (no credits).
+              preview: true,
             )
           : GeoSearchArea(
               _households.geoSearch(
@@ -339,8 +367,8 @@ class LocationSetupController extends GetxController {
     final address = addressController.text.trim();
     if (address.isEmpty && selectedLocation.value == null) {
       SnackbarService.showError(
-        'Home address',
-        'Search for your address or use your current location.',
+        'Prayer area',
+        'Search for a US city, ZIP or address, or use your current location.',
       );
       return;
     }
@@ -360,6 +388,7 @@ class LocationSetupController extends GetxController {
         longitude: location.longitude,
         searchRadiusKm: rangeKm.value,
         dailyPrayerTarget: dailyGoal.value,
+        prayerIntention: prayerIntention.value,
       );
 
       final currentUser = _globalAuthController.currentUser.value;
@@ -371,6 +400,7 @@ class LocationSetupController extends GetxController {
             longitude: location.longitude,
             searchRadiusKm: rangeKm.value,
             dailyPrayerTarget: dailyGoal.value,
+            prayerIntention: prayerIntention.value,
           ),
         );
       }
@@ -378,7 +408,7 @@ class LocationSetupController extends GetxController {
       Get.offAllNamed(AppRoutes.mainNav);
     } catch (error) {
       SnackbarService.showError(
-        'Could not save your home',
+        'Could not save your prayer area',
         FirebaseErrorMapper.message(error),
       );
     } finally {

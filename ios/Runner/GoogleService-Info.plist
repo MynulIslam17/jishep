@@ -3,23 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>93438539556-0ufdeljbdj5a47lvgifvi3jjt7k0ib5q.apps.googleusercontent.com</string>
+	<string>1044715224614-vv9k918kemdimgv8sljjvni26ljc0osg.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.93438539556-0ufdeljbdj5a47lvgifvi3jjt7k0ib5q</string>
-	<key>ANDROID_CLIENT_ID</key>
-	<string>93438539556-vi7dp5868dofivtlh00moh32c2cvgito.apps.googleusercontent.com</string>
+	<string>com.googleusercontent.apps.1044715224614-vv9k918kemdimgv8sljjvni26ljc0osg</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBFdy7gxtkwzy9e-IER9pXS-WHbuovuwjY</string>
+	<string>AIzaSyAq9ZIqg9nxABb-nl2GsIEoSNQ1GC4TmMY</string>
 	<key>GCM_SENDER_ID</key>
-	<string>93438539556</string>
+	<string>1044715224614</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>org.gaccchurch.gpsceilo</string>
 	<key>PROJECT_ID</key>
-	<string>gps-cielo</string>
+	<string>gps-para-el-cielo</string>
 	<key>STORAGE_BUCKET</key>
-	<string>gps-cielo.firebasestorage.app</string>
+	<string>gps-para-el-cielo.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -31,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:93438539556:ios:9f7e21f59b77e74dcfe5b1</string>
+	<string>1:1044715224614:ios:8fe76620733d1f4217b0e7</string>
 </dict>
 </plist>
