@@ -103,12 +103,28 @@ class LocationSetupController extends GetxController {
 
   bool get hasLocation => selectedLocation.value != null;
 
+  /// No stored homes at this spot, but owner lookups (Melissa) cover the
+  /// whole US: the homes are looked up once the address is saved (the
+  /// preview never spends credits).
+  bool get lookupAfterSetup {
+    final l = selectedLocation.value;
+    return FeatureFlags.melissaOwners &&
+        l != null &&
+        inUs(l.latitude, l.longitude);
+  }
+
+  /// Same bounds as the server (`functions/src/owners.js` `inUs`).
+  static bool inUs(double lat, double lon) =>
+      lat >= 17.8 && lat <= 71.6 && lon >= -179.9 && lon <= -64.5;
+
   /// e.g. "Your nearest 50 neighbors", "12 neighbors nearby"; with a range
   /// "Nearest 50 neighbors within 2 km", "40 neighbors within 2 km".
   String get previewSummary {
     if (previewError.value) return 'Could not load neighbors';
     if (previewUnavailable.value && !isLoadingPreview.value) {
-      return AppStrings.areaUnavailable;
+      return lookupAfterSetup
+          ? AppStrings.neighborsOnTheWay
+          : AppStrings.areaUnavailable;
     }
     final n = previewHouseholds.length;
     final noun = n == 1 ? 'neighbor' : 'neighbors';

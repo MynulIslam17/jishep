@@ -588,6 +588,12 @@ void main() {
         expect(households.calls, isEmpty, reason: 'no `households` reads');
       });
 
+      test('US addresses outside the loaded states: looked up after setup', () {
+        expect(LocationSetupController.inUs(33.03, -96.70), isTrue); // Plano
+        expect(LocationSetupController.inUs(40.92, -74.17), isTrue); // NJ
+        expect(LocationSetupController.inUs(23.71, 90.45), isFalse); // Demra
+      });
+
       testWidgets('outside the loaded area: "not available yet", and setup '
           'can still be finished', (tester) async {
         final c = await tester.runAsync(make);

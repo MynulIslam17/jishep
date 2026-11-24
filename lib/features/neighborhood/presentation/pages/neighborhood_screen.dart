@@ -198,6 +198,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
 
   Widget _buildEmpty() {
     final unavailable = controller.areaUnavailable.value;
+    final note = controller.areaSourceNote.value;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 24.h),
       child: Column(
@@ -210,7 +211,9 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
           SizedBox(height: 10.h),
           Text(
             unavailable
-                ? AppStrings.areaUnavailable
+                ? (note != null
+                      ? AppStrings.neighborsOnTheWay
+                      : AppStrings.areaUnavailable)
                 : 'No households near this place yet',
             key: const ValueKey('neighborhood-empty'),
             textAlign: TextAlign.center,
@@ -223,7 +226,8 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
           SizedBox(height: 4.h),
           Text(
             unavailable
-                ? '${AppStrings.areasAvailable}. ${AppStrings.areaComingSoon}'
+                ? (note ??
+                      '${AppStrings.areasAvailable}. ${AppStrings.areaComingSoon}')
                 : AppStrings.primaryLocationHelp,
             textAlign: TextAlign.center,
             style: AppTypography.body(

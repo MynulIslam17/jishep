@@ -20,6 +20,21 @@ class _Homes implements AreaSearch {
   bool? contains(String id) => records.any((r) => r.id == id);
 }
 
+class _NoCells implements AreaSearch {
+  @override
+  List<GeoRecord> get records => const [];
+  @override
+  bool get isComplete => true;
+  @override
+  bool get isUnavailable => true;
+  @override
+  double? get extentMeters => null;
+  @override
+  Future<void> ensure(int count) async {}
+  @override
+  bool? contains(String id) => null;
+}
+
 GeoRecord _home(String id, String address, double lat, double lon) => GeoRecord(
   id: id,
   latitude: lat,
@@ -139,5 +154,63 @@ void main() {
       OwnerOverlayArea.addressKey('705 Cardona Avenue'),
       isNot(OwnerOverlayArea.addressKey('705 Cardona Drive')),
     );
+  });
+
+  group('outside the Overture states (no cells)', () {
+    test('Melissa owner records are the homes, with owner names', () async {
+      final area = OwnerOverlayArea(
+        inner: _NoCells(),
+        owners: _owners(
+          () async => {
+            'coverage': 'full',
+            'records': [
+              _owner('mel:1', '2200 EVERGREEN DR', 33.03, -96.70, 'Owner A'),
+              _owner(
+                'mel:2',
+                '2204 EVERGREEN DR',
+                33.0301,
+                -96.7001,
+                'Owner B',
+              ),
+            ],
+          },
+        ),
+      );
+      await area.ensure(50);
+      expect(area.ownersOnly, isTrue);
+      expect(area.records.map((r) => r.id), ['mel:1', 'mel:2']);
+      expect(area.records.first.ownerName, 'Owner A');
+      expect(area.isUnavailable, isFalse);
+      expect(area.contains('mel:2'), isTrue);
+      expect(area.extentMeters, isNotNull);
+      expect(area.sourceNote, isNull);
+    });
+
+    test('queued lookup: pending note, not "area not available"', () async {
+      final area = OwnerOverlayArea(
+        inner: _NoCells(),
+        owners: _owners(
+          () async => {
+            'records': [],
+            'limited': 'app_daily_limit',
+            'queued': true,
+          },
+        ),
+      );
+      await area.ensure(50);
+      expect(area.records, isEmpty);
+      expect(area.isUnavailable, isTrue);
+      expect(area.sourceNote, OwnerDiscoveryService.queuedMessage);
+    });
+
+    test('over Overture homes the note stays hidden', () async {
+      final area = OwnerOverlayArea(
+        inner: _Homes(homes),
+        owners: _owners(() async => {'records': [], 'queued': true}),
+      );
+      await area.ensure(50);
+      expect(area.ownersOnly, isFalse);
+      expect(area.sourceNote, isNull);
+    });
   });
 }

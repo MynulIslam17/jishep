@@ -774,11 +774,13 @@ class _MeetStep extends GetView<LocationSetupController> {
   }
 
   Widget _unavailable() {
+    final lookup = controller.lookupAfterSetup;
     return _StepLayout(
-      title: AppStrings.areaUnavailable,
-      subtitle:
-          "We don't have household data around this address yet. "
-          '${AppStrings.areaComingSoon}',
+      title: lookup ? AppStrings.neighborsOnTheWay : AppStrings.areaUnavailable,
+      subtitle: lookup
+          ? AppStrings.lookupAfterSetup
+          : "We don't have household data around this address yet. "
+                '${AppStrings.areaComingSoon}',
       body: [
         Container(
           key: const ValueKey('preview-unavailable'),
@@ -796,27 +798,33 @@ class _MeetStep extends GetView<LocationSetupController> {
                 color: AppColors.primaryNavy,
               ),
               SizedBox(height: 12.h),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                decoration: BoxDecoration(
-                  color: prayedGreenLight,
-                  borderRadius: BorderRadius.circular(20.r),
-                ),
-                child: Text(
-                  AppStrings.areasAvailable,
-                  textAlign: TextAlign.center,
-                  style: AppTypography.label(
-                    color: prayedGreen,
-                    fontSize: 12.5.sp,
-                    fontWeight: FontWeight.w700,
+              if (!lookup)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12.w,
+                    vertical: 6.h,
+                  ),
+                  decoration: BoxDecoration(
+                    color: prayedGreenLight,
+                    borderRadius: BorderRadius.circular(20.r),
+                  ),
+                  child: Text(
+                    AppStrings.areasAvailable,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.label(
+                      color: prayedGreen,
+                      fontSize: 12.5.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
               SizedBox(height: 12.h),
               Text(
-                'You can finish setup now. Your neighbors appear as soon as '
-                'your area is added. To change this address later, contact '
-                'support.',
+                lookup
+                    ? 'To change this address later, contact support.'
+                    : 'You can finish setup now. Your neighbors appear as '
+                          'soon as your area is added. To change this address '
+                          'later, contact support.',
                 textAlign: TextAlign.center,
                 style: AppTypography.body(
                   color: AppColors.textSecondary,

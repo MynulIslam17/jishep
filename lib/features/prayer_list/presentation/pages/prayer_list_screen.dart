@@ -79,7 +79,9 @@ class PrayerListScreen extends GetView<PrayerListController> {
       return SliverToBoxAdapter(
         child: AppNoticeCard(
           icon: Icons.travel_explore_rounded,
-          title: AppStrings.areaUnavailable,
+          title: controller.homeNote.value != null
+              ? AppStrings.neighborsOnTheWay
+              : AppStrings.areaUnavailable,
           message:
               controller.homeNote.value ??
               'Household data for the area around '

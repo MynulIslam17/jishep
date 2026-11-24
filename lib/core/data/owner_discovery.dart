@@ -358,8 +358,9 @@ class OwnerArea implements AreaSearch {
 /// prayer history) with the recorded owner added to every home that has a
 /// stored owner record at the same street address (within [maxMeters]).
 /// Homes without one keep their address as the title; an area with no
-/// stored owner records looks exactly like before. Owner records never add
-/// or replace homes, and nothing is ever guessed: the street address must
+/// stored owner records looks exactly like before. Where there are no
+/// Overture homes at all ([ownersOnly]), the owner records are the homes.
+/// Otherwise owner records never add or replace homes, and nothing is ever guessed: the street address must
 /// match exactly (after spelling out common abbreviations).
 class OwnerOverlayArea implements AreaSearch {
   OwnerOverlayArea({required this.inner, required this.owners});
@@ -452,8 +453,18 @@ class OwnerOverlayArea implements AreaSearch {
     );
   }
 
+  /// No Overture homes here (outside the loaded states): the Melissa owner
+  /// records are the neighborhood, so every US address gets homes and
+  /// owner names.
+  bool get ownersOnly => inner.isUnavailable;
+
+  /// The owner lookup's note (queued, still looking, why empty) when the
+  /// owner records are the neighborhood; none over Overture homes.
+  String? get sourceNote => ownersOnly ? owners.sourceNote : null;
+
   @override
   List<GeoRecord> get records {
+    if (ownersOnly) return owners.records;
     final homes = inner.records;
     final named = owners.records;
     if (!identical(homes, _cacheInner) || !identical(named, _cacheOwners)) {
@@ -469,13 +480,15 @@ class OwnerOverlayArea implements AreaSearch {
   bool get isComplete => inner.isComplete && owners.isComplete;
 
   @override
-  bool get isUnavailable => inner.isUnavailable;
+  bool get isUnavailable => ownersOnly && owners.isUnavailable;
 
   @override
-  double? get extentMeters => inner.extentMeters;
+  double? get extentMeters =>
+      ownersOnly ? owners.extentMeters : inner.extentMeters;
 
   @override
-  bool? contains(String id) => inner.contains(id);
+  bool? contains(String id) =>
+      ownersOnly ? owners.contains(id) : inner.contains(id);
 
   /// Owner lookups never block or fail the homes: [OwnerArea] catches its
   /// own errors (switched off, nothing stored, offline).

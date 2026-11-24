@@ -7,6 +7,13 @@ abstract final class AppStrings {
 
   /// States whose households are loaded (keep in step with the seeding).
   static const String areasAvailable = 'Available now: New Jersey, California';
+
+  /// Anywhere in the US with owner lookups on (Melissa): homes and owners
+  /// are looked up after the address is saved.
+  static const String neighborsOnTheWay = "We're finding your neighbors";
+  static const String lookupAfterSetup =
+      'After you finish setup, we look up the homes and owners around this '
+      'address. They appear on your home screen automatically.';
   static const String appTagline = 'Conectando hogares, alcanzando vidas.';
 
   // Primary location (chosen once at signup; blueprint §2.1).

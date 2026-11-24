@@ -488,7 +488,9 @@ class _AreaUnavailableCard extends StatelessWidget {
           ),
           SizedBox(height: 12.h),
           Text(
-            AppStrings.areaUnavailable,
+            reason != null
+                ? AppStrings.neighborsOnTheWay
+                : AppStrings.areaUnavailable,
             textAlign: TextAlign.center,
             style: AppTypography.heading(
               color: AppColors.textPrimary,

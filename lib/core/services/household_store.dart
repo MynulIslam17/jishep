@@ -505,7 +505,7 @@ class HouseholdStore extends GetxService {
     if (search is OwnerOverlayArea) _rememberOwners(search.owners.records);
     _homeIds = {for (final r in _homeRecords) r.id};
     homeUnavailable.value = search.isUnavailable;
-    homeSourceNote.value = search is OwnerArea ? search.sourceNote : null;
+    homeSourceNote.value = _noteOf(search);
     _homeKey = key;
   }
 
@@ -630,11 +630,17 @@ class HouseholdStore extends GetxService {
     }
   }
 
+  static String? _noteOf(AreaSearch search) => switch (search) {
+    OwnerArea s => s.sourceNote,
+    OwnerOverlayArea s => s.sourceNote,
+    _ => null,
+  };
+
   void _publishArea(AreaSearch search) {
     _records = search.records;
     _rememberOwners(_records);
     if (search is OwnerOverlayArea) _rememberOwners(search.owners.records);
-    areaSourceNote.value = search is OwnerArea ? search.sourceNote : null;
+    areaSourceNote.value = _noteOf(search);
     areaComplete.value = search.isComplete;
     areaUnavailable.value = search.isUnavailable;
     // Cells have no fixed range: show how far the households found reach.
