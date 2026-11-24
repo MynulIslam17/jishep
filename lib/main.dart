@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/di/app_binding.dart';
+import 'package:gps_cielo/core/services/app_check_bootstrap.dart';
 import 'package:gps_cielo/core/services/push/push_inbox.dart';
 import 'package:gps_cielo/core/services/push/push_messaging_client.dart';
 import 'package:gps_cielo/core/theme/app_theme.dart';
@@ -86,6 +87,8 @@ void main() async {
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Before any Firestore / Functions call, so every request carries a token.
+  await AppCheckBootstrap.activate();
   await _useLocalFunctionsIfAsked();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await SystemUiConfig.init();

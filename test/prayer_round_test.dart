@@ -9,7 +9,6 @@ import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/prayer_round.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/day_change.dart';
 import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_service.dart';
 
@@ -126,23 +125,6 @@ void main() {
         expect(repository.roundWrites, isEmpty);
       },
     );
-
-    test('searching elsewhere never changes the round', () async {
-      await store.bindUser(_user());
-      await settle();
-      final fixed = homeIds();
-      await store.searchAround(
-        const ResolvedLocation(
-          address: 'Elsewhere',
-          latitude: 32.75,
-          longitude: -117.1,
-          source: LocationSource.search,
-        ),
-      );
-      await settle();
-      expect(homeIds(), fixed);
-      expect(repository.roundWrites, hasLength(1));
-    });
 
     test(
       'moving the saved home gives the round the new neighborhood',

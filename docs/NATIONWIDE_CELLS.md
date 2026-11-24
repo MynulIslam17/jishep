@@ -1,5 +1,7 @@
 # Nationwide Overture cells: audit, estimate and checklist
 
+> See [CACHE_DESIGN.md](CACHE_DESIGN.md) / [GEOSPATIAL_ALGORITHMS.md](GEOSPATIAL_ALGORITHMS.md) for the current design (2026-11-24).
+
 Scope: keep the existing Firestore `cells/{prefix}` + Overture + Melissa
 design and scale it to the whole US. No new architecture. (2026-11-22)
 

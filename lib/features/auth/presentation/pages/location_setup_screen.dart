@@ -761,6 +761,7 @@ class _MeetStep extends GetView<LocationSetupController> {
           ],
         ],
         actions: [
+          const _FixedLocationNote(),
           AppPrimaryButton(
             key: const ValueKey('confirm-home'),
             label: 'Start praying',
@@ -814,8 +815,8 @@ class _MeetStep extends GetView<LocationSetupController> {
               SizedBox(height: 12.h),
               Text(
                 'You can finish setup now. Your neighbors appear as soon as '
-                'your area is added, or change your address any time in '
-                'Profile.',
+                'your area is added. To change this address later, contact '
+                'support.',
                 textAlign: TextAlign.center,
                 style: AppTypography.body(
                   color: AppColors.textSecondary,
@@ -828,6 +829,7 @@ class _MeetStep extends GetView<LocationSetupController> {
         ),
       ],
       actions: [
+        const _FixedLocationNote(),
         AppPrimaryButton(
           key: const ValueKey('confirm-home'),
           label: 'Finish setup',
@@ -988,6 +990,41 @@ class _LocationErrorNote extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown above the final confirmation: the primary location is chosen once
+/// (blueprint §2.1); later corrections go through support.
+class _FixedLocationNote extends StatelessWidget {
+  const _FixedLocationNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 10.h),
+      child: Row(
+        key: const ValueKey('fixed-location-note'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 16.r,
+            color: AppColors.textSecondary,
+          ),
+          SizedBox(width: 6.w),
+          Expanded(
+            child: Text(
+              AppStrings.primaryLocationSetupNote,
+              style: AppTypography.body(
+                color: AppColors.textSecondary,
+                fontSize: 12.sp,
+                height: 1.35,
+              ),
             ),
           ),
         ],

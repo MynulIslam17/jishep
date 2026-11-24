@@ -1,135 +1,139 @@
-# GPS PARA EL CIELO — architecture (Melissa-first, cache-first)
+# GPS PARA EL CIELO — architecture
 
-Status 2026-11-22: implemented and tested **locally**. Nothing deployed.
-Production Melissa calls and owner-name display stay OFF until Melissa's
-written licence and the client's approvals. See also
-`docs/MELISSA_CACHE_STRATEGY.md`, `docs/COST_MODEL.md`, `docs/APP_FLOW.md`,
-`docs/DEPLOY_FUNCTIONS.md`.
+Status **2026-11-24**. Part of the
+[master blueprint](GPS_PARA_EL_CIELO_MASTER_BLUEPRINT.md); diagrams in
+[diagrams/](diagrams/README.md). Production (`gps-para-el-cielo`) runs the
+2026-11-23 backend; everything marked **(2026-11-24, local)** is implemented
+and tested on emulators but **not deployed** (owner's choice: local only).
 
 ## 1. Overview
 
 ```
- Flutter app (iOS / Android)                     Firebase project gps-para-el-cielo
- ───────────────────────────                     ─────────────────────────────────────────
- Home / Neighborhood / Prayer List                Cloud Function discoverOwners (callable)
-   │  HouseholdStore (one neighborhood,             1 serveFromCache ── owner_scans (addresses)
-   │   in-memory for the session)                   │                └─ owner_properties (owners,
-   │                                                │                     exclusions)  [shared or
-   ├─ OwnerArea ── callable ───────────────────────►│                     users/{uid}/…]
-   │   (pending → retry; nothing stored →           2 complete? → return (0 credits)
-   │    Overture fallback)                          3 enabled? lease discovery_jobs/{area}
-   │                                                │   reserve credits (melissa_usage)
-   ├─ Overture cells (cells/{geohash})              │   Reverse GeoCoder ─┐ guard.js
-   │   setup preview, fallback                      │   Property (MAK) ───┤ (emulator: replay
-   │                                                │                     │  only, no network)
-   └─ users/{uid}/…  (private, rules)              4 store each answer, settle credits
-        household_status/{householdId}           Cloud Function cleanupDeletedUser (auth)
-        prayer_log/{roundId}_{householdId}          deletes users/{uid}/** + counters + locks
-        prayer_rounds/{roundId}
-        notifications, devices                   Melissa key: Secret Manager only
+ Flutter app (iOS / Android)                         Firebase project gps-para-el-cielo
+ ───────────────────────────                         ─────────────────────────────────────────────
+ Location setup (once, at signup)                    Firestore rules
+   address / GPS → pin → preview (Overture only)       users/{uid}: location fields locked once set
+   → users/{uid}.latitude/longitude/address              (2026-11-24, local)
+ Home / Neighborhood / Prayer List / Follow-up        Cloud Function discoverOwners (callable)
+   HouseholdStore (one neighborhood per session)        0 auth → saved home only: primary_locations/{uid}
+     │                                                    (pinned on first use; client point must be
+     ├─ Overture cells/{geohash}  (free, base list)        ≤ 250 m away)            (2026-11-24, local)
+     │                                                  1 serveFromCache ─ owner_scans + owner_properties
+     └─ OwnerOverlayArea → OwnerArea ── callable ──►    2 complete/empty → return, 0 credits
+          (owner names matched by street address)       3 paid wanted? enabled · verified · kill switch off
+                                                          · lease discovery_jobs · reserve melissa_usage
+ users/{uid}/… (private; rules)                           (2026-11-24 gates local; enabled=false in prod)
+   household_status, prayer_log, prayer_rounds,        4 Reverse GeoCoder + Property (guard.js) → store
+   notifications, devices                                 each answer, settle credits, release lease
+                                                      enrichHousehold, discoverNearby (budget 0 in prod)
+ Operator tools (functions/tool, Admin SDK, ADC)      cleanupDeletedUser (auth trigger)
+   melissa_ops (kill switch, usage report)            Secret Manager: MELISSA_CREDIT_LICENSE
+   migrate_cache_ttl (365-day policy)
+   location_admin (status, audited correction)
 ```
 
-Clients never read Melissa data from Firestore directly; owner records reach
-the app only through the function, which checks the licence switches.
+The neighborhood is **Overture-first**: the list of homes always comes from
+the free Overture address cells; Melissa owner records are an overlay that
+adds a recorded owner to homes at the same street address
+(`OwnerOverlayArea`, `lib/core/data/owner_discovery.dart`). Clients never
+read Melissa data from Firestore; it reaches the app only through
+`discoverOwners`.
 
 ## 2. Firestore data model
 
 | Path | Written by | Read by | Purpose |
 |---|---|---|---|
-| `users/{uid}` | owner | owner | profile, home point, `dailyPrayerTarget`, `prayerCycleStartedAt` |
-| `users/{uid}/household_status/{householdId}` | owner | owner | prayed (latest), visited, invited, follow-up, notes, private name |
-| `users/{uid}/prayer_log/{roundId}_{householdId}` | owner | owner | **append-only history**: one event per home per round |
-| `users/{uid}/prayer_rounds/{roundId}` | owner | owner | round membership (`householdIds`), start / completion |
-| `owner_scans/{id}` *(shared)* or `users/{uid}/owner_scans/{id}` | function | function | Reverse GeoCoder answers + proven coverage disc |
-| `owner_properties/mel:{MAK}` *(shared)* or `users/{uid}/owner_properties/…` | function | function | one Property answer per address (named or excluded) |
-| `discovery_jobs/{scope}_{geohash6}` | function | function | lease, idempotency, credits reserved / used |
-| `melissa_usage/{day}`, `…/month-YYYY-MM`, `…/{day}/users/{uid}` | function | function | estimated credits, hits / misses, per-user limits |
-| `users/{uid}/owner_areas/{key}` | (old function) | function | older per-area results; still served while valid, not written any more |
-| `cells/{geohash}` | admin seed | signed-in users | Overture addresses (fallback, preview) — unchanged |
+| `users/{uid}` | owner (rules) | owner | profile, **primary location** (`address`, `latitude`, `longitude`, `locationConfirmedAt`, `locationVersion`), `dailyPrayerTarget`, `radiusHomes`, `prayerCycleStartedAt` |
+| `users/{uid}/household_status/{householdId}` | owner | owner | prayed, visited, invited, follow-up, notes, private resident name |
+| `users/{uid}/prayer_log/{roundId}_{householdId}` | owner | owner | append-only prayer history |
+| `users/{uid}/prayer_rounds/{roundId}` | owner | owner | fixed round membership, start / completion |
+| `primary_locations/{uid}` **(2026-11-24, local)** | function / operator | function | the home the server searches around; pinned on first use; moved only by an audited correction |
+| `location_corrections/{id}` **(2026-11-24, local)** | operator tool | operator tool | immutable audit: who, when, from, to, reason |
+| `owner_scans/{scanId}` | function | function | Reverse GeoCoder answer + proven coverage disc (`coveredMeters`) |
+| `owner_properties/mel:{MAK}` | function | function | one Property answer per address (named or excluded) |
+| `discovery_jobs/{scope}_{geohash6}` | function | function | lease / idempotency / credits reserved & used |
+| `melissa_usage/{day}`, `month-YYYY-MM`, `state`, `{day}/users/{uid}` | function / operator | function / operator | estimated credits, counters, per-user limits, `paidDisabled` kill switch, out-of-credits pause |
+| `cells/{geohash}` | admin seed | signed-in users | Overture addresses (base list, setup preview) |
+| `households/{id}` | admin | signed-in users | legacy shared directory (demo data) |
+| `support_messages/{id}` | user | user (own) | Contact support (also used for location corrections) |
 
-Design choices: each property stored once (owner details never copied into
-user records); area documents hold addresses only (≈ 20 KB); user history
-is separate from shared geographic data; household ids (`mel:{MAK}`) are
-unchanged so existing statuses keep matching; `version: 1` on new documents.
+Shared property data and private prayer activity never mix: owner records
+are stored once (`mel:{MAK}`), never copied into user documents; household
+ids are stable (`mel:{MAK}` / Overture ids), so a cache refresh cannot create
+duplicate prayer records. Details: [CACHE_DESIGN.md](CACHE_DESIGN.md).
 
-## 3. Geospatial algorithm
+## 3. Location model (blueprint §2.1)
 
-See `MELISSA_CACHE_STRATEGY.md` §3: geohash-5 cell covering (boundary-safe),
-hash-map dedupe, haversine distances, bounded nearest-K walk with chunked
-reads, coverage radius of the union of scan discs, and the completeness
-states `complete / partial / empty / expired / unknown / legacy`. A result
-is called the nearest 50 only when coverage proves it.
+1. Chosen once in Location setup (`LocationSetupController.confirmLocation`
+   → `AuthService.updateLocation`), with `locationConfirmedAt` (server
+   time) and `locationVersion: 1`; falls back to the plain fields if old
+   rules are live.
+2. Locked: the rules refuse any client change of the location fields once
+   latitude/longitude exist (`locationChangeAllowed`). Existing users with
+   coordinates are locked automatically (no migration).
+3. Server-authoritative: `discoverOwners` ignores client coordinates except
+   to reject them (> 250 m from the pinned home → `location_not_authorized`).
+4. Corrections: support only, `functions/tool/location_admin.js correct`
+   (operator + reason, ≤ 2 per user per 365 days, audited).
+5. The app has no location editor and no way to view another place
+   (Profile shows the home read-only; "Look around another place" was
+   removed 2026-11-24 because the client approved signup-only location).
+   Every screen shows the saved home's neighborhood.
 
-## 4. Concurrency and credit protection
+## 4. Geospatial algorithm
+
+Geohash-5 cell covering (boundary-safe), hash-map dedupe by id, parcel
+dedupe, haversine distances, nearest-first walk with chunked `getAll`
+reads, coverage radius of the union of scan discs, completeness states.
+See [GEOSPATIAL_ALGORITHMS.md](GEOSPATIAL_ALGORITHMS.md).
+
+## 5. Concurrency and credit protection
 
 One paid job per area (lease + double-checked read), atomic reservation
-against per-request (920), per-user (5/day), daily (2,000) and monthly
-(20,000) budgets, unused credits returned, partial work stored as it
-arrives, 6 h pause on out-of-credits, negative cache 90 days, bounded
-retries. Tested: 100 simultaneous users → 1 paid discovery.
+against per-request / per-user / daily / monthly / app-wide budgets, unused
+credits returned, partial work stored as it arrives, out-of-credits pause,
+**kill switch, verified-account gate, server-side location gate
+(2026-11-24, local)**. Budget-limited answers return stored records with
+`limited: <reason>` instead of an error (no retry storms). Tested: 100
+simultaneous users → 1 paid discovery. See
+[MELISSA_COST_CONTROL.md](MELISSA_COST_CONTROL.md).
 
-## 5. Prayer rounds and history
+## 6. Prayer rounds and history
 
-- **Fixed membership.** A round's homes are recorded once in
-  `prayer_rounds/{roundId}.members` (id, point, street, city — never owner
-  names; plus `center` and `target` = Settings count). `HouseholdStore`
-  shows exactly these homes for the whole round, using fresher details when
-  loaded. A changed cache answer, a Melissa result arriving later, or a
-  search elsewhere never changes them. Only explicit user actions do:
-  moving the saved home > 100 m (the round gets the new neighborhood, same
-  round id) or a new Settings count (existing homes kept, nearest added or
-  farthest dropped). A round is fixed only from a settled answer
-  (`OwnerArea.isSettled`: not pending, not a network/server error).
-- **Same homes every round.** Starting a round copies the current round's
-  members (`HouseholdStore.nextRound`); no lookup, no cache read.
-- Day plan unchanged: today's goal (3/5/10/15) nearest-first among homes not
-  prayed this round; "today" by the phone's local date. Home and the Prayer
-  List rebuild together at midnight and when the app is reopened on a later
-  day (`DayChangeWatcher`).
-- Praying writes the status, then `prayer_log/{roundId}_{householdId}`
-  (idempotent id; a new round never overwrites history). The history write
-  never fails the prayer (old rules deny it). Un-praying deletes only this
-  round's event.
-- Starting a round (`UserRepository.startPrayerRound`): round documents
-  (close previous, record new members) best-effort, then
-  `prayerCycleStartedAt`. Visits, invitations, follow-ups untouched.
-- Lifetime count: Profile "My impact" → **Prayers** =
-  max(`prayer_log` count, homes prayed), kept current locally. The max
-  covers prayers saved before the history existed.
-- Rules compatibility: `functions/tool/check_rules_compat.js` (read-only;
-  emulator by default) lists existing documents the new rules would block.
+- Fixed membership per round in `prayer_rounds/{roundId}.members`
+  (id, point, street, city — never owner names). A cache change, a late
+  Melissa answer or a refresh never changes them.
+- Starting a round copies the current members; no lookup, no credits.
+- Praying writes the status, then `prayer_log/{roundId}_{householdId}`;
+  a new round never overwrites history.
+- Lifetime count: max(`prayer_log` count, homes prayed).
+- A support correction of the home starts the new neighborhood on the next
+  app open; history, statuses and follow-ups are untouched.
 
-## 6. Name display
+## 7. Name display
 
-1. the user's own name for the home (private) → 2. recorded owner, labelled
-"Property Owner (Public Record)", "The owner may not live here.", company /
-trust tag, second owner in the details → 3. street address → 4. "Neighbor"
-only with no address. Owner names appear only when the server allows them.
+1. the user's private name for the home → 2. recorded owner
+("Property Owner (Public Record)", "The owner may not live here.") →
+3. street address → 4. "Unknown Resident" only without an address.
 
-## 7. Environments and switches
+## 8. Environments and switches
 
-| | Tests | Local emulator | Production |
+| | Tests | Local emulator | Production (deployed 2026-11-23) |
 |---|---|---|---|
-| Melissa network | blocked (`test/no_network.js`) | replay only (`guard.js`) | real, only if switched on |
-| `MELISSA_ALLOW_OWNER_NAMES` | per test | true (`.env.local`) | **false** |
-| `MELISSA_OWNER_DISCOVERY_ENABLED` | per test | **false** (cache-only) | **false** |
-| `MELISSA_OWNER_SHARED_CACHE` | per test | false | **false** |
-| App `MELISSA_OWNERS` | per test | `--dart-define=MELISSA_OWNERS=true` | not set |
-| Data | demo project ids | `.emulator-data/` (git-ignored) via `tool/emulators.sh` | none seeded |
+| Melissa network | blocked (`test/no_network.js`) | replay only (`guard.js`) | real, only if a paid switch is on |
+| `MELISSA_GLOBAL_DAILY_CREDITS` | per test | 0 | **0** (no paid call possible) |
+| `MELISSA_OWNER_DISCOVERY_ENABLED` | per test | false | **false** |
+| `MELISSA_ALLOW_OWNER_NAMES` | per test | true | **true** (owner's direction 2026-11-23) |
+| `MELISSA_OWNER_SHARED_CACHE` | per test | true | **true** |
+| `MELISSA_CACHE_DAYS` | per test | 365 | 30 deployed → **365 in the env file, not deployed** |
+| `MELISSA_OWNER_REQUIRE_VERIFIED` / `…_LOCATION_TOLERANCE_M` | per test | true / 250 | not deployed |
+| `MELISSA_REQUIRE_APP_CHECK` (soft) | per test | false (emulator) | not deployed → **true** in the env file |
+| `ENFORCE_APP_CHECK` (hard) | — | false | **false** (until builds without App Check are retired) |
+| App `MELISSA_OWNERS` | per test | true | true in release builds |
 
-## 8. Production deployment and migration plan (needs approval)
+## 9. Deployment
 
-1. Melissa written licence (display, storage period, sharing, negative
-   cache, non-FCRA use).
-2. Client: enable APIs, grant roles (`DEPLOY_FUNCTIONS.md` §1).
-3. Deploy rules (adds `prayer_log`, `prayer_rounds`, server-only Melissa
-   collections) — test first with `tool/firestore_rules_test`.
-4. Deploy functions with discovery OFF (cache-only; nothing stored yet in
-   production, so every area is `unknown` → Overture fallback).
-5. App release with `MELISSA_OWNERS=true` only after 1.
-6. Turn on `MELISSA_OWNER_DISCOVERY_ENABLED` with budgets agreed by the
-   client; turn on `MELISSA_OWNER_SHARED_CACHE` only if licensed.
-7. Migration: none destructive. New collections are additive; old
-   `owner_areas` documents are still served until they expire. Household
-   ids are unchanged. The local pilot data is **not** uploaded to
-   production.
+One command, prepared and not run: `tool/deploy_blueprint.sh
+--approve=gps-para-el-cielo` (backups → dry run → rules + indexes →
+functions → 365-day migration → live check). See
+[PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md).

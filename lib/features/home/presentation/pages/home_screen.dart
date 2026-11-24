@@ -10,7 +10,7 @@ import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/features/home/presentation/controllers/home_controller.dart';
 import 'package:gps_cielo/features/main_nav/presentation/controllers/main_nav_controller.dart';
 import 'package:gps_cielo/features/main_nav/presentation/models/main_nav_destination.dart';
-import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/primary_location_help.dart';
 import 'package:gps_cielo/routes/app_routes.dart';
 import 'package:gps_cielo/shared/widgets/bottom_sheets/household_detail_bottom_sheet.dart';
 import 'package:gps_cielo/shared/widgets/household/household_row.dart';
@@ -147,13 +147,22 @@ class HomeScreen extends GetView<HomeController> {
 
     final Widget content;
     if (!controller.hasHome.value) {
+      // Normally unreachable: users without a primary location are sent to
+      // location setup at sign-in (AuthController).
       content = AppNoticeCard(
         icon: Icons.home_outlined,
-        title: 'Set your home address',
+        title: 'Finish setting up your neighborhood',
         message:
-            'Your neighborhood is the homes nearest your home. Add your '
-            'address to meet your neighbors.',
-        actions: [ChangeHomeAddress.button()],
+            'Your neighborhood is the homes nearest the address you choose '
+            'when you set up your account.',
+        actions: [
+          OutlinedButton.icon(
+            key: const ValueKey('finish-location-setup'),
+            onPressed: () => Get.offAllNamed(AppRoutes.locationSetup),
+            icon: const Icon(Icons.location_on_outlined, size: 16),
+            label: const Text('Set up neighborhood'),
+          ),
+        ],
       );
     } else if (homes.isEmpty && controller.isLoading.value) {
       content = Padding(
@@ -181,8 +190,10 @@ class HomeScreen extends GetView<HomeController> {
       content = AppNoticeCard(
         icon: Icons.travel_explore_rounded,
         title: 'No households near your home yet',
-        message: 'Try changing your home address.',
-        actions: [ChangeHomeAddress.button()],
+        message:
+            "We haven't found homes around your neighborhood yet. "
+            '${AppStrings.primaryLocationHelp}',
+        actions: [PrimaryLocationHelp.button()],
       );
     } else {
       content = Column(
@@ -517,7 +528,7 @@ class _AreaUnavailableCard extends StatelessWidget {
             ),
           ],
           SizedBox(height: 14.h),
-          ChangeHomeAddress.button(),
+          PrimaryLocationHelp.button(),
         ],
       ),
     );

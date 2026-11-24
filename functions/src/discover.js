@@ -8,7 +8,7 @@
 // each address is also checked with Personator (3 credits) and businesses
 // are dropped. Nothing is invented: fewer results are returned as they are.
 
-const { overGlobalLimit } = require('./budget');
+const { overGlobalLimit, paidDisabled } = require('./budget');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { CHECK_CREDITS, checkAddress } = require('./melissa');
 
@@ -20,6 +20,8 @@ const MILE_METERS = 1609.344;
 
 const GAP_DEFAULTS = {
   enabled: false,
+  // Paid lookups need a valid Firebase App Check token (request.app).
+  requireAppCheck: true,
   // Gap fills one user may run per UTC day.
   perUserDaily: 3,
   // Credits all gap fills together may spend per UTC day.
@@ -144,6 +146,7 @@ async function reserveGap(db, uid, now, cfg, credits) {
   const state = db.collection('melissa_usage').doc('state');
   await db.runTransaction(async (tx) => {
     const [d, u, st] = await Promise.all([tx.get(day), tx.get(user), tx.get(state)]);
+    if (paidDisabled(st)) throw new DiscoverError('resource-exhausted', 'paid_disabled');
     const paused = st.get('outOfCreditsAt');
     if (paused && now.getTime() - paused.toMillis() < cfg.outOfCreditsPauseMs) {
       throw new DiscoverError('resource-exhausted', 'out_of_credits');
@@ -176,7 +179,7 @@ async function settle(db, reservation, unusedCredits, { undoFill = false } = {})
  * Returns `{records, source, cached, coverage}` with up to (50 - have)
  * Melissa addresses nearest the point. Throws DiscoverError.
  */
-async function discoverNearby({ db, uid, data, key, now = new Date(), config = {}, reverse = reverseLookup, check = checkAddress, log = () => {} }) {
+async function discoverNearby({ db, uid, data, key, now = new Date(), config = {}, appVerified = false, reverse = reverseLookup, check = checkAddress, log = () => {} }) {
   const cfg = { ...GAP_DEFAULTS, ...config };
   if (!cfg.enabled) throw new DiscoverError('failed-precondition', 'gap_filler_disabled');
   if (!uid) throw new DiscoverError('unauthenticated', 'sign_in_required');
@@ -194,6 +197,10 @@ async function discoverNearby({ db, uid, data, key, now = new Date(), config = {
     }
   }
 
+  if (cfg.requireAppCheck && !appVerified) {
+    log({ event: 'gap', outcome: 'denied', reason: 'app_check_required' });
+    throw new DiscoverError('failed-precondition', 'app_check_required');
+  }
   const recs = Math.min(100, need + cfg.buffer);
   const verifyCost = cfg.verifyResidential ? recs * CHECK_CREDITS : 0;
   const reserved = recs * REVERSE_CREDITS_PER_RECORD + verifyCost;

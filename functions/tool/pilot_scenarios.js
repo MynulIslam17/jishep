@@ -10,7 +10,17 @@ const path = require('path');
 const { melissaFetch } = require('../src/recorder');
 const { reverseLookup } = require('../src/discover');
 const { lookupProperty } = require('../src/melissa');
-const { discoverOwners } = require('../src/owners');
+const owners = require('../src/owners');
+
+// discoverOwners searches only around the caller's SAVED home: each simulated
+// user gets users/{uid} at the point it represents (local/emulator only).
+async function discoverOwners(args) {
+  const { db, uid, data } = args;
+  const home = { latitude: data.latitude, longitude: data.longitude };
+  await db.doc(`users/${uid}`).set(home, { merge: true });
+  await db.doc(`primary_locations/${uid}`).set(home);
+  return owners.discoverOwners({ verified: true, appVerified: true, ...args });
+}
 const geo = require('../src/property_cache');
 
 const PILOT = { latitude: 32.6435, longitude: -117.0185 };

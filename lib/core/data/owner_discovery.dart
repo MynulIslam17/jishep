@@ -13,8 +13,19 @@ class OwnerDiscoveryResult {
     required this.cached,
     this.completeness = 'complete',
     this.pending = false,
+    this.limited,
+    this.queued = false,
     this.stats = const {},
   });
+
+  /// The server could not look this area up now (lookups paused for the
+  /// day or month) and has queued it: the homes are added automatically
+  /// once lookups resume. No completion time is known or promised.
+  final bool queued;
+
+  /// Why the server served only stored records instead of looking up the
+  /// rest (budget, kill switch, unverified account), or null.
+  final String? limited;
 
   /// Named residential properties, nearest first (never placeholders).
   final List<GeoRecord> records;
@@ -88,6 +99,8 @@ class OwnerDiscoveryService {
       cached: data['cached'] == true,
       completeness: data['completeness']?.toString() ?? 'complete',
       pending: data['pending'] == true,
+      limited: data['limited']?.toString(),
+      queued: data['queued'] == true,
       stats: {
         if (stats is Map)
           for (final e in stats.entries)
@@ -159,7 +172,27 @@ class OwnerDiscoveryService {
     'unknown',
     'expired',
     'outside_us',
+    // Blueprint 2026-11-24 (server-side location + paid-discovery gates).
+    'location_not_authorized',
+    'no_primary_location',
+    'unverified',
+    'paid_disabled',
+    'app_monthly_limit',
+    'request_budget',
+    // No valid Firebase App Check token (stored data is still served).
+    'app_check',
+    'app_check_required',
   }.contains(reason);
+
+  /// The neighborhood is queued and nothing is stored yet. Deliberately no
+  /// time: when it finishes depends on the lookups available.
+  static const queuedMessage =
+      "We're gathering the homes in your neighborhood. They'll appear here "
+      'automatically when ready.';
+
+  /// Some homes are shown and more are queued.
+  static const queuedMoreMessage =
+      'More homes in your neighborhood will be added automatically.';
 
   /// User-facing text for a backend error reason.
   static String messageFor(String? reason) => switch (reason) {
@@ -176,6 +209,18 @@ class OwnerDiscoveryService {
     'legacy' ||
     'complete' => 'No stored property owner records near this point yet.',
     'outside_us' => 'Homes are available only in the United States.',
+    // Plain words, no internals (credits, budgets, switches) for users.
+    'location_not_authorized' =>
+      'Neighbors are shown for your own neighborhood only.',
+    'no_primary_location' =>
+      'Finish setting up your neighborhood to see your neighbors.',
+    'unverified' =>
+      'Verify your email to load more homes in your neighborhood.',
+    'paid_disabled' ||
+    'app_check' ||
+    'app_check_required' ||
+    'app_monthly_limit' ||
+    'request_budget' => 'More homes for this area will be added soon.',
     _ => "Couldn't look up property owners right now.",
   };
 }
@@ -237,6 +282,9 @@ class OwnerArea implements AreaSearch {
     final reason = unavailableReason;
     if (reason != null) return reason;
     if (result?.pending ?? false) return 'Still looking up this area';
+    if (result?.queued ?? false) {
+      return OwnerDiscoveryService.queuedMoreMessage;
+    }
     return null;
   }
 
@@ -290,7 +338,9 @@ class OwnerArea implements AreaSearch {
       result = r;
       _named = r.records;
       if (r.records.isEmpty && !r.pending) {
-        unavailableReason = OwnerDiscoveryService.messageFor(r.completeness);
+        unavailableReason = r.queued
+            ? OwnerDiscoveryService.queuedMessage
+            : OwnerDiscoveryService.messageFor(r.limited ?? r.completeness);
       }
     } on FirebaseFunctionsException catch (e) {
       unavailableReason = OwnerDiscoveryService.messageFor(e.message);

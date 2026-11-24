@@ -24,7 +24,7 @@ before(() => {
   db = getFirestore();
 });
 beforeEach(async () => {
-  for (const c of ['users', 'melissa_usage', 'owner_areas', 'owner_scans', 'owner_properties', 'discovery_jobs']) {
+  for (const c of ['primary_locations', 'users', 'melissa_usage', 'owner_areas', 'owner_scans', 'owner_properties', 'discovery_jobs']) {
     await db.recursiveDelete(db.collection(c));
   }
 });
@@ -71,9 +71,20 @@ const propertyFrom = (bodies) => {
   f.calls = [];
   return f;
 };
-const run = (over = {}) => discoverOwners({
-  db, uid: 'alice', data: { ...POINT }, key: 'k', now: NOW, config: ON, ...over,
-});
+// The server searches only around the caller's SAVED home, so every caller
+// gets a users/{uid} home at the point it asks about (noHome: none saved).
+const run = async ({ noHome = false, ...over } = {}) => {
+  const uid = 'uid' in over ? over.uid : 'alice';
+  const data = over.data || { ...POINT };
+  if (uid && !noHome && data.latitude != null) {
+    const home = { latitude: data.latitude, longitude: data.longitude };
+    await db.doc(`users/${uid}`).set(home, { merge: true });
+    await db.doc(`primary_locations/${uid}`).set(home); // "this user lives here"
+  }
+  return discoverOwners({
+    db, uid: 'alice', data: { ...POINT }, key: 'k', now: NOW, config: ON, verified: true, appVerified: true, ...over,
+  });
+};
 const rejectsWith = (p, reason) => assert.rejects(p, (e) => e instanceof OwnerError && e.reason === reason);
 const usage = async () => (await db.doc(`melissa_usage/${DAY}`).get()).data() || {};
 
@@ -220,16 +231,20 @@ test('limits: per request, per user per day, app per day and per month', async (
   const far = { latitude: POINT.latitude + 0.05, longitude: POINT.longitude };
   const cfg = { ...ON, perUserDaily: 1 };
   await run({ config: cfg, reverse: reverseWith([address(1)]), property: propertyFrom({}) });
-  await rejectsWith(run({ config: cfg, data: far, reverse: reverseWith([]) }), 'user_daily_limit');
-  await rejectsWith(run({ uid: 'bob', config: { ...ON, dailyCredits: 100 }, reverse: reverseWith([]) }), 'app_daily_limit');
-  await rejectsWith(run({ uid: 'carol', config: { ...ON, monthlyCredits: 100 }, reverse: reverseWith([]) }), 'app_monthly_limit');
+  assert.equal((await run({ config: cfg, data: far, reverse: reverseWith([]) })).limited, 'user_daily_limit');
+  // Over a limit with nothing stored: an empty result that says why (no throw,
+  // no Melissa call), so the app shows "not available yet" instead of retrying.
+  const overDay = reverseWith([]);
+  assert.equal((await run({ uid: 'bob', config: { ...ON, dailyCredits: 100 }, reverse: overDay })).limited, 'app_daily_limit');
+  assert.equal((await run({ uid: 'carol', config: { ...ON, monthlyCredits: 100 }, reverse: overDay })).limited, 'app_monthly_limit');
+  assert.equal(overDay.calls.length, 0);
   // A small per-request ceiling shrinks the lookups instead of refusing.
   const prop = propertyFrom({});
   const dan = await run({ uid: 'dan', config: { ...ON, perRequestMaxCredits: 200 + 5 * 9 },
     reverse: reverseWith(Array.from({ length: 30 }, (_, i) => address(i + 1))), property: prop });
   assert.equal(prop.calls.length, 5);
   assert.ok(dan.credits <= 245);
-  await rejectsWith(run({ uid: 'eve', config: { ...ON, perRequestMaxCredits: 150 }, reverse: reverseWith([]) }), 'request_budget');
+  assert.equal((await run({ uid: 'eve', config: { ...ON, perRequestMaxCredits: 150 }, reverse: reverseWith([]) })).limited, 'request_budget');
 });
 
 test('out of credits: stops, pauses, keeps the finished work, serves it from the cache', async () => {
@@ -239,7 +254,7 @@ test('out of credits: stops, pauses, keeps the finished work, serves it from the
   assert.equal(r.stopped, 'out_of_credits');
   assert.equal(r.records.length, 2);
   assert.ok((await db.doc('melissa_usage/state').get()).get('outOfCreditsAt'));
-  await rejectsWith(run({ uid: 'bob', reverse: reverseWith(records), property: propertyFrom({}) }), 'out_of_credits');
+  assert.equal((await run({ uid: 'bob', reverse: reverseWith(records), property: propertyFrom({}) })).limited, 'out_of_credits');
   // Alice keeps her 2 homes while paused; nothing is called.
   const property = propertyFrom({});
   const again = await run({ property });
@@ -309,7 +324,8 @@ test('a lease held by a crashed instance expires; waiting requests get pending',
 
 test('expired cache: names are never served, and nothing is refreshed without permission', async () => {
   await run({ reverse: reverseWith([address(1), address(2)]), property: propertyFrom({}) });
-  const later = new Date(NOW.getTime() + 31 * 864e5);
+  // Past the 365-day freshness window (MELISSA_CACHE_DAYS).
+  const later = new Date(NOW.getTime() + 366 * 864e5);
   const reverse = reverseWith([]);
   const r = await run({ now: later, config: { enabled: false, allowOwnerNames: true }, reverse });
   assert.equal(r.completeness, 'expired');

@@ -21,4 +21,13 @@ function overGlobalLimit(daySnap, credits, limit) {
   return spentToday(daySnap) + credits > limit;
 }
 
-module.exports = { spentToday, overGlobalLimit };
+/**
+ * Administrative kill switch: `melissa_usage/state.paidDisabled == true`
+ * stops every paid Melissa request at once, with no redeploy (cached data is
+ * still served). Set and cleared with `node tool/melissa_ops.js kill|unkill`.
+ */
+function paidDisabled(stateSnap) {
+  return Boolean(stateSnap && stateSnap.exists !== false && stateSnap.get && stateSnap.get('paidDisabled') === true);
+}
+
+module.exports = { spentToday, overGlobalLimit, paidDisabled };

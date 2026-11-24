@@ -3,7 +3,7 @@ class AppConfig {
 
   static const String environment = 'development';
   static const bool isProduction = false;
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.2';
   static const int buildNumber = 1;
 
   // --- Phone sign-in ---

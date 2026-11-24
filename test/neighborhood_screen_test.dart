@@ -5,7 +5,6 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/pages/neighborhood_screen.dart';
@@ -102,38 +101,12 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the header search opens the look-around sheet', (tester) async {
-    await pump(tester);
-    await tester.tap(find.byKey(const ValueKey('neighborhood-search')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('neighborhood-search-sheet')),
-      findsOneWidget,
-    );
-    expect(find.text('Look around another place'), findsOneWidget);
-    expect(find.byKey(const ValueKey('search-back-to-home')), findsNothing);
-  });
-
-  testWidgets('looking around shows a banner with the way back home', (
+  testWidgets('no search for other places (signup-only location)', (
     tester,
   ) async {
-    final c = await pump(tester);
-    await store.searchAround(
-      const ResolvedLocation(
-        address: 'Uttara, Dhaka',
-        latitude: 23.8759,
-        longitude: 90.3795,
-        source: LocationSource.search,
-      ),
-    );
-    c.centerLatitude.value = null; // still no tiles
-    await tester.pump();
-    expect(find.byKey(const ValueKey('viewing-banner')), findsOneWidget);
-    expect(find.text('Viewing near Uttara, Dhaka'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('back-to-home')));
-    await tester.pumpAndSettle();
-    expect(c.isTemporary.value, isFalse);
+    await pump(tester);
+    expect(find.byKey(const ValueKey('neighborhood-search')), findsNothing);
+    expect(find.text('Look around another place'), findsNothing);
     expect(find.byKey(const ValueKey('viewing-banner')), findsNothing);
   });
 }

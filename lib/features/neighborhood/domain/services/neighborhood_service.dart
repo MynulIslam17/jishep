@@ -1,16 +1,13 @@
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 
-/// The Neighborhood tab: the nearest N homes around the saved home, or
-/// around a place the user looks at for a while (a temporary search).
+/// The Neighborhood tab: the nearest N homes around the saved primary
+/// location (the only place the app searches; blueprint §2.1).
 class NeighborhoodService {
   final HouseholdStore _store;
-  final LocationService? _locationService;
 
-  NeighborhoodService(this._store, {LocationService? locationService})
-    : _locationService = locationService;
+  NeighborhoodService(this._store);
 
   Rxn<SearchCenter> get center => _store.center;
 
@@ -26,29 +23,6 @@ class NeighborhoodService {
   RxBool get isLoading => _store.isLoading;
 
   Future<void> refreshHouseholds() => _store.refreshHouseholds();
-
-  /// Searches around [address] (or [location] when the coordinates are
-  /// already known from a suggestion or GPS). Temporary: the saved home
-  /// address is not changed.
-  Future<ResolvedLocation> searchNeighborhood(
-    String address, {
-    ResolvedLocation? location,
-  }) async {
-    location ??= await _locations.resolveAddress(address);
-    await _store.searchAround(location);
-    return location;
-  }
-
-  /// Goes back to the saved home address.
-  Future<void> useSavedLocation() => _store.useSavedLocation();
-
-  Future<ResolvedLocation> currentLocation() => _locations.currentLocation();
-
-  LocationService get _locations {
-    final service = _locationService;
-    if (service == null) throw StateError('No LocationService');
-    return service;
-  }
 
   Future<void> togglePray(String householdId) {
     return _store.togglePray(householdId);

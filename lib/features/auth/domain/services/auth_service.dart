@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
@@ -201,8 +202,10 @@ class AuthService {
     return _userRepository.createUser(profile);
   }
 
-  /// Saves the home chosen in Location setup with the search range and
-  /// daily prayer goal picked there.
+  /// Saves the PRIMARY location chosen in Location setup (once, at signup;
+  /// blueprint §2.1) with the search range and daily prayer goal picked
+  /// there. The Firestore rules refuse any later client change of the
+  /// location fields; support corrects a wrong address.
   Future<void> updateLocation({
     required String address,
     required double latitude,
@@ -210,11 +213,11 @@ class AuthService {
     required double searchRadiusKm,
     required int dailyPrayerTarget,
     String? prayerIntention,
-  }) {
+  }) async {
     final user = _authRepository.currentUser;
     if (user == null) throw const AppException('You are not signed in.');
     final intention = UserModel.cleanIntention(prayerIntention);
-    return _userRepository.updateFields(user.uid, {
+    final fields = <String, dynamic>{
       'address': address,
       'latitude': latitude,
       'longitude': longitude,
@@ -222,7 +225,20 @@ class AuthService {
       'dailyPrayerTarget': dailyPrayerTarget,
       // Only when chosen (needs the rules that allow `prayerIntention`).
       'prayerIntention': ?intention,
-    });
+    };
+    try {
+      await _userRepository.updateFields(user.uid, {
+        ...fields,
+        'locationConfirmedAt': FieldValue.serverTimestamp(),
+        'locationVersion': 1,
+      });
+    } on FirebaseException catch (e) {
+      // Rules deployed before 2026-11-24 do not know the confirmation
+      // fields: save the location without them (it is still locked once
+      // saved by the newer rules).
+      if (e.code != 'permission-denied') rethrow;
+      await _userRepository.updateFields(user.uid, fields);
+    }
   }
 
   Future<void> signOut() => _authRepository.signOut();

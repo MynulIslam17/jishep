@@ -5,9 +5,7 @@ import 'package:get/get.dart';
 import 'package:gps_cielo/core/config/feature_flags.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
-import 'package:gps_cielo/core/services/address_suggestion_service.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
-import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/features/neighborhood/domain/services/neighborhood_service.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
@@ -38,30 +36,6 @@ class FakeUserRepository implements UserRepository {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _SylhetPhoton implements AddressSearchProvider {
-  @override
-  String get attribution => '';
-
-  @override
-  Future<AddressSuggestion?> reverse(double latitude, double longitude) async =>
-      null;
-
-  @override
-  Future<List<AddressSuggestion>> search(
-    String query, {
-    double? nearLatitude,
-    double? nearLongitude,
-    int limit = 5,
-  }) async => const [
-    AddressSuggestion(
-      title: 'Zindabazar',
-      subtitle: 'Sylhet',
-      latitude: 24.896,
-      longitude: 91.868,
-    ),
-  ];
 }
 
 UserModel user({
@@ -110,7 +84,6 @@ void main() {
     await store.bindUser(user());
     expect(repository.fetches.single.latitude, 23.7465);
     expect(repository.fetches.single.radiusKm, 5);
-    expect(store.center.value?.isTemporary, isFalse);
     expect(store.center.value?.label, 'Dhanmondi, Dhaka');
   });
 
@@ -138,72 +111,6 @@ void main() {
     expect(store.center.value, isNull);
   });
 
-  test(
-    'a temporary search moves the center without touching the profile',
-    () async {
-      await store.bindUser(user());
-      await store.searchAround(uttara);
-
-      expect(repository.fetches.last.latitude, 23.8759);
-      expect(store.isTemporarySearch, isTrue);
-      expect(store.center.value?.label, 'Uttara, Dhaka');
-      expect(store.center.value?.isTemporary, isTrue);
-    },
-  );
-
-  test(
-    'profile updates keep the temporary search; a new range reloads it',
-    () async {
-      await store.bindUser(user());
-      await store.searchAround(uttara);
-      final before = repository.fetches.length;
-
-      await store.bindUser(user()); // e.g. name changed
-      expect(repository.fetches.length, before);
-      expect(store.isTemporarySearch, isTrue);
-
-      final reloadFrom = repository.fetches.length;
-      await store.bindUser(user(rangeKm: 10));
-      final reloads = repository.fetches.skip(reloadFrom).toList();
-      // The search on screen (Uttara) and the home neighborhood both reload.
-      expect(
-        reloads.map((f) => (f.latitude, f.radiusKm)),
-        containsAll([(23.8759, 10.0), (23.7465, 10.0)]),
-      );
-      expect(store.isTemporarySearch, isTrue);
-    },
-  );
-
-  test('useSavedLocation returns to home', () async {
-    await store.bindUser(user());
-    await store.searchAround(uttara);
-    await store.useSavedLocation();
-    expect(store.isTemporarySearch, isFalse);
-    expect(repository.fetches.last.latitude, 23.7465);
-  });
-
-  test('saving a new home address discards the temporary search', () async {
-    await store.bindUser(user());
-    await store.searchAround(uttara);
-    store.discardTemporarySearch();
-    await store.bindUser(user(latitude: 22.3260, longitude: 91.8120));
-    expect(store.isTemporarySearch, isFalse);
-    expect(repository.fetches.last.latitude, 22.3260);
-  });
-
-  test('switching accounts clears the previous temporary search', () async {
-    await store.bindUser(user());
-    await store.searchAround(uttara);
-    await store.bindUser(user(id: 'bob'));
-    expect(store.isTemporarySearch, isFalse);
-    expect(repository.fetches.last.latitude, 23.7465);
-  });
-
-  test('searchAround is ignored when signed out', () async {
-    await store.searchAround(uttara);
-    expect(repository.fetches, isEmpty);
-  });
-
   test('status writes go to the signed-in user only', () async {
     await store.bindUser(user());
     store.households.add(
@@ -216,31 +123,6 @@ void main() {
     );
     await store.togglePray('demo_bd_001');
     expect(repository.savedStatuses.single.uid, 'alice');
-  });
-
-  // NeighborhoodService has no UserRepository at all, so looking around
-  // (search or GPS) can never write the profile.
-  NeighborhoodService lookAround() => NeighborhoodService(
-    store,
-    locationService: LocationService(
-      addressSearch: AddressSuggestionService(
-        provider: _SylhetPhoton(),
-        minInterval: Duration.zero,
-      ),
-    ),
-  );
-
-  test('NeighborhoodService.searchNeighborhood is temporary', () async {
-    final service = lookAround();
-    await store.bindUser(user());
-    final location = await service.searchNeighborhood('Zindabazar, Sylhet');
-
-    expect(location.latitude, 24.896);
-    expect(store.center.value?.isTemporary, isTrue);
-    expect(repository.fetches.last.latitude, 24.896);
-
-    await service.useSavedLocation();
-    expect(store.center.value?.isTemporary, isFalse);
   });
 
   group('search range (km) and number of households', () {
@@ -296,16 +178,6 @@ void main() {
         expect(repository.fetches.length, fetches);
       },
     );
-
-    test('the count filter survives a temporary search', () async {
-      repository.available = 40;
-      await store.bindUser(user(radiusHomes: 10));
-      await store.filterRadius(5);
-      await store.searchAround(uttara);
-      expect(repository.fetches.last.latitude, uttara.latitude);
-      expect(repository.fetches.last.radiusKm, 5);
-      expect(store.households.length, 5);
-    });
 
     test('Default (or picking the default) clears the filter', () async {
       repository.available = 40;
@@ -365,21 +237,17 @@ void main() {
   group('prayer list neighborhood and status changes', () {
     Future<void> flush() => Future<void>.delayed(Duration.zero);
 
-    test(
-      'my neighborhood stays at home during a search and a Home filter',
-      () async {
-        repository.available = 40;
-        await store.bindUser(user(radiusHomes: 10));
-        final home = store.homeHouseholds.map((h) => h.id).toList();
-        expect(home.length, 10);
+    test('my neighborhood stays at home during a Home filter', () async {
+      repository.available = 40;
+      await store.bindUser(user(radiusHomes: 10));
+      final home = store.homeHouseholds.map((h) => h.id).toList();
+      expect(home.length, 10);
 
-        await store.searchAround(uttara);
-        await store.filterRadius(5);
-        expect(store.households.length, 5);
-        expect(store.homeHouseholds.map((h) => h.id), home);
-        expect(store.homeHouseholds.first.latitude, closeTo(23.7474, 0.0001));
-      },
-    );
+      await store.filterRadius(5);
+      expect(store.households.length, 5);
+      expect(store.homeHouseholds.map((h) => h.id), home);
+      expect(store.homeHouseholds.first.latitude, closeTo(23.7474, 0.0001));
+    });
 
     test('the Settings count sets the size of my neighborhood', () async {
       repository.available = 40;
@@ -468,32 +336,7 @@ void main() {
     });
   });
 
-  group('set a searched place as home', () {
-    test(
-      'saves the place, ends the search and moves my neighborhood',
-      () async {
-        repository.available = 12;
-        final users = FakeUserRepository();
-        final homeAddress = HomeAddressService(users, store);
-        final alice = user(radiusHomes: 10);
-        await store.bindUser(alice);
-        await store.searchAround(uttara);
-        expect(store.homeHouseholds.first.latitude, closeTo(23.7474, 0.0001));
-        final fetches = repository.fetches.length;
-
-        await homeAddress.save(alice, uttara);
-
-        expect(users.locations.single.address, 'Uttara, Dhaka');
-        expect(users.locations.single.latitude, 23.8759);
-        expect(store.isTemporarySearch, isFalse);
-        expect(store.center.value?.isTemporary, isFalse);
-        // The Uttara results already on screen become "my neighborhood".
-        expect(repository.fetches.length, fetches);
-        expect(store.homeHouseholds.first.latitude, closeTo(23.8768, 0.0001));
-        expect(store.isNearHome('demo_0'), isTrue);
-      },
-    );
-
+  group('near home', () {
     test('a household found elsewhere is not near home', () async {
       repository.available = 3;
       await store.bindUser(user());
@@ -520,17 +363,19 @@ void main() {
       expect(controller.toPrayCount, 20);
     });
 
-    test('a searched place shows its nearest homes', () async {
-      repository.available = 40;
-      await store.bindUser(user());
-      final controller = Get.put(
-        NeighborhoodController(NeighborhoodService(store)),
-      );
-      expect(controller.isTemporary.value, isFalse);
-      await store.searchAround(uttara);
-      expect(controller.isTemporary.value, isTrue);
-      expect(controller.households.length, 10);
-    });
+    test(
+      'the neighborhood is always the saved home (no searching elsewhere)',
+      () async {
+        repository.available = 40;
+        await store.bindUser(user());
+        final controller = Get.put(
+          NeighborhoodController(NeighborhoodService(store)),
+        );
+        expect(controller.centerLabel.value, 'Dhanmondi, Dhaka');
+        expect(controller.centerLatitude.value, 23.7465);
+        expect(controller.households.length, 10);
+      },
+    );
   });
 
   group('bounded status reads', () {

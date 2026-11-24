@@ -9,6 +9,21 @@ abstract final class AppStrings {
   static const String areasAvailable = 'Available now: New Jersey, California';
   static const String appTagline = 'Conectando hogares, alcanzando vidas.';
 
+  // Primary location (chosen once at signup; blueprint §2.1).
+  static const String primaryNeighborhood = 'Your neighborhood';
+  static const String primaryLocationFixed =
+      'Your neighborhood was set when you joined, so your prayer list stays '
+      'with the homes around you.';
+  static const String primaryLocationHelp =
+      'Moved, or chose the wrong address? Contact support and we will '
+      'update it for you.';
+  static const String primaryLocationSetupNote =
+      'Choose carefully: this becomes your neighborhood. To change it later, '
+      'contact support.';
+  static const String contactSupport = 'Contact support';
+  static const String locationCorrectionMessage =
+      'Please update my neighborhood address. My correct address is: ';
+
   // Auth Strings
   static const String welcomeBack = 'Welcome back';
   static const String signInToAccount = 'Sign in to your account';

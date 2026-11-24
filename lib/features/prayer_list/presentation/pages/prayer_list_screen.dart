@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/primary_location_help.dart';
 import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
@@ -85,7 +85,7 @@ class PrayerListScreen extends GetView<PrayerListController> {
               'Household data for the area around '
                   '${controller.homeLabel.value} has not been added yet. '
                   '${AppStrings.areaComingSoon}',
-          actions: [ChangeHomeAddress.button()],
+          actions: [PrimaryLocationHelp.button()],
         ),
       );
     }

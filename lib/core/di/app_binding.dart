@@ -4,7 +4,6 @@ import 'package:gps_cielo/core/data/device_token_repository.dart';
 import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/services/address_suggestion_service.dart';
-import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
 import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/services/push/app_badge.dart';
@@ -48,10 +47,6 @@ class AppBinding extends Bindings {
     // 3. Shared household state (Permanent)
     final householdStore = Get.put<HouseholdStore>(
       HouseholdStore(householdRepository, notificationRepository),
-      permanent: true,
-    );
-    Get.put<HomeAddressService>(
-      HomeAddressService(userRepository, householdStore),
       permanent: true,
     );
 

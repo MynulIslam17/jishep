@@ -156,7 +156,7 @@ class ProfileAboutBottomSheet extends StatelessWidget {
   }
 
   /// Keep in step with `version:` in pubspec.yaml (a test checks it).
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.2';
 
   /// Map tiles come from OpenStreetMap (attribution required).
   static const String mapCredit = 'Map data \u00A9 OpenStreetMap contributors';

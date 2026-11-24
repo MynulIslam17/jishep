@@ -11,7 +11,6 @@ import 'package:gps_cielo/core/data/household_repository.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/core/models/prayer_round.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/follow_up_date.dart';
 import 'package:gps_cielo/core/utils/geohash.dart';
@@ -27,14 +26,12 @@ class SearchCenter {
   final double longitude;
   final String label;
 
-  /// True for a one-off search location; false for the saved home address.
-  final bool isTemporary;
-
+  /// Always the saved primary location: searching elsewhere was removed
+  /// (signup-only location, blueprint §2.1).
   const SearchCenter({
     required this.latitude,
     required this.longitude,
     required this.label,
-    required this.isTemporary,
   });
 }
 
@@ -188,9 +185,6 @@ class HouseholdStore extends GetxService {
 
   int get _radiusHomes => _radiusFilter ?? _savedRadius;
 
-  /// A one-off search location. Never written to the profile.
-  ResolvedLocation? _temporaryLocation;
-
   /// What the current household list was loaded for.
   double? _latitude;
   double? _longitude;
@@ -225,8 +219,6 @@ class HouseholdStore extends GetxService {
   int _loadGeneration = 0;
   int _homeGeneration = 0;
 
-  bool get isTemporarySearch => _temporaryLocation != null;
-
   /// The saved home location, or null when none is set.
   ({double latitude, double longitude})? get homePoint {
     final latitude = _savedLatitude;
@@ -242,7 +234,7 @@ class HouseholdStore extends GetxService {
   DateTime? get cycleStart => cycleStartedAt.value;
 
   /// Points the store at [user], reloading when the account, search center or
-  /// range changed. A temporary search location survives profile updates.
+  /// range changed.
   Future<void> bindUser(UserModel user) async {
     final userChanged = user.id != _uid;
     if (userChanged) {
@@ -402,13 +394,6 @@ class HouseholdStore extends GetxService {
     return [for (final m in round.members) fresh[m.id] ?? m];
   }
 
-  /// Searches around [location] without changing the saved home address.
-  Future<void> searchAround(ResolvedLocation location) async {
-    if (_uid == null) return;
-    _temporaryLocation = location;
-    await _applyCenter();
-  }
-
   /// Shows the [homes] nearest households found within the range. The range
   /// stays as set in Settings and up to [SearchRange.maxHomes] are already
   /// loaded, so nothing is re-queried. Pass null (or the default) to go back
@@ -430,33 +415,16 @@ class HouseholdStore extends GetxService {
     isRadiusFiltered.value = _radiusFilter != null;
   }
 
-  /// Forgets a temporary search location without reloading; the next
-  /// [bindUser] then searches around the saved home address.
-  void discardTemporarySearch() => _temporaryLocation = null;
-
-  /// Returns to searching around the saved home address.
-  Future<void> useSavedLocation() async {
-    if (_temporaryLocation == null) return;
-    _temporaryLocation = null;
-    await _applyCenter();
-  }
-
   Future<void> _applyCenter({bool force = false}) async {
-    final temporary = _temporaryLocation;
-    final latitude = temporary?.latitude ?? _savedLatitude;
-    final longitude = temporary?.longitude ?? _savedLongitude;
+    final latitude = _savedLatitude;
+    final longitude = _savedLongitude;
 
     center.value = latitude == null || longitude == null
         ? null
         : SearchCenter(
             latitude: latitude,
             longitude: longitude,
-            label: temporary != null
-                ? (temporary.hasAddress
-                      ? temporary.address
-                      : temporary.coordinatesLabel)
-                : _savedAddress,
-            isTemporary: temporary != null,
+            label: _savedAddress,
           );
 
     final changed =
@@ -489,7 +457,6 @@ class HouseholdStore extends GetxService {
   }
 
   bool get _viewIsHome =>
-      _temporaryLocation == null &&
       _latitude == _savedLatitude &&
       _longitude == _savedLongitude &&
       _loadedRangeKm == _rangeKm;
@@ -576,7 +543,6 @@ class HouseholdStore extends GetxService {
     defaultHomes.value = 0;
     isRadiusFiltered.value = false;
     foundInRange.value = 0;
-    _temporaryLocation = null;
     _latitude = null;
     _longitude = null;
     _loadedRangeKm = 0;

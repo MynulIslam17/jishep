@@ -75,5 +75,5 @@ Google Play Console (manual):
 
 ## Version numbers
 
-`pubspec.yaml` `version: 1.0.0+1`: raise the part after `+` for every upload
+`pubspec.yaml` `version: 1.0.2+2` (1.0.0 approved on the App Store; 1.0.2 = App Check + queue build): raise the part after `+` for every upload
 to either store (Codemagic picks the next iOS build number automatically).

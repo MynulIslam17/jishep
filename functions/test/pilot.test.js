@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const { initializeApp, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-const { discoverOwners } = require('../src/owners');
+const { discoverOwnersAtHome: discoverOwners } = require('./support');
 const geo = require('../src/property_cache');
 const pilot = require('../tool/pilot_scenarios');
 
@@ -25,7 +25,7 @@ before(() => {
   db = getFirestore();
 });
 beforeEach(async () => {
-  for (const c of ['users', 'melissa_usage', 'owner_scans', 'owner_properties', 'discovery_jobs']) {
+  for (const c of ['primary_locations', 'users', 'melissa_usage', 'owner_scans', 'owner_properties', 'discovery_jobs']) {
     await db.recursiveDelete(db.collection(c));
   }
 });

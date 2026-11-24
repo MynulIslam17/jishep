@@ -246,6 +246,23 @@ void main() {
       );
       await server.ensure(50);
       expect(server.isSettled, isFalse);
+
+      // A Firestore outage on the server surfaces as `internal`: a passing
+      // failure (tried again later), plain words, nothing invented.
+      final outage = area(
+        seeded(),
+        (_) async => throw FirebaseFunctionsException(
+          code: 'internal',
+          message: 'internal',
+        ),
+      );
+      await outage.ensure(50);
+      expect(outage.records, isEmpty);
+      expect(outage.isSettled, isFalse);
+      expect(
+        outage.unavailableReason,
+        "Couldn't look up property owners right now.",
+      );
     });
   });
 
@@ -341,4 +358,127 @@ void main() {
       expect(find.textContaining('resident', findRichText: true), findsNothing);
     },
   );
+
+  group('blueprint 2026-11-24: server-side location and paid gates', () {
+    test(
+      'a forged location is refused: plain message, not a passing error',
+      () async {
+        final a = area(
+          seeded(),
+          (_) async => throw FirebaseFunctionsException(
+            code: 'permission-denied',
+            message: 'location_not_authorized',
+          ),
+        );
+        await a.ensure(50);
+        expect(
+          a.unavailableReason,
+          'Neighbors are shown for your own neighborhood only.',
+        );
+        expect(a.isSettled, isTrue);
+      },
+    );
+
+    test(
+      'limited answers explain without internals (no credits words)',
+      () async {
+        for (final reason in [
+          'paid_disabled',
+          'app_monthly_limit',
+          'unverified',
+          'app_check',
+        ]) {
+          final a = area(
+            seeded(),
+            (_) async => {
+              'records': <Object?>[],
+              'coverage': 'partial',
+              'completeness': 'unknown',
+              'limited': reason,
+            },
+          );
+          await a.ensure(50);
+          expect(a.result?.limited, reason);
+          expect(a.unavailableReason, isNot(contains('credit')));
+          expect(a.unavailableReason, isNot(contains('budget')));
+          expect(a.isSettled, isTrue);
+        }
+      },
+    );
+
+    test(
+      'queued (budget used up, nothing stored): pending note, no time promised',
+      () async {
+        final a = area(
+          seeded(),
+          (_) async => {
+            'records': <Object?>[],
+            'coverage': 'partial',
+            'completeness': 'unknown',
+            'limited': 'app_daily_limit',
+            'queued': true,
+          },
+        );
+        await a.ensure(50);
+        expect(a.result?.queued, isTrue);
+        expect(a.unavailableReason, OwnerDiscoveryService.queuedMessage);
+        expect(a.sourceNote, OwnerDiscoveryService.queuedMessage);
+        expect(a.isUnavailable, isTrue);
+        for (final text in [
+          OwnerDiscoveryService.queuedMessage,
+          OwnerDiscoveryService.queuedMoreMessage,
+        ]) {
+          expect(text, isNot(contains(RegExp(r'\d'))));
+          for (final word in [
+            'minute',
+            'hour',
+            'today',
+            'tomorrow',
+            'soon',
+            'credit',
+            'budget',
+          ]) {
+            expect(text.toLowerCase(), isNot(contains(word)));
+          }
+        }
+        // Settled as before: a prayer round is never fixed on nothing.
+        expect(a.isSettled, isTrue);
+      },
+    );
+
+    test('queued with some homes stored: homes shown, "more" note', () async {
+      final a = area(
+        seeded(),
+        (_) async => {
+          'records': [for (var i = 1; i <= 12; i++) owned(i)],
+          'coverage': 'partial',
+          'completeness': 'partial',
+          'limited': 'app_monthly_limit',
+          'queued': true,
+        },
+      );
+      await a.ensure(50);
+      expect(a.records, hasLength(12));
+      expect(a.unavailableReason, isNull);
+      expect(a.sourceNote, OwnerDiscoveryService.queuedMoreMessage);
+    });
+
+    test('limited without queue keeps the old wording', () async {
+      final a = area(
+        seeded(),
+        (_) async => {
+          'records': <Object?>[],
+          'coverage': 'partial',
+          'completeness': 'unknown',
+          'limited': 'app_monthly_limit',
+        },
+      );
+      await a.ensure(50);
+      expect(a.result?.queued, isFalse);
+      expect(
+        a.unavailableReason,
+        OwnerDiscoveryService.messageFor('app_monthly_limit'),
+      );
+    });
+  });
 }

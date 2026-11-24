@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/core/utils/show_snackbar.dart';
 import 'package:gps_cielo/core/utils/validators.dart';
@@ -59,49 +58,6 @@ class ProfileController extends GetxController {
       visitsMade: _service.visitsMade.value,
     );
     selectedPrayerTarget.value = current.dailyPrayerTarget;
-  }
-
-  Future<void> updateAddress(
-    String newAddress, {
-    ResolvedLocation? location,
-  }) async {
-    final current = _authController.currentUser.value;
-    if (newAddress.trim().isEmpty || current == null) return;
-
-    isLoading.value = true;
-    try {
-      final updated = await _service.updateAddress(
-        current,
-        newAddress.trim(),
-        location: location,
-      );
-      _authController.updateUser(updated);
-      SnackbarService.showSuccess(
-        'Address Updated',
-        'Your location has been saved.',
-      );
-    } catch (error) {
-      SnackbarService.showError(
-        'Address Not Saved',
-        FirebaseErrorMapper.message(error),
-      );
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  /// Reads the device GPS for the address form. Returns null on failure
-  /// (after telling the user why). Nothing is saved here.
-  Future<ResolvedLocation?> locateDevice() async {
-    try {
-      return await _service.currentLocation();
-    } catch (error) {
-      SnackbarService.showError(
-        'Location Unavailable',
-        FirebaseErrorMapper.message(error),
-      );
-      return null;
-    }
   }
 
   Future<void> updatePrayerPreferences(

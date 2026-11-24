@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:gps_cielo/core/data/user_repository.dart';
 import 'package:gps_cielo/core/models/user_model.dart';
-import 'package:gps_cielo/core/services/home_address_service.dart';
 import 'package:gps_cielo/core/services/household_store.dart';
-import 'package:gps_cielo/core/services/location_service.dart';
 import 'package:gps_cielo/core/utils/firebase_error_mapper.dart';
 import 'package:gps_cielo/features/auth/data/repositories/auth_repository.dart';
 
@@ -13,16 +11,8 @@ class ProfileService {
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
   final HouseholdStore _store;
-  final LocationService _locationService;
-  final HomeAddressService _homeAddress;
 
-  ProfileService(
-    this._userRepository,
-    this._authRepository,
-    this._store,
-    this._locationService,
-    this._homeAddress,
-  );
+  ProfileService(this._userRepository, this._authRepository, this._store);
 
   RxInt get homesPrayed => _store.prayedCount;
 
@@ -31,18 +21,8 @@ class ProfileService {
   /// Lifetime prayers over every round (prayer history).
   RxInt get prayersOffered => _store.prayersOffered;
 
-  Future<UserModel> updateAddress(
-    UserModel user,
-    String address, {
-    ResolvedLocation? location,
-  }) async {
-    location ??= await _locationService.resolveAddress(address);
-    return _homeAddress.save(user, location);
-  }
-
-  /// One-shot GPS reading for the address form. Nothing is saved.
-  Future<ResolvedLocation> currentLocation() =>
-      _locationService.currentLocation();
+  // No updateAddress: the primary location is set once at signup and
+  // corrected only by support (blueprint §2.1, functions/src/location.js).
 
   /// Saves the daily target, the default number of households and the
   /// search range in km.

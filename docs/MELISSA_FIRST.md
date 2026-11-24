@@ -1,5 +1,7 @@
 # Melissa-first neighborhood (property owners from public records)
 
+> See [CACHE_DESIGN.md](CACHE_DESIGN.md) / [GEOSPATIAL_ALGORITHMS.md](GEOSPATIAL_ALGORITHMS.md) for the current design (2026-11-24).
+
 > Superseded in part (2026-11-22 afternoon): discovery is now **cache first**
 > (canonical property cache, coverage-aware nearest 50, one paid job per
 > area, budgets). See `docs/MELISSA_CACHE_STRATEGY.md` and

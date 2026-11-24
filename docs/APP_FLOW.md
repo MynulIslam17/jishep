@@ -1,4 +1,68 @@
-# GPS PARA EL CIELO: app flow audit (current code)
+# GPS PARA EL CIELO: app flow
+
+> **Current flow (2026-11-24) is the section directly below.** Everything
+> after it is the 2026-11-22 audit, kept as history; where they disagree,
+> the 2026-11-24 section wins. Part of the
+> [master blueprint](GPS_PARA_EL_CIELO_MASTER_BLUEPRINT.md); diagrams:
+> [02](diagrams/02_signup_authentication.md),
+> [03](diagrams/03_primary_location_onboarding.md),
+> [09](diagrams/09_prayer_list_lifecycle.md).
+
+## Current flow — fixed primary location (2026-11-24)
+
+Implemented and tested **locally**; the backend half is **not deployed**
+(production still runs the 2026-11-23 functions and rules).
+
+```mermaid
+flowchart TD
+    A[Open app] --> B{Signed in?}
+    B -- No --> C[Onboarding / Sign up / Sign in]
+    C --> V{Password account verified?}
+    V -- No --> VE[Verify email screen]
+    VE --> D
+    V -- Yes --> D[Load users/uid]
+    B -- Yes --> D
+    D --> E{latitude + longitude saved?}
+    E -- No --> F["Location setup: address or GPS → pin → preview (Overture only, 0 credits) → daily goal"]
+    F --> G["Confirm once: users/uid address, latitude, longitude, locationConfirmedAt"]
+    G --> I
+    E -- Yes --> I[Main tabs]
+    I --> J["HouseholdStore: Overture cells around the saved home"]
+    J --> K["discoverOwners (saved home only) → owner names overlay"]
+    K --> L{Cache complete?}
+    L -- Yes --> M[Serve stored owners, 0 credits]
+    L -- No --> N{"Paid allowed? enabled · verified · kill switch off · budgets"}
+    N -- "No (production today)" --> O["Stored owners only, limited reason"]
+    N -- Yes --> P["Lease → Reverse GeoCoder / Property for the missing part → store → serve"]
+    M --> Q[Home · Neighborhood · Prayer List · Follow-up]
+    O --> Q
+    P --> Q
+```
+
+| Step | Behaviour | Code / proof | Status |
+|---|---|---|---|
+| Route after sign-in | verify email (password) → has latitude+longitude → main tabs, else Location setup | `auth_controller.dart` `routeAfterSignIn` | IMPLEMENTED AND TESTED |
+| Location setup | address search (US) or GPS → confirm pin → nearby preview with `preview: true` (never Melissa, never on drag or typing) → daily goal → confirm | `location_setup_controller.dart` `_loadPreview`, `confirmLocation`; `test/location_setup_test.dart` | IMPLEMENTED AND TESTED |
+| Fixed-location notice | "Choose carefully: this becomes your neighborhood. To change it later, contact support." | `location_setup_screen.dart` `_FixedLocationNote` | IMPLEMENTED |
+| Save once | `AuthService.updateLocation` writes the location + `locationConfirmedAt` (server time) + `locationVersion: 1`; retries without the stamps if old rules refuse them; double submit blocked | `auth_service.dart`; rules test "set once at setup, then locked" | IMPLEMENTED AND TESTED |
+| Locked | rules refuse any later client change of address/latitude/longitude/stamps; other profile fields still save | `firestore.rules` `locationChangeAllowed`; `tool/firestore_rules_test` (4 tests) | IMPLEMENTED AND TESTED, **not deployed** |
+| No location editor | Home, Neighborhood, Prayer List show "Contact support" instead of "Change home address"; Profile shows "Your neighborhood" read-only; "Set as my home" removed | `primary_location_help.dart`; `test/fixed_location_test.dart`, `test/home_screen_test.dart` | IMPLEMENTED AND TESTED |
+| Look around another place | **REMOVED 2026-11-24** (client approved signup-only location); every screen shows the saved home | — | REMOVED |
+| Server-side location | `discoverOwners` searches only around `primary_locations/{uid}` (pinned from users/{uid} on first use); client point > 250 m away → `location_not_authorized` | `functions/src/owners.js` `primaryLocation`; `functions/test/blueprint.test.js` | IMPLEMENTED AND TESTED, **not deployed** |
+| Correction | support → `functions/tool/location_admin.js correct` (operator, reason, ≤ 2/365 days, audit in `location_corrections`) | `functions/src/location.js`; `functions/test/ops_tools.test.js` | IMPLEMENTED AND TESTED |
+| Existing users | a saved latitude/longitude is their primary location (locked automatically); missing/invalid → Location setup; no data deleted | rules test "existing users … locked with no migration"; `location_admin.js status` | IMPLEMENTED AND TESTED |
+| Paid discovery | needs `MELISSA_OWNER_DISCOVERY_ENABLED`, verified account, kill switch off, budgets; production: OFF and budget 0 | `owners.js`; `zero_budget.test.js` | IMPLEMENTED AND TESTED; **OFF in production** |
+| Prayer, rounds, follow-ups | unchanged; never trigger Melissa | `household_store.dart`, `user_repository.dart` `startPrayerRound` | IMPLEMENTED AND TESTED |
+
+Sections B, E and F below describe the **old** model (location changeable
+from Profile / Neighborhood / setup preview costs). They are kept only as
+history: the location can no longer be changed in the app, the setup preview
+never calls Melissa, and nearby/overlapping areas reuse the shared property
+cache (`owner_properties/mel:{MAK}`).
+
+---
+
+# 2026-11-22 app flow audit (history)
 
 Audited 2026-11-22 from the code in this repository (branch
 `chore/firebase-client-migration`, uncommitted work included). Everything
@@ -201,7 +265,7 @@ Melissa-first mode the app calls `discoverOwners` whenever a new
 | Open a household | No | the sheet doesn't call Melissa; "Check address" uses `users/{uid}/enrichment/{id}` (30 days) |
 | Same location tomorrow | No | within 30 days the cache hit returns before any credit reservation |
 | Same location after 30 days | **Yes, full paid run** (≈ 668–920) | cache `expiresAt` passed |
-| New "Look around" place | **Yes** (new key) | `searchAround` → new `OwnerArea` |
+| New "Look around" place | *(feature removed 2026-11-24)* | — |
 | Each spot in setup preview | **Yes** (bug, see B) | `_loadPreview` |
 
 Tests: `functions/test/owners.test.js` "a cached area is free"; the

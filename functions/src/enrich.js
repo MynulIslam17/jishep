@@ -3,11 +3,13 @@
 // Melissa call and the stored result. Firebase wiring is in index.js so this
 // file can be tested against the Firestore emulator.
 
-const { overGlobalLimit } = require('./budget');
+const { overGlobalLimit, paidDisabled } = require('./budget');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { CHECK_CREDITS, PROPERTY_CREDITS, checkAddress, lookupProperty } = require('./melissa');
 
 const DEFAULTS = {
+  // Paid lookups need a valid Firebase App Check token (request.app).
+  requireAppCheck: true,
   // Lookups one user may make per UTC day (each costs CHECK_CREDITS).
   perUserDailyLookups: 20,
   // Credits the whole app (every endpoint) may spend per UTC day.
@@ -74,6 +76,7 @@ async function reserve(db, uid, now, cfg, credits) {
     const [daySnap, userSnap, stateSnap] = await Promise.all([
       tx.get(day), tx.get(user), tx.get(state),
     ]);
+    if (paidDisabled(stateSnap)) throw new EnrichError('resource-exhausted', 'paid_disabled');
     const pausedAt = stateSnap.get('outOfCreditsAt');
     if (pausedAt && now.getTime() - pausedAt.toMillis() < cfg.outOfCreditsPauseMs) {
       throw new EnrichError('resource-exhausted', 'out_of_credits');
@@ -117,7 +120,7 @@ const UNCHARGED = new Set([
  * Checks one household address for `uid`. Returns the stored result
  * (plus `cached: true` when reused). Throws EnrichError.
  */
-async function enrichHousehold({ db, uid, data, key, now = new Date(), config = {}, check = checkAddress, property = lookupProperty, log = () => {} }) {
+async function enrichHousehold({ db, uid, data, key, now = new Date(), config = {}, appVerified = false, check = checkAddress, property = lookupProperty, log = () => {} }) {
   if (!uid) throw new EnrichError('unauthenticated', 'sign_in_required');
   const cfg = { ...DEFAULTS, ...config };
   const input = validateInput(data);
@@ -138,6 +141,11 @@ async function enrichHousehold({ db, uid, data, key, now = new Date(), config = 
     }
   }
 
+  // Paid lookups only from a genuine app (Firebase App Check); cache above.
+  if (cfg.requireAppCheck && !appVerified) {
+    log({ event: 'enrich', outcome: 'denied', reason: 'app_check_required' });
+    throw new EnrichError('failed-precondition', 'app_check_required');
+  }
   const credits = CHECK_CREDITS + (input.includeProperty ? PROPERTY_CREDITS : 0);
   const reservation = await reserve(db, uid, now, cfg, credits);
   const result = await check({ ...input, requestId: input.householdId }, key);

@@ -10,7 +10,7 @@ import 'package:gps_cielo/features/prayer_list/domain/services/prayer_list_servi
 
 /// Home (Figma "Home"): a greeting, today's neighbors, a small map of the
 /// neighborhood and today's homes to pray for. Always the saved home's
-/// neighborhood; looking around another place is on the Neighborhood tab.
+/// neighborhood (the location is chosen once, at signup).
 class HomeController extends GetxController {
   final HomeService _homeService;
   final AuthController _authController;

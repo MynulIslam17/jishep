@@ -17,7 +17,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { enrichHousehold, EnrichError } = require('./enrich');
 const { discoverNearby, DiscoverError, reverseLookup } = require('./discover');
-const { discoverOwners, OwnerError } = require('./owners');
+const { discoverOwners, OwnerError, isVerifiedToken, isAppCheckVerified } = require('./owners');
 const { checkAddress, lookupProperty } = require('./melissa');
 
 initializeApp();
@@ -38,12 +38,22 @@ const PER_USER_DAILY_LOOKUPS = defineInt('MELISSA_PER_USER_DAILY_LOOKUPS', { def
 // 0 = no paid Melissa call at all; the default is 0 so a missing value
 // fails closed.
 const GLOBAL_DAILY_CREDITS = defineInt('MELISSA_GLOBAL_DAILY_CREDITS', { default: 0 });
-const CACHE_DAYS = defineInt('MELISSA_CACHE_DAYS', { default: 30 });
-// `enforceAppCheck` takes a plain boolean (a params expression is an object
-// and would always count as true), so it is read from the functions .env
-// file at deploy time. Set ENFORCE_APP_CHECK=true once App Check is
-// registered for both apps.
+// Freshness of stored Melissa answers (blueprint §4.3: 365 days). Expiry
+// never deletes anything; a stale record is simply not served as fresh.
+const CACHE_DAYS = defineInt('MELISSA_CACHE_DAYS', { default: 365 });
+// Firebase App Check, two levels:
+// - Soft (MELISSA_REQUIRE_APP_CHECK, default true): a call without a valid
+//   App Check token (request.app) still gets stored data, but can never
+//   start a paid Melissa lookup. App builds without App Check (1.0.0)
+//   keep working on the cache.
+// - Hard (ENFORCE_APP_CHECK=true): every call without a valid token is
+//   rejected. Only after old app versions are retired
+//   (docs/COMPATIBILITY_AUDIT.md). `enforceAppCheck` takes a plain boolean (a
+//   params expression is an object and would always count as true), so it
+//   is read from the functions .env file at deploy time.
 const ENFORCE_APP_CHECK = process.env.ENFORCE_APP_CHECK === 'true';
+const REQUIRE_APP_CHECK = defineBoolean('MELISSA_REQUIRE_APP_CHECK', { default: true });
+const appVerified = (request) => isAppCheckVerified(request.app);
 // Owner names from Melissa Property (public record): OFF until Melissa's
 // license is confirmed to allow showing them (app owner, 2026-11-22).
 const ALLOW_OWNER_NAMES = defineBoolean('MELISSA_ALLOW_OWNER_NAMES', { default: false });
@@ -63,9 +73,11 @@ exports.enrichHousehold = onCall(
       return await enrichHousehold({
         db: getFirestore(),
         uid: request.auth && request.auth.uid,
+        appVerified: appVerified(request),
         data: request.data,
         key: MELISSA_CREDIT_LICENSE.value(),
         config: {
+          requireAppCheck: REQUIRE_APP_CHECK.value(),
           perUserDailyLookups: PER_USER_DAILY_LOOKUPS.value(),
           globalDailyCredits: GLOBAL_DAILY_CREDITS.value(),
           cacheDays: CACHE_DAYS.value(),
@@ -107,9 +119,11 @@ exports.discoverNearby = onCall(
       return await discoverNearby({
         db: getFirestore(),
         uid: request.auth && request.auth.uid,
+        appVerified: appVerified(request),
         data: request.data,
         key: MELISSA_CREDIT_LICENSE.value(),
         config: {
+          requireAppCheck: REQUIRE_APP_CHECK.value(),
           enabled: GAP_FILL_ENABLED.value(),
           perUserDaily: GAP_PER_USER_DAILY.value(),
           dailyCredits: GAP_DAILY_CREDITS.value(),
@@ -144,7 +158,43 @@ const OWNER_RADIUS_MILES = defineInt('MELISSA_OWNER_RADIUS_MILES', { default: 1 
 const OWNER_SHARED_CACHE = defineBoolean('MELISSA_OWNER_SHARED_CACHE', { default: false });
 const OWNER_MONTHLY_CREDITS = defineInt('MELISSA_OWNER_MONTHLY_CREDITS', { default: 20000 });
 const OWNER_REQUEST_MAX_CREDITS = defineInt('MELISSA_OWNER_REQUEST_MAX_CREDITS', { default: 920 });
-const OWNER_NEGATIVE_CACHE_DAYS = defineInt('MELISSA_OWNER_NEGATIVE_CACHE_DAYS', { default: 90 });
+// Same as the scans (365): never re-buy an address a fresh scan still lists.
+const OWNER_NEGATIVE_CACHE_DAYS = defineInt('MELISSA_OWNER_NEGATIVE_CACHE_DAYS', { default: 365 });
+// Client coordinates farther than this from the saved home are refused
+// (the server always searches around users/{uid}.latitude/longitude).
+const OWNER_LOCATION_TOLERANCE_M = defineInt('MELISSA_OWNER_LOCATION_TOLERANCE_M', { default: 250 });
+// Paid discovery only for verified accounts (email verified, Google, Apple, phone).
+const OWNER_REQUIRE_VERIFIED = defineBoolean('MELISSA_OWNER_REQUIRE_VERIFIED', { default: true });
+// Pending discovery queue (src/queue.js): budget refusals of verified,
+// genuine requests are recorded per area and resumed by
+// processDiscoveryQueue. Caps: new jobs per UTC day, open jobs at once.
+const QUEUE_ENABLED = defineBoolean('MELISSA_OWNER_QUEUE_ENABLED', { default: true });
+const QUEUE_DAILY_NEW = defineInt('MELISSA_OWNER_QUEUE_DAILY_NEW', { default: 50 });
+const QUEUE_MAX_OPEN = defineInt('MELISSA_OWNER_QUEUE_MAX_OPEN', { default: 200 });
+const QUEUE_JOBS_PER_RUN = defineInt('MELISSA_OWNER_QUEUE_JOBS_PER_RUN', { default: 5 });
+
+// The same owner configuration for the callable and the queue processor.
+const ownerConfig = () => ({
+  locationToleranceMeters: OWNER_LOCATION_TOLERANCE_M.value(),
+  requireVerified: OWNER_REQUIRE_VERIFIED.value(),
+  requireAppCheck: REQUIRE_APP_CHECK.value(),
+  enabled: OWNER_ENABLED.value(),
+  allowOwnerNames: ALLOW_OWNER_NAMES.value(),
+  perUserDaily: OWNER_PER_USER_DAILY.value(),
+  dailyCredits: OWNER_DAILY_CREDITS.value(),
+  globalDailyCredits: GLOBAL_DAILY_CREDITS.value(),
+  maxLookups: OWNER_MAX_LOOKUPS.value(),
+  maxMiles: OWNER_RADIUS_MILES.value(),
+  sharedCache: OWNER_SHARED_CACHE.value(),
+  monthlyCredits: OWNER_MONTHLY_CREDITS.value(),
+  perRequestMaxCredits: OWNER_REQUEST_MAX_CREDITS.value(),
+  negativeCacheDays: OWNER_NEGATIVE_CACHE_DAYS.value(),
+  cacheDays: CACHE_DAYS.value(),
+  queueEnabled: QUEUE_ENABLED.value(),
+  queueDailyNew: QUEUE_DAILY_NEW.value(),
+  queueMaxOpen: QUEUE_MAX_OPEN.value(),
+  queueJobsPerRun: QUEUE_JOBS_PER_RUN.value(),
+});
 
 exports.discoverOwners = onCall(
   {
@@ -157,26 +207,22 @@ exports.discoverOwners = onCall(
   },
   async (request) => {
     const fetchImpl = emulatorFetch();
+    // Share of real traffic with a valid App Check token: decides when hard
+    // enforcement is safe (Logs Explorer: jsonPayload.event="app_check").
+    logger.info({
+      event: 'app_check', fn: 'discoverOwners', verified: appVerified(request),
+      // ios / android from the verified Firebase app id (no user data).
+      platform: appVerified(request) ? (/:ios:/.test(request.app.appId) ? 'ios' : 'android') : null,
+    });
     try {
       return await discoverOwners({
         db: getFirestore(),
         uid: request.auth && request.auth.uid,
+        verified: isVerifiedToken(request.auth && request.auth.token),
+        appVerified: appVerified(request),
         data: request.data,
         key: MELISSA_CREDIT_LICENSE.value(),
-        config: {
-          enabled: OWNER_ENABLED.value(),
-          allowOwnerNames: ALLOW_OWNER_NAMES.value(),
-          perUserDaily: OWNER_PER_USER_DAILY.value(),
-          dailyCredits: OWNER_DAILY_CREDITS.value(),
-          globalDailyCredits: GLOBAL_DAILY_CREDITS.value(),
-          maxLookups: OWNER_MAX_LOOKUPS.value(),
-          maxMiles: OWNER_RADIUS_MILES.value(),
-          sharedCache: OWNER_SHARED_CACHE.value(),
-          monthlyCredits: OWNER_MONTHLY_CREDITS.value(),
-          perRequestMaxCredits: OWNER_REQUEST_MAX_CREDITS.value(),
-          negativeCacheDays: OWNER_NEGATIVE_CACHE_DAYS.value(),
-          cacheDays: CACHE_DAYS.value(),
-        },
+        config: ownerConfig(),
         reverse: (params, k) => reverseLookup(params, k, { fetchImpl }),
         property: (a, k, o) => lookupProperty(a, k, { ...o, fetchImpl }),
         // Counts only: no uid, address or name in logs.
@@ -187,6 +233,41 @@ exports.discoverOwners = onCall(
       logger.error({ event: 'owners', outcome: 'crash', message: String(e && e.message) });
       throw new HttpsError('internal', 'internal');
     }
+  },
+);
+
+// Pending discovery queue: resumes owner lookups that were refused for
+// budget reasons, oldest first, once the budget allows. With paid
+// discovery off (MELISSA_OWNER_DISCOVERY_ENABLED=false or
+// MELISSA_GLOBAL_DAILY_CREDITS=0) it returns at once without any read.
+// Every job goes through discoverOwners: cache, the requester's account
+// and App Check flag, home and every credit limit are checked again.
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { getAuth } = require('firebase-admin/auth');
+const { processQueue } = require('./queue');
+exports.processDiscoveryQueue = onSchedule(
+  {
+    schedule: 'every 30 minutes',
+    region: 'us-central1',
+    secrets: [MELISSA_CREDIT_LICENSE],
+    timeoutSeconds: 540,
+    memory: '256MiB',
+    maxInstances: 1,
+    retryCount: 0,
+  },
+  async () => {
+    const fetchImpl = emulatorFetch();
+    const out = await processQueue({
+      db: getFirestore(),
+      key: MELISSA_CREDIT_LICENSE.value(),
+      config: ownerConfig(),
+      getUser: (uid) => getAuth().getUser(uid),
+      reverse: (params, k) => reverseLookup(params, k, { fetchImpl }),
+      property: (a, k, o) => lookupProperty(a, k, { ...o, fetchImpl }),
+      log: (entry) => logger.info(entry),
+    });
+    // Counts only.
+    logger.info({ event: 'queue_run', ...out });
   },
 );
 

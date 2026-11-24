@@ -22,7 +22,7 @@ before(() => {
   db = getFirestore();
 });
 beforeEach(async () => {
-  for (const c of ['owner_scans', 'owner_properties', 'users', 'melissa_usage']) await db.recursiveDelete(db.collection(c));
+  for (const c of ['owner_scans', 'owner_properties', 'users', 'primary_locations', 'melissa_usage']) await db.recursiveDelete(db.collection(c));
 });
 
 const NOW = new Date('2026-11-23T00:00:00Z');
@@ -160,7 +160,7 @@ test('after migration, production settings serve the same records to every user 
   // A realistic snapshot built with the cache's own document builders.
   const cache = require('../src/property_cache');
   const { Timestamp } = require('firebase-admin/firestore');
-  const { discoverOwners } = require('../src/owners');
+  const { discoverOwnersAtHome: discoverOwners } = require('./support');
   const enc = (v) => (v instanceof Timestamp ? { __ts: v.toDate().toISOString() }
     : Array.isArray(v) ? v.map(enc)
       : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) : v);

@@ -11,7 +11,8 @@ const { initializeApp, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { enrichHousehold, EnrichError } = require('../src/enrich');
 const { discoverNearby, DiscoverError } = require('../src/discover');
-const { discoverOwners, OwnerError } = require('../src/owners');
+const { OwnerError } = require('../src/owners');
+const { discoverOwnersAtHome: discoverOwners } = require('./support');
 const { overGlobalLimit } = require('../src/budget');
 
 const ROOT = path.join(__dirname, '..');
@@ -22,7 +23,7 @@ before(() => {
   db = getFirestore();
 });
 beforeEach(async () => {
-  for (const c of ['users', 'melissa_usage', 'owner_scans', 'owner_properties', 'owner_areas', 'discovery_jobs']) {
+  for (const c of ['primary_locations', 'users', 'melissa_usage', 'owner_scans', 'owner_properties', 'owner_areas', 'discovery_jobs']) {
     await db.recursiveDelete(db.collection(c));
   }
 });
@@ -61,10 +62,16 @@ const ALL_ON = {
 test('production settings: global daily credits 0, every paid switch off', () => {
   const env = prodEnv();
   assert.equal(env.MELISSA_GLOBAL_DAILY_CREDITS, '0');
-  for (const k of ['MELISSA_OWNER_DISCOVERY_ENABLED', 'MELISSA_GAP_FILL_ENABLED',
-    'MELISSA_ALLOW_OWNER_NAMES', 'MELISSA_OWNER_SHARED_CACHE']) {
+  for (const k of ['MELISSA_OWNER_DISCOVERY_ENABLED', 'MELISSA_GAP_FILL_ENABLED']) {
     assert.equal(env[k], 'false', k);
   }
+  // Owner names and the shared cache are ON in production since 2026-11-23
+  // (project owner's direction); they serve stored records only, 0 credits.
+  assert.equal(env.MELISSA_ALLOW_OWNER_NAMES, 'true');
+  assert.equal(env.MELISSA_OWNER_SHARED_CACHE, 'true');
+  // Blueprint 2026-11-24: 365-day freshness, saved-home + verified gates.
+  assert.equal(env.MELISSA_CACHE_DAYS, '365');
+  assert.equal(env.MELISSA_OWNER_REQUIRE_VERIFIED, 'true');
   assert.ok(!('MELISSA_EMULATOR_LIVE' in env));
 });
 
@@ -92,7 +99,7 @@ test('enrichHousehold: budget 0 refuses before Melissa, counts nothing', async (
   const property = neverProperty();
   for (const config of [{ ...ALL_ON, globalDailyCredits: 0 }, { ...ALL_ON }]) { // explicit 0, and unset
     await assert.rejects(
-      enrichHousehold({
+      enrichHousehold({ appVerified: true,
         db, uid: 'alice', key: 'k', now: NOW, config, check, property,
         data: { householdId: 'ovt:1', line: '1 Test St', city: 'Chula Vista', state: 'CA', zip: '91910', includeProperty: true },
       }),
@@ -108,7 +115,7 @@ test('discoverNearby: budget 0 refuses before Melissa, even with gap-fill on', a
   const check = neverCheck();
   for (const config of [{ ...ALL_ON, globalDailyCredits: 0 }, { ...ALL_ON }]) {
     await assert.rejects(
-      discoverNearby({
+      discoverNearby({ appVerified: true,
         db, uid: 'alice', key: 'k', now: NOW, config, reverse, check,
         data: { latitude: 36.1699, longitude: -115.1398, have: 12 },
       }),
@@ -123,13 +130,12 @@ test('discoverOwners: budget 0 refuses before Melissa, even with discovery and n
   const reverse = neverReverse();
   const property = neverProperty();
   for (const config of [{ ...ALL_ON, globalDailyCredits: 0 }, { ...ALL_ON }]) {
-    await assert.rejects(
-      discoverOwners({
-        db, uid: 'alice', key: 'k', now: NOW, config, reverse, property,
-        data: { latitude: 32.6401, longitude: -117.0842 },
-      }),
-      (e) => e instanceof OwnerError && e.reason === 'app_daily_limit',
-    );
+    const r = await discoverOwners({
+      db, uid: 'alice', key: 'k', now: NOW, config, reverse, property,
+      data: { latitude: 32.6401, longitude: -117.0842 },
+    });
+    assert.equal(r.limited, 'app_daily_limit');
+    assert.equal(r.records.length, 0);
   }
   assert.equal(reverse.calls.length + property.calls.length, 0);
   const u = await usage();
@@ -141,22 +147,20 @@ test('the budget is app-wide: credits spent by one endpoint count for the others
   // 12 credits left today; enrichHousehold spends them, the next paid call
   // from any endpoint is refused before Melissa.
   const config = { ...ALL_ON, globalDailyCredits: 12, cacheDays: 0 };
-  await enrichHousehold({
+  await enrichHousehold({ appVerified: true,
     db, uid: 'alice', key: 'k', now: NOW, config, check: neverCheck(),
     property: melissa(() => ({ status: 'not_found', codes: [] })),
     data: { householdId: 'ovt:1', line: '1 Test St', city: 'Chula Vista', state: 'CA', zip: '91910', includeProperty: true },
   });
   const reverse = neverReverse();
   await assert.rejects(
-    discoverNearby({ db, uid: 'bob', key: 'k', now: NOW, config, reverse, check: neverCheck(),
+    discoverNearby({ appVerified: true, db, uid: 'bob', key: 'k', now: NOW, config, reverse, check: neverCheck(),
       data: { latitude: 36.1699, longitude: -115.1398, have: 49 } }),
     (e) => e.reason === 'app_daily_limit',
   );
-  await assert.rejects(
-    discoverOwners({ db, uid: 'carol', key: 'k', now: NOW, config: { ...config, cacheDays: 30 }, reverse, property: neverProperty(),
-      data: { latitude: 32.6401, longitude: -117.0842 } }),
-    (e) => e.reason === 'app_daily_limit',
-  );
+  const carol = await discoverOwners({ db, uid: 'carol', key: 'k', now: NOW, config: { ...config, cacheDays: 30 }, reverse, property: neverProperty(),
+    data: { latitude: 32.6401, longitude: -117.0842 } });
+  assert.equal(carol.limited, 'app_daily_limit');
   assert.equal(reverse.calls.length, 0);
 });
 
@@ -168,7 +172,7 @@ test('budget 0 never blocks free answers: stored results are still served', asyn
     expiresAt: new Date(NOW.getTime() + 864e5),
   });
   const check = neverCheck();
-  const r = await enrichHousehold({
+  const r = await enrichHousehold({ appVerified: true,
     db, uid: 'alice', key: 'k', now: NOW, config: { ...ALL_ON, globalDailyCredits: 0 }, check,
     data: { householdId: 'ovt:1', line: '1 Test St', city: 'Chula Vista', state: 'CA', zip: '91910' },
   });
@@ -190,8 +194,13 @@ test('every deployed function given the Melissa key also gets the app-wide budge
   const src = fs.readFileSync(path.join(ROOT, 'src/index.js'), 'utf8');
   const keyed = (src.match(/key: MELISSA_CREDIT_LICENSE\.value\(\)/g) || []).length;
   const budgeted = (src.match(/globalDailyCredits: GLOBAL_DAILY_CREDITS\.value\(\)/g) || []).length;
-  assert.equal(keyed, 3); // enrichHousehold, discoverNearby, discoverOwners
-  assert.equal(budgeted, keyed);
+  // enrichHousehold, discoverNearby, discoverOwners, processDiscoveryQueue
+  assert.equal(keyed, 4);
+  // The two owner paths share ownerConfig(), which carries the budget once.
+  const owner = (src.match(/config: ownerConfig\(\)/g) || []).length;
+  assert.equal(owner, 2);
+  assert.equal(budgeted, keyed - owner + 1);
+  assert.match(src.slice(src.indexOf('const ownerConfig')), /^const ownerConfig = \(\) => \(\{[\s\S]*?globalDailyCredits: GLOBAL_DAILY_CREDITS\.value\(\)[\s\S]*?\}\);/);
   assert.match(src, /defineInt\('MELISSA_GLOBAL_DAILY_CREDITS', \{ default: 0 \}\)/);
   // Melissa hosts are named only in the modules whose calls are budgeted.
   for (const f of fs.readdirSync(path.join(ROOT, 'src'))) {

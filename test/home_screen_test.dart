@@ -146,16 +146,22 @@ void main() {
     expect(find.byType(Slider), findsNothing);
   });
 
-  homeTest('area not available: message, states and change address', (
-    tester,
-  ) async {
-    service.homeUnavailable.value = true;
-    await pump(tester);
-    expect(find.byKey(const ValueKey('home-unavailable')), findsOneWidget);
-    expect(find.text("This area isn't available yet"), findsOneWidget);
-    expect(find.text('Available now: New Jersey, California'), findsOneWidget);
-    expect(find.text('Change home address'), findsOneWidget);
-  });
+  homeTest(
+    'area not available: message, states and contact support (no location change)',
+    (tester) async {
+      service.homeUnavailable.value = true;
+      await pump(tester);
+      expect(find.byKey(const ValueKey('home-unavailable')), findsOneWidget);
+      expect(find.text("This area isn't available yet"), findsOneWidget);
+      expect(
+        find.text('Available now: New Jersey, California'),
+        findsOneWidget,
+      );
+      // Primary location is fixed (blueprint §2.1): support, never "change".
+      expect(find.text('Contact support'), findsOneWidget);
+      expect(find.text('Change home address'), findsNothing);
+    },
+  );
 
   homeTest('Melissa only: an area with no stored owners shows why', (
     tester,
@@ -171,9 +177,12 @@ void main() {
     );
   });
 
-  homeTest('without a home address it asks for one', (tester) async {
+  homeTest('without a primary location it points to setup, not an editor', (
+    tester,
+  ) async {
     await pump(tester, profile: user(located: false));
-    expect(find.text('Set your home address'), findsOneWidget);
+    expect(find.text('Finish setting up your neighborhood'), findsOneWidget);
+    expect(find.byKey(const ValueKey('finish-location-setup')), findsOneWidget);
   });
 
   homeTest('a finished round says so instead of rows', (tester) async {

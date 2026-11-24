@@ -32,7 +32,7 @@ const counting = (impl) => {
 };
 // Paid paths need an explicit app-wide budget (the default is 0: no calls).
 const BUDGET = { globalDailyCredits: 1e6 };
-const run = (over = {}) => enrichHousehold({ db, uid: 'alice', data: DATA, key: 'k', now: NOW, check: verified, ...over,
+const run = (over = {}) => enrichHousehold({ appVerified: true, db, uid: 'alice', data: DATA, key: 'k', now: NOW, check: verified, ...over,
   config: { ...BUDGET, ...over.config } });
 const rejectsWith = (p, reason) => assert.rejects(p, (e) => e instanceof EnrichError && e.reason === reason);
 

@@ -19,11 +19,21 @@
 // `enabled` off = cache-only (what is stored + what is missing). Refused
 // unless owner names are allowed (MELISSA_ALLOW_OWNER_NAMES). LeadGen
 // Property is not enabled on this account (status 116, 2026-11-22).
+//
+// Location authority (blueprint §2.1, §8): the point searched is ALWAYS the
+// caller's saved primary location (users/{uid}.latitude/longitude), never a
+// coordinate the client chooses. A client may still send its coordinates
+// (older app versions do); if they are farther than `locationToleranceMeters`
+// from the saved home, the request is refused (`location_not_authorized`).
+// Paid discovery additionally needs a verified account (email verified, or a
+// Google / Apple / phone sign-in) and the kill switch off
+// (melissa_usage/state.paidDisabled).
 
-const { overGlobalLimit } = require('./budget');
+const { overGlobalLimit, paidDisabled } = require('./budget');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { PROPERTY_CREDITS, lookupProperty } = require('./melissa');
 const { REVERSE_CREDITS_PER_RECORD, reverseLookup, areaKey } = require('./discover');
+const { QUEUE_DEFAULTS, QUEUE_REASONS, enqueueDiscovery } = require('./queue');
 
 const MAX_TARGET = 50;
 
@@ -52,12 +62,22 @@ const OWNER_DEFAULTS = {
   monthlyCredits: 20000,
   // Hard ceiling for one discovery (one Reverse + 80 Property = 920).
   perRequestMaxCredits: 920,
-  // Owner records: kept for this many days (Melissa licence). 0 = not stored.
-  cacheDays: 30,
-  // Exclusions (not found, commercial, no owner): no owner data, kept longer.
-  negativeCacheDays: 90,
-  // Scans (addresses only).
-  scanCacheDays: 30,
+  // Owner records: fresh for this many days (MELISSA_CACHE_DAYS, 365 by
+  // the 2026-11-24 blueprint). 0 = not stored. Expiry never deletes.
+  cacheDays: 365,
+  // Exclusions (not found, commercial, no owner): no owner data. As long as
+  // the scans that list them (365): a shorter window would make a still-fresh
+  // scan's excluded addresses "unknown" again and buy them a second time.
+  negativeCacheDays: 365,
+  // Scans (addresses only); null = the same as cacheDays.
+  scanCacheDays: null,
+  // Client coordinates farther than this from the saved home are refused.
+  locationToleranceMeters: 250,
+  // Paid discovery only for verified accounts (anti account-farming).
+  requireVerified: true,
+  // Paid discovery only from a genuine app (valid Firebase App Check token:
+  // Play Integrity / DeviceCheck). Requests without one keep cached data.
+  requireAppCheck: true,
   // true = one stored result per area for every user (needs Melissa's OK).
   sharedCache: false,
   // Expected share of looked-up addresses that end up named (pilot 50/52).
@@ -73,6 +93,9 @@ const OWNER_DEFAULTS = {
   waitMs: 20000,
   pollMs: 500,
   outOfCreditsPauseMs: 6 * 60 * 60 * 1000,
+  // Pending discovery queue (src/queue.js): a budget refusal records the
+  // area so the lookup resumes when the budget allows.
+  ...QUEUE_DEFAULTS,
 };
 
 class OwnerError extends Error {
@@ -85,17 +108,79 @@ class OwnerError extends Error {
 
 const inUs = (lat, lon) => lat >= 17.8 && lat <= 71.6 && lon >= -179.9 && lon <= -64.5;
 
+/**
+ * Checks the request. Coordinates are optional (the saved home is used);
+ * when given they must be valid US coordinates. Returns
+ * `{latitude, longitude, target}` with null coordinates when none were sent.
+ */
 function validateOwners(data) {
-  if (!data || typeof data !== 'object') throw new OwnerError('invalid-argument', 'bad_input');
-  const lat = Number(data.latitude);
-  const lon = Number(data.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new OwnerError('invalid-argument', 'bad_location');
-  if (!inUs(lat, lon)) throw new OwnerError('invalid-argument', 'outside_us');
+  if (data == null) data = {};
+  if (typeof data !== 'object') throw new OwnerError('invalid-argument', 'bad_input');
+  let lat = null;
+  let lon = null;
+  if (data.latitude != null || data.longitude != null) {
+    lat = Number(data.latitude);
+    lon = Number(data.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new OwnerError('invalid-argument', 'bad_location');
+    if (!inUs(lat, lon)) throw new OwnerError('invalid-argument', 'outside_us');
+  }
   const target = data.target == null ? MAX_TARGET : Number(data.target);
   if (!Number.isInteger(target) || target < 1 || target > MAX_TARGET) {
     throw new OwnerError('invalid-argument', 'bad_target');
   }
   return { latitude: lat, longitude: lon, target };
+}
+
+/**
+ * The caller's authoritative primary location.
+ *
+ * primary_locations/{uid} (server-only, never client-writable) pins the home
+ * the first time the server sees it, copied from users/{uid}. Later client
+ * edits of users/{uid} (or deleting and re-creating it) do not move it; only
+ * the audited admin correction (src/location.js) does. Throws
+ * `failed-precondition/no_primary_location` when no home is saved.
+ */
+async function primaryLocation(db, uid, now = new Date()) {
+  const ref = db.collection('primary_locations').doc(uid);
+  const read = (snap) => {
+    const lat = snap.exists ? snap.get('latitude') : null;
+    const lon = snap.exists ? snap.get('longitude') : null;
+    if (typeof lat !== 'number' || typeof lon !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { latitude: lat, longitude: lon };
+  };
+  const pinned = read(await ref.get());
+  if (pinned) {
+    if (!inUs(pinned.latitude, pinned.longitude)) throw new OwnerError('failed-precondition', 'outside_us');
+    return pinned;
+  }
+  const saved = read(await db.collection('users').doc(uid).get());
+  if (!saved) throw new OwnerError('failed-precondition', 'no_primary_location');
+  if (!inUs(saved.latitude, saved.longitude)) throw new OwnerError('failed-precondition', 'outside_us');
+  try {
+    await ref.create({ ...saved, version: 1, source: 'first_use', pinnedAt: Timestamp.fromDate(now) });
+    return saved;
+  } catch (e) {
+    // Another request pinned it first (ALREADY_EXISTS): that one wins.
+    if (e && (e.code === 6 || /ALREADY_EXISTS/.test(String(e.message)))) {
+      const won = read(await ref.get());
+      if (won) return won;
+    }
+    throw e;
+  }
+}
+
+/** Email verified, or a provider that verifies identity itself. */
+/** True when the callable carried a valid Firebase App Check token
+ *  (`request.app`, set by the Functions SDK after verifying it). */
+function isAppCheckVerified(app) {
+  return Boolean(app && typeof app.appId === 'string' && app.appId.length > 0);
+}
+
+function isVerifiedToken(token) {
+  if (!token || typeof token !== 'object') return false;
+  if (token.email_verified === true) return true;
+  const provider = token.firebase && token.firebase.sign_in_provider;
+  return ['google.com', 'apple.com', 'phone'].includes(provider);
 }
 
 // Melissa PropertyUseStandardized codes (Property reference guide).
@@ -175,6 +260,7 @@ async function countUsage(db, now, fields) {
  * out-of-credits pause. Unused credits are given back by `settleOwners`.
  */
 async function reserveOwners(db, uid, now, cfg, credits) {
+  if (!(credits > 0)) throw new OwnerError('resource-exhausted', 'request_budget');
   if (credits > cfg.perRequestMaxCredits) throw new OwnerError('resource-exhausted', 'request_budget');
   const day = db.collection('melissa_usage').doc(dayKey(now));
   const month = db.collection('melissa_usage').doc(monthKey(now));
@@ -182,6 +268,7 @@ async function reserveOwners(db, uid, now, cfg, credits) {
   const state = db.collection('melissa_usage').doc('state');
   await db.runTransaction(async (tx) => {
     const [d, m, u, st] = await Promise.all([tx.get(day), tx.get(month), tx.get(user), tx.get(state)]);
+    if (paidDisabled(st)) throw new OwnerError('resource-exhausted', 'paid_disabled');
     const paused = st.get('outOfCreditsAt');
     if (paused && now.getTime() - paused.toMillis() < cfg.outOfCreditsPauseMs) {
       throw new OwnerError('resource-exhausted', 'out_of_credits');
@@ -315,20 +402,58 @@ function shape(served, target, extra = {}) {
  *   classification: {kind, label, code, group}, yearBuilt}`.
  */
 async function discoverOwners({ db, uid, data, key, now = new Date(), config = {},
+  verified = false, appVerified = false, queue = true, expectJobId = null,
   reverse = reverseLookup, property = lookupProperty, log = () => {},
   clock = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const cfg = { ...OWNER_DEFAULTS, ...config };
+  if (cfg.scanCacheDays == null) cfg.scanCacheDays = cfg.cacheDays;
   if (!cfg.allowOwnerNames) throw new OwnerError('failed-precondition', 'owner_names_disabled');
   if (!uid) throw new OwnerError('unauthenticated', 'sign_in_required');
   if (!(cfg.cacheDays > 0)) throw new OwnerError('failed-precondition', 'owner_cache_disabled');
   const input = validateOwners(data);
-  const { latitude, longitude, target } = input;
+  const { target } = input;
+  // Server-authoritative point: the saved primary location only.
+  const home = await primaryLocation(db, uid, now);
+  if (input.latitude != null) {
+    const away = cache.haversineMeters(input.latitude, input.longitude, home.latitude, home.longitude);
+    if (away > cfg.locationToleranceMeters) {
+      await countUsage(db, now, { deniedSecurity: 1 });
+      log({ event: 'owners', outcome: 'denied', reason: 'location_not_authorized' });
+      throw new OwnerError('permission-denied', 'location_not_authorized');
+    }
+  }
+  const { latitude, longitude } = home;
   const scope = cache.scopeOf(db, { shared: cfg.sharedCache, uid });
+  const jobId = cache.jobIdFor(scope.id, latitude, longitude);
+  // A queued job is processed only for a requester whose home is still in
+  // that area (an audited correction may have moved it).
+  if (expectJobId && expectJobId !== jobId) throw new OwnerError('failed-precondition', 'queue_area_changed');
+  // Budget refusal of a verified, genuine request: record the area so the
+  // lookup resumes later (deduplicated per area, capped; src/queue.js).
+  const enqueue = async (reason) => {
+    if (!queue || !QUEUE_REASONS.has(reason)) return {};
+    try {
+      const q = await enqueueDiscovery(db, {
+        jobId, scopeId: scope.id, area: areaKey(latitude, longitude), uid, appVerified, reason, now, cfg,
+      });
+      if (q.queued) await countUsage(db, now, { queuedRequests: 1 });
+      log({ event: 'queue', outcome: q.queued ? (q.created ? 'queued' : 'joined') : 'refused', reason: q.why || reason });
+      return q.queued ? { queued: true } : {};
+    } catch (e) {
+      // The queue is best effort: the stored data is still answered.
+      log({ event: 'queue', outcome: 'error', message: String(e && e.message) });
+      return {};
+    }
+  };
   const serve = () => cache.serveFromCache(scope, { latitude, longitude, target, now, cfg });
 
   let served = await serve();
+  const reuse = (sv) => ({
+    propertiesReused: sv.stats.resolved, duplicatesAvoided: sv.stats.duplicateAddresses,
+    overlapScansUsed: sv.stats.scans > 1 ? sv.stats.scans : 0,
+  });
   if (served.completeness === 'complete' || served.completeness === 'empty') {
-    await countUsage(db, now, { ownerCacheHits: 1 });
+    await countUsage(db, now, { ownerCacheHits: 1, ...reuse(served) });
     log({ event: 'owners', outcome: 'cache_hit', completeness: served.completeness, reads: served.reads });
     return shape(served, target);
   }
@@ -358,12 +483,21 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
   const missing = missingOf(plan);
   if (!cfg.enabled || (!plan.scanNeeded && plan.lookupsNeeded === 0)) {
     // Cache-only: what is stored, and exactly what a paid discovery would add.
-    await countUsage(db, now, { ownerCacheMisses: 1 });
+    await countUsage(db, now, { ownerCacheMisses: 1, ...reuse(served) });
     log({ event: 'owners', outcome: 'cache_only', completeness: served.completeness, ...missing });
     return shape(served, target, { missing });
   }
+  // Paid discovery is wanted: refuse before any lease or reservation when
+  // the account is unverified or the kill switch is on (cached data stays).
+  const gate = cfg.requireVerified && !verified ? 'unverified'
+    : cfg.requireAppCheck && !appVerified ? 'app_check'
+    : paidDisabled(await db.collection('melissa_usage').doc('state').get()) ? 'paid_disabled' : null;
+  if (gate) {
+    await countUsage(db, now, { ownerCacheMisses: 1, ...(gate !== 'paid_disabled' ? { deniedSecurity: 1 } : { deniedBudget: 1 }), ...reuse(served) });
+    log({ event: 'owners', outcome: 'limited', reason: gate });
+    return shape(served, target, { missing, limited: gate, ...(await enqueue(gate)) });
+  }
 
-  const jobId = cache.jobIdFor(scope.id, latitude, longitude);
   const owner = cache.newLeaseOwner();
   const got = await acquireLease(db, jobId, owner, clock, cfg, { area: areaKey(latitude, longitude) });
   if (got) {
@@ -390,6 +524,14 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
     served = await serve();
     await countUsage(db, now, { ownerWaited: 1 });
     log({ event: 'owners', outcome: finished ? 'joined' : 'pending', completeness: served.completeness });
+    // The holder was refused for budget: this user's area waits in the
+    // queue too (joins the same job as a requester).
+    const held = finished ? await db.collection('discovery_jobs').doc(jobId).get() : null;
+    const skipped = held && held.get('status') === 'skipped' && QUEUE_REASONS.has(held.get('error'))
+      ? held.get('error') : null;
+    if (skipped && served.completeness !== 'complete' && served.completeness !== 'empty') {
+      return shape(served, target, { missing, limited: skipped, ...(await enqueue(skipped)) });
+    }
     return shape(served, target, { pending: !finished, missing });
   }
 
@@ -406,12 +548,13 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
     try {
       reservation = await reserveOwners(db, uid, now, cfg, reserved);
     } catch (e) {
-      // Over a limit (or paused): show what is already stored, if anything.
-      if (!(e instanceof OwnerError) || !served.records.length) throw e;
+      // Over a limit (or paused, or switched off): show what is already
+      // stored (possibly nothing) with the reason; never retried by itself.
+      if (!(e instanceof OwnerError)) throw e;
       await finishLease(db, jobId, owner, { status: 'skipped', error: e.reason, creditsReserved: 0, creditsUsed: 0 }, clock);
-      await countUsage(db, now, { ownerCacheMisses: 1 });
+      await countUsage(db, now, { ownerCacheMisses: 1, deniedBudget: 1 });
       log({ event: 'owners', outcome: 'limited', reason: e.reason });
-      return shape(served, target, { missing, limited: e.reason });
+      return shape(served, target, { missing, limited: e.reason, ...(await enqueue(e.reason)) });
     }
     const pause = () => db.collection('melissa_usage').doc('state')
       .set({ outOfCreditsAt: Timestamp.fromDate(now) }, { merge: true });
@@ -493,7 +636,10 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
       status: stop ? 'stopped' : 'done', creditsReserved: reserved, creditsUsed: spent,
       requests, failedLookups: failed, completeness: served.completeness,
     }, clock);
-    await countUsage(db, now, { ownerCacheMisses: 1, melissaRequests: requests, failedLookups: failed, estimatedCredits: spent });
+    await countUsage(db, now, {
+      ownerCacheMisses: 1, melissaRequests: requests, failedLookups: failed, estimatedCredits: spent,
+      ...(stop ? { failedDiscoveries: 1 } : { successfulDiscoveries: 1 }),
+    });
     // Counts only: no address, name or uid in logs.
     log({ event: 'owners', outcome: served.completeness, stopped: stop, credits: spent, ...dstats });
     return shape(served, target, {
@@ -503,6 +649,7 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
     });
   } catch (e) {
     if (reservation) await settleOwners(db, reservation, Math.max(0, reserved - spent), { undo: spent === 0 });
+    await countUsage(db, now, { failedDiscoveries: 1, ...(spent ? { estimatedCredits: spent } : {}) });
     await finishLease(db, jobId, owner, {
       status: 'failed', error: e instanceof OwnerError ? e.reason : 'internal',
       creditsReserved: reserved, creditsUsed: spent, requests,
@@ -512,6 +659,6 @@ async function discoverOwners({ db, uid, data, key, now = new Date(), config = {
 }
 
 module.exports = {
-  OWNER_DEFAULTS, OwnerError, validateOwners, classify, accepts, sameAddress, discoverOwners,
-  reserveOwners, acquireLease,
+  OWNER_DEFAULTS, OwnerError, validateOwners, primaryLocation, isVerifiedToken, isAppCheckVerified, inUs,
+  classify, accepts, sameAddress, discoverOwners, reserveOwners, acquireLease,
 };

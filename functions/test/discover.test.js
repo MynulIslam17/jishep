@@ -32,7 +32,7 @@ const reverseOk = (n) => {
   return f;
 };
 const ENABLED = { enabled: true, globalDailyCredits: 1e6 };
-const run = (over = {}) => discoverNearby({
+const run = (over = {}) => discoverNearby({ appVerified: true,
   db, uid: 'alice', data: { ...POINT, have: 12 }, key: 'k', now: NOW, config: ENABLED, reverse: reverseOk(100), ...over,
 });
 const rejectsWith = (p, reason) => assert.rejects(p, (e) => e instanceof DiscoverError && e.reason === reason);

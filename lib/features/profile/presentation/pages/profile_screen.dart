@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_colors.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/shared/widgets/layout/collapsing_header_scroll_view.dart';
 import 'package:gps_cielo/features/profile/presentation/controllers/profile_controller.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_about_bottom_sheet.dart';
 import 'package:gps_cielo/shared/widgets/avatar/user_avatar_image.dart';
-import 'package:gps_cielo/features/profile/presentation/widgets/profile_address_bottom_sheet.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/primary_location_help.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_contact_support_bottom_sheet.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_delete_account_dialog.dart';
 import 'package:gps_cielo/features/profile/presentation/widgets/profile_impact_card.dart';
@@ -178,25 +179,19 @@ class ProfileScreen extends GetView<ProfileController> {
                     ),
                     child: Column(
                       children: [
-                        // 1. My Address
+                        // 1. Primary neighborhood (read-only, set at signup).
                         Obx(
                           () => _buildMenuItem(
                             icon: Icons.location_on_outlined,
-                            title: 'My address',
+                            title: AppStrings.primaryNeighborhood,
                             subtitle:
                                 (controller.user.value?.address.isNotEmpty ??
                                     false)
                                 ? controller.user.value!.address
-                                : 'Set your home address',
-                            onTap: () => ProfileAddressBottomSheet.show(
+                                : 'Not set',
+                            onTap: () => PrimaryLocationHelp.showDetails(
                               context,
-                              currentAddress:
-                                  controller.user.value?.address ?? '',
-                              nearLatitude: controller.user.value?.latitude,
-                              nearLongitude: controller.user.value?.longitude,
-                              onSaveAddress: (newAddr, location) => controller
-                                  .updateAddress(newAddr, location: location),
-                              onUseCurrentLocation: controller.locateDevice,
+                              address: controller.user.value?.address ?? '',
                             ),
                           ),
                         ),

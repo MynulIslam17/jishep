@@ -8,11 +8,9 @@ import 'package:gps_cielo/core/constants/app_strings.dart';
 import 'package:gps_cielo/core/constants/app_typography.dart';
 import 'package:gps_cielo/core/models/household_model.dart';
 import 'package:gps_cielo/features/neighborhood/presentation/controllers/neighborhood_controller.dart';
-import 'package:gps_cielo/features/profile/presentation/widgets/change_home_address.dart';
+import 'package:gps_cielo/features/profile/presentation/widgets/primary_location_help.dart';
 import 'package:gps_cielo/shared/widgets/bottom_sheets/household_detail_bottom_sheet.dart';
-import 'package:gps_cielo/shared/widgets/dialogs/app_confirmation_dialog.dart';
 import 'package:gps_cielo/shared/widgets/household/household_row.dart';
-import 'package:gps_cielo/shared/widgets/inputs/app_search_field.dart';
 import 'package:gps_cielo/shared/widgets/inputs/app_segmented_switch.dart';
 import 'package:gps_cielo/shared/widgets/layout/collapsing_header_scroll_view.dart';
 import 'package:gps_cielo/shared/widgets/map/household_osm_map.dart';
@@ -31,22 +29,12 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         subtitle: Obx(() {
           final n = controller.households.length;
           final where = controller.centerLabel.value;
-          final lead = controller.isTemporary.value
-              ? 'Viewing'
-              : 'Nearest $n ${n == 1 ? 'home' : 'homes'}';
+          final lead = 'Nearest $n ${n == 1 ? 'home' : 'homes'}';
           return Text(
             where.isEmpty ? lead : '$lead · $where',
             key: const ValueKey('neighborhood-subtitle'),
           );
         }),
-        actions: [
-          HeaderIconButton(
-            key: const ValueKey('neighborhood-search'),
-            icon: Icons.search_rounded,
-            tooltip: 'Look around another place',
-            onPressed: () => _openSearch(context),
-          ),
-        ],
         onRefresh: controller.loadHouseholds,
         pinnedHeight: 60.h,
         pinned: _buildPinnedStrip(),
@@ -123,7 +111,6 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
 
   Widget _buildBody(BuildContext context) {
     final homes = controller.households.toList();
-    final banner = controller.isTemporary.value ? _buildViewingBanner() : null;
 
     if (!(controller.isLoading.value && homes.isEmpty) &&
         homes.isNotEmpty &&
@@ -138,14 +125,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
               height: height,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (banner != null)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
-                      child: banner,
-                    ),
-                  Expanded(child: _buildMap(context, homes)),
-                ],
+                children: [Expanded(child: _buildMap(context, homes))],
               ),
             ),
           );
@@ -166,11 +146,6 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         padding: _pad,
         sliver: SliverMainAxisGroup(
           slivers: [
-            if (banner != null)
-              SliverPadding(
-                padding: EdgeInsets.only(bottom: 12.h),
-                sliver: SliverToBoxAdapter(child: banner),
-              ),
             SliverList.separated(
               key: const ValueKey('neighborhood-list'),
               itemCount: homes.length,
@@ -186,10 +161,7 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
       sliver: SliverToBoxAdapter(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (banner != null) ...[banner, SizedBox(height: 12.h)],
-            content,
-          ],
+          children: [content],
         ),
       ),
     );
@@ -252,17 +224,15 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
           Text(
             unavailable
                 ? '${AppStrings.areasAvailable}. ${AppStrings.areaComingSoon}'
-                : 'Search another place, or change your home address.',
+                : AppStrings.primaryLocationHelp,
             textAlign: TextAlign.center,
             style: AppTypography.body(
               color: AppColors.textSecondary,
               fontSize: 13.sp,
             ),
           ),
-          if (!controller.isTemporary.value) ...[
-            SizedBox(height: 12.h),
-            ChangeHomeAddress.button(),
-          ],
+          SizedBox(height: 12.h),
+          PrimaryLocationHelp.button(),
         ],
       ),
     );
@@ -410,181 +380,6 @@ class NeighborhoodScreen extends GetView<NeighborhoodController> {
         ),
         child: Icon(icon, size: 18.r, color: AppColors.primaryNavy),
       ),
-    );
-  }
-
-  /// While looking at another place: say so, go back, or make it home.
-  Widget _buildViewingBanner() {
-    final place = controller.centerLabel.value;
-    return Container(
-      key: const ValueKey('viewing-banner'),
-      padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 4.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF),
-        borderRadius: BorderRadius.circular(14.r),
-        border: Border.all(color: const Color(0xFFDDD6FE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.travel_explore_rounded,
-                size: 18.r,
-                color: const Color(0xFF7C3AED),
-              ),
-              SizedBox(width: 8.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Viewing near $place',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.label(
-                        color: AppColors.textPrimary,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      'Just looking around: your home and Prayer List are '
-                      'unchanged.',
-                      style: AppTypography.body(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5.sp,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Wrap(
-            spacing: 4.w,
-            children: [
-              TextButton.icon(
-                key: const ValueKey('back-to-home'),
-                onPressed: controller.useHomeAddress,
-                icon: Icon(Icons.home_outlined, size: 16.r),
-                label: const Text('Back to my home'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primaryNavy,
-                ),
-              ),
-              TextButton.icon(
-                key: const ValueKey('set-as-home'),
-                onPressed: controller.isSavingHome.value
-                    ? null
-                    : () => AppConfirmationDialog.show(
-                        title: 'Set as your home?',
-                        message:
-                            'Your home address will change to "$place". Your '
-                            'Prayer List, Neighborhood and Home will use the '
-                            'homes nearest it.',
-                        confirmLabel: 'Set as home',
-                        onConfirm: controller.setSearchedPlaceAsHome,
-                      ),
-                icon: Icon(Icons.push_pin_outlined, size: 16.r),
-                label: const Text('Set as my home'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF7C3AED),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Bottom sheet: search an address or use GPS to look around there.
-  void _openSearch(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheet) {
-        void done() => Navigator.of(sheet).maybePop();
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(sheet).viewInsets.bottom,
-          ),
-          child: Container(
-            key: const ValueKey('neighborhood-search-sheet'),
-            padding: EdgeInsets.fromLTRB(
-              20.w,
-              16.h,
-              20.w,
-              20.h + MediaQuery.of(sheet).padding.bottom,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Look around another place',
-                  style: AppTypography.heading(
-                    color: AppColors.textPrimary,
-                    fontSize: 17.sp,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  'See the nearest homes there. Your home and Prayer List '
-                  "don't change.",
-                  style: AppTypography.body(
-                    color: AppColors.textSecondary,
-                    fontSize: 12.5.sp,
-                  ),
-                ),
-                SizedBox(height: 14.h),
-                Obx(
-                  () => AppSearchField(
-                    controller: controller.searchController,
-                    nearLatitude: controller.homeLatitude,
-                    nearLongitude: controller.homeLongitude,
-                    isLocating: controller.isLocating.value,
-                    onAddressSelected: (suggestion) {
-                      done();
-                      controller.selectSuggestion(suggestion);
-                    },
-                    onSubmitted: (_) {
-                      done();
-                      controller.searchNeighborhood();
-                    },
-                    onGpsPressed: () {
-                      done();
-                      controller.useCurrentLocation();
-                    },
-                  ),
-                ),
-                if (controller.isTemporary.value) ...[
-                  SizedBox(height: 8.h),
-                  TextButton.icon(
-                    key: const ValueKey('search-back-to-home'),
-                    onPressed: () {
-                      done();
-                      controller.useHomeAddress();
-                    },
-                    icon: Icon(Icons.home_outlined, size: 16.r),
-                    label: const Text('Back to my home'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

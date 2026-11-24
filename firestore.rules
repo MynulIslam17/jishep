@@ -61,7 +61,8 @@ service cloud.firestore {
           'address', 'churchAffiliation', 'dailyPrayerTarget',
           'prayerCycleTarget', 'radiusHomes', 'searchRadiusKm',
           'latitude', 'longitude', 'prayerCycleStartedAt',
-          'prayerIntention', 'createdAt', 'updatedAt'])
+          'prayerIntention', 'locationConfirmedAt', 'locationVersion',
+          'createdAt', 'updatedAt'])
         && optString('fullName', 100)
         && optString('email', 254)
         && optString('phone', 20)
@@ -79,7 +80,35 @@ service cloud.firestore {
         && optTimestamp('prayerCycleStartedAt')
         && optString('prayerIntention', 120)
         && optTimestamp('createdAt')
-        && optTimestamp('updatedAt');
+        && optTimestamp('updatedAt')
+        && optTimestamp('locationConfirmedAt')
+        && optIntIn('locationVersion', 1, 1000);
+    }
+
+    // Primary location (blueprint §2.1): chosen ONCE at signup. After a
+    // latitude/longitude is saved, the client may not change the location
+    // fields again; corrections go through support (functions/src/location.js,
+    // Admin SDK, audited). Deleting and re-creating the profile does not move
+    // the home the server uses either (primary_locations/{uid}).
+    function locationFields() {
+      return ['address', 'latitude', 'longitude', 'locationConfirmedAt',
+              'locationVersion'];
+    }
+
+    function hasSavedLocation() {
+      return resource != null
+        && resource.data.get('latitude', null) != null
+        && resource.data.get('longitude', null) != null;
+    }
+
+    function locationChangeAllowed() {
+      return !changed().hasAny(locationFields()) || !hasSavedLocation();
+    }
+
+    // A confirmation stamp, when sent, is the server's time.
+    function locationConfirmationValid() {
+      return !('locationConfirmedAt' in changed())
+        || data().locationConfirmedAt == request.time;
     }
 
     // The profile email must be the account's own sign-in email
@@ -104,7 +133,9 @@ service cloud.firestore {
       allow create, update: if isOwner(uid)
         && validProfile()
         && emailMatchesAccount()
-        && phoneMatchesAccount();
+        && phoneMatchesAccount()
+        && locationChangeAllowed()
+        && locationConfirmationValid();
       allow delete: if isOwner(uid);
 
       // The user's own prayed / visited / invited / follow-up state.
@@ -265,7 +296,14 @@ service cloud.firestore {
     match /owner_properties/{id} { allow read, write: if false; }
     match /owner_areas/{id} { allow read, write: if false; }
     match /discovery_jobs/{id} { allow read, write: if false; }
+    // Pending owner discovery queue (functions/src/queue.js): server only.
+    match /discovery_queue/{id} { allow read, write: if false; }
     match /melissa_usage/{document=**} { allow read, write: if false; }
+
+    // The home the server searches around (pinned on first use) and the
+    // audit of support corrections: Cloud Functions / operator tools only.
+    match /primary_locations/{uid} { allow read, write: if false; }
+    match /location_corrections/{id} { allow read, write: if false; }
 
     // Anything else is closed.
   }

@@ -327,17 +327,93 @@ test('existing client data: old-shape documents still validate on update', async
 test('Melissa owner data, locks and credit counters: no client access at all', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1',
+    for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1', 'discovery_queue/q1',
       'melissa_usage/2026-11-22', 'melissa_usage/2026-11-22/users/alice',
       'users/alice/owner_areas/a1', 'users/alice/owner_scans/s1', 'users/alice/owner_properties/mel:1']) {
       await setDoc(doc(db, p), { x: 1 });
     }
   });
-  for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1',
+  for (const p of ['owner_scans/s1', 'owner_properties/mel:1', 'owner_areas/a1', 'discovery_jobs/j1', 'discovery_queue/q1',
     'melissa_usage/2026-11-22', 'melissa_usage/2026-11-22/users/alice',
     'users/alice/owner_areas/a1', 'users/alice/owner_scans/s1', 'users/alice/owner_properties/mel:1']) {
     await assertFails(getDoc(doc(alice(), p)));
     await assertFails(setDoc(doc(alice(), p), { x: 2 }));
     await assertFails(deleteDoc(doc(alice(), p)));
   }
+});
+
+test('primary location: set once at setup, then locked for the client', async () => {
+  const me = doc(alice(), 'users/alice');
+  // First save (location setup): allowed, with a server-time confirmation.
+  await assertSucceeds(updateDoc(me, {
+    address: '1 Test St, Chula Vista, CA', latitude: 32.64, longitude: -117.08,
+    locationConfirmedAt: serverTimestamp(), locationVersion: 1, searchRadiusKm: 5,
+  }));
+  // Any later change of a location field is refused …
+  await assertFails(updateDoc(me, { latitude: 33.0 }));
+  await assertFails(updateDoc(me, { address: 'Elsewhere' }));
+  await assertFails(updateDoc(me, { latitude: 33.0, longitude: -117.0, address: 'Elsewhere' }));
+  await assertFails(updateDoc(me, { locationVersion: 2 }));
+  await assertFails(setDoc(me, { latitude: 40.7, longitude: -74.0 }, { merge: true }));
+  // … while other profile fields still save, and re-sending the same values is a no-op.
+  await assertSucceeds(updateDoc(me, { fullName: 'Alice B', dailyPrayerTarget: 7, updatedAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(me, { latitude: 32.64, longitude: -117.08, fullName: 'Alice C' }, { merge: true }));
+});
+
+test('primary location: a client-chosen confirmation time is refused', async () => {
+  await assertFails(updateDoc(doc(alice(), 'users/alice'), {
+    latitude: 32.64, longitude: -117.08, locationConfirmedAt: new Date('2020-01-01'),
+  }));
+});
+
+test('primary location: existing users with saved coordinates are locked with no migration', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/bob'), { fullName: 'Bob', email: 'b@example.com', address: 'Old', latitude: 32.6, longitude: -117.0 });
+  });
+  await assertFails(updateDoc(doc(bob(), 'users/bob'), { address: 'New', latitude: 32.7, longitude: -117.1 }));
+  await assertSucceeds(updateDoc(doc(bob(), 'users/bob'), { dailyPrayerTarget: 9 }));
+});
+
+test('server-only location records: no client access', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'primary_locations/alice'), { latitude: 1, longitude: 2 });
+    await setDoc(doc(ctx.firestore(), 'location_corrections/c1'), { uid: 'alice' });
+  });
+  for (const p of ['primary_locations/alice', 'location_corrections/c1']) {
+    await assertFails(getDoc(doc(alice(), p)));
+    await assertFails(setDoc(doc(alice(), p), { latitude: 3 }));
+    await assertFails(deleteDoc(doc(alice(), p)));
+  }
+});
+
+// ---- Compatibility with app builds already installed (1.0.0, before the
+// fixed location). The exact writes those builds make (git HEAD
+// lib/core/data/user_repository.dart updateFields/updateLocation and
+// AuthService.updateLocation): set(..., merge) + updatedAt server time.
+test('old app: location setup write (no saved home yet) still succeeds', async () => {
+  await assertSucceeds(setDoc(doc(alice(), 'users/alice'), {
+    address: '1 Test St, Chula Vista, CA', latitude: 32.64, longitude: -117.08,
+    searchRadiusKm: 5, dailyPrayerTarget: 10, updatedAt: serverTimestamp(),
+  }, { merge: true }));
+});
+
+test('old app: the removed "Change home address" editor write is refused once a home exists', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/bob'), { fullName: 'Bob', email: 'b@example.com',
+      address: '1 Test St, Chula Vista, CA', latitude: 32.64, longitude: -117.08 });
+  });
+  const me = doc(bob(), 'users/bob');
+  // HomeAddressService.save → UserRepository.updateLocation (no radiusHomes).
+  await assertFails(setDoc(me, {
+    address: '9 Other Ave, San Diego, CA', latitude: 32.75, longitude: -117.15, updatedAt: serverTimestamp(),
+  }, { merge: true }));
+  // Old setup screen reopened by a user who already has a home: also refused.
+  await assertFails(setDoc(me, {
+    address: '9 Other Ave, San Diego, CA', latitude: 32.75, longitude: -117.15,
+    searchRadiusKm: 5, dailyPrayerTarget: 10, updatedAt: serverTimestamp(),
+  }, { merge: true }));
+  // Everything else the old app writes keeps working.
+  await assertSucceeds(setDoc(me, { dailyPrayerTarget: 12, updatedAt: serverTimestamp() }, { merge: true }));
+  await assertSucceeds(setDoc(me, { radiusHomes: 25, updatedAt: serverTimestamp() }, { merge: true }));
+  await assertSucceeds(setDoc(doc(bob(), 'users/bob/household_status/h1'), status(), { merge: true }));
 });

@@ -2,7 +2,7 @@ name: gps_cielo
 description: "GPS Para El Cielo - Conectando hogares, alcanzando vidas."
 publish_to: 'none'
 
-version: 1.0.1+1
+version: 1.0.2+2
 
 environment:
   sdk: ^3.10.8
@@ -38,6 +38,7 @@ dependencies:
   latlong2: ^0.10.1
   firebase_messaging: 16.7.0
   cloud_functions: ^6.5.0
+  firebase_app_check: ^0.4.8
 
 dev_dependencies:
   flutter_test:
